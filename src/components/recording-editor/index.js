@@ -130,14 +130,15 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>
       {presentations.map((presentation, i) => {
         const title = presentation.filename || presentation.presentation || t('slides');
+        const defaultClass = presentation.filename?.toLowerCase() === 'default.pdf' ? ' re-default-presentation' : '';
         const description = `${title}\n${formatTime(presentation.start_ms)} – ${formatTime(presentation.end_ms)}`;
         return <React.Fragment key={i}>
-          <button className="re-presentation-ribbon" style={{ left: pct(presentation.start_ms), width: pct(presentation.end_ms - presentation.start_ms) }}
+          <button className={`re-presentation-ribbon${defaultClass}`} style={{ left: pct(presentation.start_ms), width: pct(presentation.end_ms - presentation.start_ms) }}
             data-tooltip={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(presentation.start_ms)}>{title}</button>
           {presentation.events.filter(event => event.time_ms < presentation.end_ms).map((event, j) => {
             const label = event.type === 'GotoSlideEvent' ? t('slide', { page: event.page }) : t('slideCamera');
             const details = `${formatTime(event.time_ms)} · ${label}`;
-            return <button key={j} className="re-event-marker re-presentation-marker" style={{ left: pct(event.time_ms) }} data-tooltip={details}
+            return <button key={j} className={`re-event-marker re-presentation-marker${defaultClass}`} style={{ left: pct(event.time_ms) }} data-tooltip={details}
               aria-label={details} onPointerDown={e => e.stopPropagation()} onClick={() => seek(event.time_ms)} />;
           })}
         </React.Fragment>;
