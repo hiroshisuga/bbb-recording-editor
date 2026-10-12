@@ -223,7 +223,7 @@ XMLバックアップ、加工素材、元素材のバックアップ、編集JS
 sudo bash "/ダウンロード先/bbb-recording-editor/deploy.sh"
 ```
 
-`deploy.sh` は引数なしでエディターを導入します。`deploy-editor.sh` を直接実行しても構いません。旧形式の `deploy.sh --editor` は同じ導入処理への互換入口として残しています。
+`deploy.sh` はインストーラー `editor/deploy/install-editor.py` を直接呼び出し、引数なしでエディターを導入します。旧形式の `deploy.sh --editor` は同じ導入処理への互換入口として残しています。
 
 前提はNode.js 20以上とnpm、Python 3.8以上、systemd、稼働中のBBB・Nginx、`bigbluebutton` ユーザー、Ubuntu標準のNginxグループ `www-data`、`/usr/bin/bbb-record` です。Node.jsやBBB本体はこのスクリプトでは導入しません。Ruby 3.0以上・Nokogiri・WEBrick、FFmpeg、sudoの不足分は `apt-get install` で補います。`htpasswd` / `apache2-utils` は、認証ファイルを新規作成する場合だけ必要です。既存の `/etc/nginx/bbb-recording-editor.htpasswd` があれば、OpenSSLで作成したものもそのまま保持し、認証のためにaptを実行することはありません。既存パッケージの依存関係を修復する処理は実行しません。
 
@@ -253,8 +253,7 @@ sudo bash "/ダウンロード先/bbb-recording-editor/deploy.sh"
 | スクリプト | 用途 |
 | --- | --- |
 | [deploy.sh](deploy.sh) | 通常使用する一括導入・更新の入口。旧形式の `--editor` も受け付ける。 |
-| [deploy-editor.sh](deploy-editor.sh) | 同じ一括導入処理を呼び出す別の入口。オプションは共通。 |
-| [editor/deploy/install-editor.py](editor/deploy/install-editor.py) | 上記のシェルスクリプトから実行されるインストーラー本体。 |
+| [editor/deploy/install-editor.py](editor/deploy/install-editor.py) | `deploy.sh` から直接実行されるインストーラー本体。 |
 | [editor/deploy/install-rebuild-helper.sh](editor/deploy/install-rebuild-helper.sh) | 手動導入した環境で、再構築用ヘルパーだけを設置・更新する。一括導入では別途実行不要。 |
 
 **初回導入**

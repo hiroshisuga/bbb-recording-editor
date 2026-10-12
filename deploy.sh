@@ -5,4 +5,4 @@ source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 if [[ ${1:-} == --editor ]]; then
   shift
 fi
-exec bash "$source_dir/deploy-editor.sh" "$@"
+exec python3 "$source_dir/editor/deploy/install-editor.py" "$@"
