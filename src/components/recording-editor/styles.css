@@ -96,9 +96,16 @@
 .recording-editor .re-external-ribbon,.recording-editor .re-presentation-ribbon { position:absolute; top:18px; height:21px; min-width:2px; border:0; border-radius:2px; padding:0 5px; background:#64713b; color:#f3ffcc; font-size:11px; line-height:21px; text-align:left; overflow:hidden; text-overflow:ellipsis; }
 .recording-editor .re-external-ribbon:hover { background:#788847; }
 .recording-editor .re-external-marker,.recording-editor .re-presentation-marker { top:18px; width:3px; height:21px; border-radius:0; background:#e5f2b5; transform:translateX(-50%); z-index:2; }
-.recording-editor .re-presentation-ribbon { background:#356687; color:#d6eeff; border:1px solid #91c8ee; line-height:19px; }
-.recording-editor .re-presentation-ribbon:hover { background:#427da4; }
-.recording-editor .re-presentation-marker { background:#a7d6f4; }
+.recording-editor .re-presentation-ribbon { background:#2e506c; color:#d6eeff; border:1px solid #43627b; border-left:3px solid #8ecbf8; line-height:19px; }
+.recording-editor .re-presentation-ribbon:hover:not(:disabled) { background:#375f7d; border-color:#43627b; border-left-color:#8ecbf8; }
+.recording-editor .re-presentation-marker { top:18px; width:7px; height:21px; background:transparent; }
+.recording-editor .re-presentation-marker::before { content:''; position:absolute; top:5px; left:3px; width:1px; height:11px; background:#7797af; pointer-events:none; }
+.recording-editor .re-presentation-marker:hover:not(:disabled) { background:transparent; }
+.recording-editor .re-presentation-marker:hover:not(:disabled)::before { background:#9ab5c8; }
+.recording-editor .re-presentation-ribbon.re-default-presentation { background:#1d2a36; border:1px solid #344454; color:#8b9bac; }
+.recording-editor .re-presentation-ribbon.re-default-presentation:hover:not(:disabled) { background:#253442; border-color:#344454; }
+.recording-editor .re-presentation-marker.re-default-presentation::before { top:6px; height:8px; background:#536574; }
+.recording-editor .re-presentation-marker.re-default-presentation:hover:not(:disabled)::before { background:#708596; }
 .re-selection-overlay { position:absolute; top:29px; bottom:0; border:1px solid #85cfff; background:#66b9f321; pointer-events:none; z-index:3; }.re-playhead { position:absolute; top:0; bottom:0; width:1px; background:#fa6868; pointer-events:none; z-index:5; }.re-playhead:before { content:''; position:absolute; top:0; left:-4px; border:5px solid transparent; border-top-color:#fa6868; }
 .re-selection { font-size:12px; border-bottom:1px solid var(--re-line); padding-bottom:15px; }.re-selection button { font-size:11px; padding:6px 8px; }.recording-editor .re-beep-button { background:#674c28; border-color:#a77c43; }
 .re-bottom { display:grid; grid-template-columns:minmax(410px,1fr) minmax(240px,1fr); gap:20px; margin-top:18px; }.re-range-list { padding:12px; border:1px solid var(--re-line); border-radius:5px; margin-bottom:12px; background:#15212e; }.re-range-list h3 { margin-bottom:10px; }.re-range-list small { margin-left:10px; font-weight:400; }.re-range-row { display:flex; align-items:center; gap:7px; margin:6px 0; }.re-range-row button { padding:4px 8px; }.re-range-row>.re-time { flex:1; min-width:110px; max-width:145px; }

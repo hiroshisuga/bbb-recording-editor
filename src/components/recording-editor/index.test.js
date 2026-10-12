@@ -211,6 +211,28 @@ test('presentation ribbons group slides by deck with interior navigation and cam
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
+test('default presentation styling uses the recorded filename and applies to its interior markers', async () => {
+  const previousFetch = global.fetch;
+  const events = [
+    { type: 'SharePresentationEvent', time_ms: 0, presentation: 'id-default', presentation_filename: 'default.pdf' },
+    { type: 'GotoSlideEvent', time_ms: 5000, presentation: 'id-default', page: 2 },
+    { type: 'SharePresentationEvent', time_ms: 10000, presentation: 'id-lecture', presentation_filename: 'Lecture.pdf' },
+    { type: 'GotoSlideEvent', time_ms: 15000, presentation: 'id-lecture', page: 2 },
+    { type: 'SharePresentationEvent', time_ms: 20000, presentation: 'id-default-again', presentation_filename: 'DEFAULT.PDF' },
+    { type: 'GotoSlideEvent', time_ms: 25000, presentation: 'id-default-again', page: 2 },
+  ];
+  global.fetch = jest.fn(async (url, options) => url.endsWith(`/recordings/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, events }) } : previousFetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const isDefault = element => element.classList.contains('re-default-presentation');
+  expect([...container.querySelectorAll('.re-presentation-ribbon')].map(isDefault)).toEqual([true, false, true]);
+  const markers = container.querySelectorAll('.re-presentation-marker');
+  expect([...markers].map(isDefault)).toEqual([true, false, true]);
+  await act(async () => Simulate.click(markers[0]));
+  expect(container.querySelector('audio').currentTime).toBe(5);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+});
+
 test('audio playback pages the zoomed timeline without seeking or saving edits', async () => {
   await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: '4' } }));
   const scroll = container.querySelector('.re-timeline-scroll');
