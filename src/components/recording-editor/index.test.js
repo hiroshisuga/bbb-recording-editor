@@ -30,6 +30,11 @@ async function time(label, text) {
   await act(async () => { Simulate.change(input, { target: { value: text } }); });
   await act(async () => { Simulate.blur(input); });
 }
+async function selectRange() {
+  const [start, end] = container.querySelectorAll('.re-selection input');
+  await time(end.getAttribute('aria-label'), '00:00:03.000');
+  await time(start.getAttribute('aria-label'), '00:00:01.000');
+}
 async function language(value) {
   await act(async () => { Simulate.change(container.querySelector('.re-language select'), { target: { value } }); });
 }
@@ -64,6 +69,27 @@ beforeEach(async () => {
 });
 
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); localStorage.removeItem(LANGUAGE_KEY); localStorage.removeItem(PREFERENCES_KEY); jest.restoreAllMocks(); global.fetch = originalFetch; });
+
+test('opening and reopening begin unselected and allow entering the start time first', async () => {
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:00.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
+  expect(button('ピー音を追加').disabled).toBe(true);
+  expect(button('録画に残す').disabled).toBe(true);
+  expect(button('録画から除外').disabled).toBe(true);
+  await time('選択開始', '00:00:06.500');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:06.500');
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(button('ピー音を追加').disabled).toBe(true);
+  await time('選択終了', '00:00:09.500');
+  expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
+  expect(button('ピー音を追加').disabled).toBe(false);
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
+  expect(button('ピー音を追加').disabled).toBe(true);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+});
 
 test('editing, undo/redo and draft send meeting-time ranges with revision', async () => {
   await time('選択開始', '00:00:06.500');
@@ -357,6 +383,7 @@ test('preferences remain editable when browser storage is blocked', async () => 
 });
 
 test('reset requires confirmation and clears edits, draft and undo without rebuilding', async () => {
+  await selectRange();
   await click('ピー音を追加');
   await click('初期状態に戻す…');
   expect(calls.some(call => call.url.endsWith('/reset'))).toBe(false);
@@ -365,6 +392,10 @@ test('reset requires confirmation and clears edits, draft and undo without rebui
   expect(calls.find(call => call.url.endsWith('/reset')).payload).toEqual({ revision: 'revision-one', confirmed: true });
   expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]')).toBeNull();
   expect(button('↶ 元に戻す').disabled).toBe(true);
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:00.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
+  expect(button('ピー音を追加').disabled).toBe(true);
   expect(container.textContent).toContain('初期状態をrawデータに復元しました');
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(false);
@@ -408,6 +439,7 @@ test('BBB processing blocks mutations and explains the disabled rebuild', async 
     ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status: 'not_requested', processing: true } }) }
     : fetch(url, options));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
+  await selectRange();
   await click('ピー音を追加');
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
@@ -428,6 +460,7 @@ test('record-off splits the range and bad time input cannot edit it', async () =
 });
 
 test('saving refreshes meeting summaries and keeps the current publication badge', async () => {
+  await selectRange();
   await click('ピー音を追加');
   await click('rawデータへ保存…');
   await click('バックアップを作成して保存');
@@ -477,6 +510,7 @@ test('warnings, save review, errors and completed messages follow the selected l
   expect(container.querySelector('.re-warnings').textContent).toContain('Raw data is missing.');
   // User content is kept exactly as recorded, even when it resembles a diagnostic.
   expect(container.querySelector('.re-events').textContent).toContain('参加者: rawデータがありません。');
+  await selectRange();
   await click('Add beep');
   await click('Save to raw…');
   expect(container.querySelector('.re-review').textContent).toContain('Keep: 1 interval / Beep: 1 interval');
@@ -489,6 +523,7 @@ test('warnings, save review, errors and completed messages follow the selected l
 
 
 test('raw review explains audio file changes before sending a save request', async () => {
+  await selectRange();
   await click('ピー音を追加');
   await click('rawデータへ保存…');
   const review = container.querySelector('.re-review');
@@ -501,6 +536,7 @@ test('raw review explains audio file changes before sending a save request', asy
 });
 
 test('rebuild requires saved edits and a separate confirmation, then reports a request not completion', async () => {
+  await selectRange();
   await click('ピー音を追加');
   expect(button('録画を再構築…').disabled).toBe(true);
   await click('↶ 元に戻す');
@@ -544,6 +580,7 @@ test('polling a completed rebuild updates the message and unlocks raw saving', a
     expect(container.querySelector('.re-success').textContent).toContain('録画の再構築が完了しました');
     expect(button('rawデータへ保存…').disabled).toBe(true);
     expect(button('録画を再構築…').disabled).toBe(false);
+    await selectRange();
     await click('ピー音を追加');
     expect(button('rawデータへ保存…').disabled).toBe(false);
   } finally { jest.useRealTimers(); }

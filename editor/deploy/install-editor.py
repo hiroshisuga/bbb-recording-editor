@@ -381,6 +381,7 @@ class Installer:
             self.copy_and_build()
             self.snapshot()
             self.configure(templates)
+            self.run(['systemctl', 'daemon-reload'])
             self.run(['systemctl', 'stop', 'bbb-recording-editor'], check=self.active)
             if target.exists():
                 self.old_app = target.with_name(target.name + '.previous-' + self.backup.name)
@@ -389,7 +390,6 @@ class Installer:
             self.stage.rename(target)
             self.stage = None
             self.switched = True
-            self.run(['systemctl', 'daemon-reload'])
             self.run(['systemctl', 'enable', 'bbb-recording-editor'])
             self.run(['systemctl', 'restart', 'bbb-recording-editor'])
             self.wait_for_service()

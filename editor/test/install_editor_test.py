@@ -24,6 +24,7 @@ class FakeInstaller(module.Installer):
         self.commands = []
         self.missing = set()
         self.fail_build = self.fail_health = self.fail_nginx = self.fail_stop = False
+        self.fail_reload = False
         self.include = True
         self.was_active = self.was_enabled = False
 
@@ -45,6 +46,9 @@ class FakeInstaller(module.Installer):
             status = 0 if self.was_enabled else 1
         elif args[:2] == ['systemctl', 'stop'] and self.fail_stop:
             self.fail_stop = False
+            status = 1
+        elif args == ['systemctl', 'daemon-reload'] and self.fail_reload:
+            self.fail_reload = False
             status = 1
         elif args[:2] == ['apt-get', 'install']:
             self.missing.clear()
@@ -133,6 +137,13 @@ class InstallEditorTest(unittest.TestCase):
         self.assertTrue(all(args[:4] == ['runuser', '-u', 'builder', '--'] for args, _ in build_calls))
         self.assertTrue(all(str(kw['cwd']).startswith(str(i.path('/opt'))) for _, kw in build_calls))
         self.assertNotIn('private-test-password', repr(i.commands))
+        commands = [args for args, _ in i.commands]
+        reload = commands.index(['systemctl', 'daemon-reload'])
+        stop = commands.index(['systemctl', 'stop', 'bbb-recording-editor'])
+        restart = commands.index(['systemctl', 'restart', 'bbb-recording-editor'])
+        self.assertLess(reload, stop)
+        self.assertLess(stop, restart)
+        self.assertEqual(commands.count(['systemctl', 'daemon-reload']), 1)
 
     def test_update_preserves_custom_settings_credentials_and_history(self):
         self.install()
@@ -157,6 +168,9 @@ class InstallEditorTest(unittest.TestCase):
         self.assertEqual((update.old_app / 'editor/server.rb').read_text(), 'source-v1')
         self.assertEqual((update.path(update.APP) / 'editor/server.rb').read_text(), 'source-v2')
         self.assertFalse(any(args[0] == 'htpasswd' for args, _ in update.commands))
+        commands = [args for args, _ in update.commands]
+        self.assertLess(commands.index(['systemctl', 'daemon-reload']),
+                        commands.index(['systemctl', 'stop', 'bbb-recording-editor']))
 
     def test_build_failure_does_not_touch_installed_app_or_configuration(self):
         self.install()
@@ -220,6 +234,20 @@ class InstallEditorTest(unittest.TestCase):
             self.assertFalse(i.path(name).exists(), name)
         self.assertIn(['systemctl', 'disable', 'bbb-recording-editor'], [args for args, _ in i.commands])
         self.assertEqual((self.raw / 'events.xml').read_text(), 'raw must stay unchanged')
+
+    def test_failed_daemon_reload_rolls_back_before_application_switch(self):
+        self.install()
+        update = self.update_installer()
+        update.fail_reload = True
+        update.path(update.UNIT).write_text('# Previous custom setting\n' + update.path(update.UNIT).read_text())
+        before = update.path(update.UNIT).read_bytes()
+        with self.assertRaises(module.InstallError):
+            self.install(update)
+        self.assertFalse(update.switched)
+        self.assertNotIn(['systemctl', 'stop', 'bbb-recording-editor'], [args for args, _ in update.commands])
+        self.assertEqual((update.path(update.APP) / 'editor/server.rb').read_text(), 'source-v1')
+        self.assertEqual(update.path(update.UNIT).read_bytes(), before)
+        self.assertEqual(self.journal(update)['status'], 'rolled_back')
 
     def test_failed_stop_does_not_replace_running_application(self):
         self.install()
