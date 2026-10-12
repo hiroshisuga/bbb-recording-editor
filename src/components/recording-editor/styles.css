@@ -77,13 +77,14 @@
 .re-time { width:124px; text-align:center; font:12px ui-monospace,monospace!important; font-variant-numeric:tabular-nums; }
 .re-time.invalid { border-color:#ed8686; }
 .re-timeline-scroll { overflow-x:auto; border:1px solid var(--re-line); border-radius:5px; background:#141f2b; }
-.re-timeline { position:relative; min-width:650px; touch-action:none; user-select:none; overflow:hidden; }
+/* Clip drawing overflow without creating a second scroll container for sticky labels. */
+.re-timeline { position:relative; min-width:650px; touch-action:none; user-select:none; overflow:clip; }
 .re-ruler { height:29px; position:relative; background:#203042; border-bottom:1px solid #415064; font:10px ui-monospace,monospace; color:#b8c6d5; }
 .re-ruler span { position:absolute; top:5px; border-left:1px solid #688098; padding-left:4px; height:20px; }
 .re-ruler span:last-child { transform:translateX(-100%); }
 .re-track,.re-wave { position:relative; height:35px; border-bottom:1px solid #2b3b4e; }
-.re-wave { height:68px; }.re-wave svg { width:100%; height:100%; stroke:#7cacbf; stroke-width:.75; }
-.re-track-label { position:absolute; font-size:10px; color:#c4d4e4; left:6px; top:2px; z-index:2; background:#102130c9; padding:0 3px; border-radius:2px; pointer-events:none; }
+.re-wave { height:68px; }.re-wave svg { position:absolute; inset:0; width:100%; height:100%; stroke:#7cacbf; stroke-width:.75; }
+.re-track-label { position:sticky; display:inline-block; vertical-align:top; margin-top:2px; font-size:10px; color:#c4d4e4; left:6px; top:2px; z-index:6; background:#102130; padding:0 3px; border-radius:2px; pointer-events:none; }
 .re-wave-pending { position:absolute; inset:0; display:flex; justify-content:center; align-items:center; color:#8395a9; font-size:12px; }
 .re-bar { position:absolute; top:17px; bottom:3px; background:#34846f; border:1px solid #6fd1b1; color:#d5fff0; font-size:10px; text-align:center; min-width:2px; }
 .beep_ranges .re-bar { background:#98652a; border-color:#e5b261; color:#ffe9c7; }.re-bar>span { pointer-events:none; }

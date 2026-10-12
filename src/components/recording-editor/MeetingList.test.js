@@ -38,7 +38,7 @@ test('shows independent badges, meeting length, marked duration and missing raw'
   expect(rows()[2].textContent).toContain('録画区間 00:00');
   expect(rows()[2].querySelector('.re-status-unmarked').textContent).toBe('録画区間なし');
   expect(rows()[4].textContent).toContain('録画区間 —');
-  expect(rows()[4].querySelector('.re-status-missing').textContent).toBe('rawなし');
+  expect(rows()[4].querySelector('.re-status-missing').textContent).toBe('rawデータなし');
 });
 
 test('all status filters include correct meetings and counts without changing selection', async () => {

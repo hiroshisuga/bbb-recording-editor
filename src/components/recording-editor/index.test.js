@@ -99,7 +99,7 @@ test('volume and mute affect preview playback without changing edits or saving r
   await volume(60);
   expect(audio.muted).toBe(false);
   expect(audio.volume).toBeCloseTo(0.6);
-  expect(button('rawへ保存…').disabled).toBe(true);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('↶ 元に戻す').disabled).toBe(true);
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
   await language('en');
@@ -184,8 +184,8 @@ test('reset requires confirmation and clears edits, draft and undo without rebui
   expect(calls.find(call => call.url.endsWith('/reset')).payload).toEqual({ revision: 'revision-one', confirmed: true });
   expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]')).toBeNull();
   expect(button('↶ 元に戻す').disabled).toBe(true);
-  expect(container.textContent).toContain('初期状態をrawに復元しました');
-  expect(button('rawへ保存…').disabled).toBe(true);
+  expect(container.textContent).toContain('初期状態をrawデータに復元しました');
+  expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(false);
   expect(calls.filter(call => call.url.endsWith('/preview'))).toHaveLength(2);
   expect(calls.some(call => call.url.endsWith('/rebuild'))).toBe(false);
@@ -198,10 +198,10 @@ test('reset with an unavailable helper explains setup without requiring another 
     : fetch(url, options));
   await click('初期状態に戻す…');
   await click('確認して初期状態に戻す');
-  expect(button('rawへ保存…').disabled).toBe(true);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
-  expect(container.textContent).toContain('rawへの再保存は不要');
-  expect(container.querySelector('#re-rebuild-reason').textContent).toContain('rawへの保存や初期化とは別の条件');
+  expect(container.textContent).toContain('rawデータへの再保存は不要');
+  expect(container.querySelector('#re-rebuild-reason').textContent).toContain('rawデータへの保存や初期化とは別の条件');
   expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
 });
 
@@ -212,11 +212,11 @@ test('unmarked original offers saving candidate intervals before rebuild', async
     : fetch(url, options));
   await click('初期状態に戻す…');
   await click('確認して初期状態に戻す');
-  expect(button('rawへ保存…').disabled).toBe(false);
+  expect(button('rawデータへ保存…').disabled).toBe(false);
   expect(button('録画を再構築…').disabled).toBe(true);
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('編集候補');
-  expect(container.textContent).not.toContain('現在の編集内容はrawに保存済み');
-  await click('rawへ保存…');
+  expect(container.textContent).not.toContain('現在の編集内容はrawデータに保存済み');
+  await click('rawデータへ保存…');
   await click('バックアップを作成して保存');
   expect(calls.some(call => call.url.endsWith('/save'))).toBe(true);
 });
@@ -228,7 +228,7 @@ test('BBB processing blocks mutations and explains the disabled rebuild', async 
     : fetch(url, options));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
   await click('ピー音を追加');
-  expect(button('rawへ保存…').disabled).toBe(true);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
   expect(button('初期状態に戻す…').disabled).toBe(true);
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('処理中');
@@ -248,7 +248,7 @@ test('record-off splits the range and bad time input cannot edit it', async () =
 
 test('saving refreshes meeting summaries and keeps the current publication badge', async () => {
   await click('ピー音を追加');
-  await click('rawへ保存…');
+  await click('rawデータへ保存…');
   await click('バックアップを作成して保存');
   expect(calls.filter(call => call.url.endsWith('/recordings'))).toHaveLength(2);
   expect(container.querySelector('.re-meeting .re-status-unpublished').textContent).toBe('非公開');
@@ -309,9 +309,9 @@ test('warnings, save review, errors and completed messages follow the selected l
 
 test('raw review explains audio file changes before sending a save request', async () => {
   await click('ピー音を追加');
-  await click('rawへ保存…');
+  await click('rawデータへ保存…');
   const review = container.querySelector('.re-review');
-  expect(review.textContent).toContain('raw内に別名ファイルを追加してXMLの参照先を切り替えます');
+  expect(review.textContent).toContain('rawデータ内に別名ファイルを追加してXMLの参照先を切り替えます');
   expect(review.textContent).toContain('元ファイルとバックアップは保持します');
   expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
   await language('en');
@@ -361,9 +361,9 @@ test('polling a completed rebuild updates the message and unlocks raw saving', a
       : originalMock(url, options));
     await act(async () => { jest.advanceTimersByTime(5000); });
     expect(container.querySelector('.re-success').textContent).toContain('録画の再構築が完了しました');
-    expect(button('rawへ保存…').disabled).toBe(true);
+    expect(button('rawデータへ保存…').disabled).toBe(true);
     expect(button('録画を再構築…').disabled).toBe(false);
     await click('ピー音を追加');
-    expect(button('rawへ保存…').disabled).toBe(false);
+    expect(button('rawデータへ保存…').disabled).toBe(false);
   } finally { jest.useRealTimers(); }
 });
