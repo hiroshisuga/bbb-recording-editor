@@ -6,6 +6,7 @@ import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
+import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
 import { audioAdapter, externalVideos, formatTime, normalizeRanges, parseTime, removeRange } from './model';
 import './styles.css';
 
@@ -128,14 +129,10 @@ function Editor() {
   const [selection, setSelection] = useState({ start_ms: 0, end_ms: 0 });
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [rate, setRate] = useState(1);
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
-  const lastVolume = useRef(1);
-  const [zoom, setZoom] = useState(1);
+  const [preferences, updatePreferences] = useEditorPreferences();
+  const { rate, volume, muted, lastVolume, zoom, beepPreview } = preferences;
   const [audio, setAudio] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [beepPreview, setBeepPreview] = useState(true);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -158,19 +155,16 @@ function Editor() {
     if (!audio) return;
     audio.volume = volume;
     audio.muted = muted;
-  }, [audio, volume, muted]);
+    audio.playbackRate = rate;
+  }, [audio, volume, muted, rate]);
   useAudioPreview(audio, edit.beep_ranges, beepPreview);
   const silent = muted || volume === 0;
   const changeVolume = event => {
     const value = Number(event.target.value) / 100;
-    if (value > 0) lastVolume.current = value;
-    setVolume(value); setMuted(false);
+    updatePreferences({ volume: value, muted: false, lastVolume: value > 0 ? value : lastVolume });
   };
   const toggleMute = () => {
-    if (silent) {
-      if (volume === 0) setVolume(lastVolume.current);
-      setMuted(false);
-    } else setMuted(true);
+    updatePreferences({ muted: !silent, volume: silent && volume === 0 ? lastVolume : volume });
   };
 
   const refreshList = useCallback(async () => {
@@ -242,7 +236,7 @@ function Editor() {
     return job.result;
   };
   const open = async id => {
-    setBusy({ id: 'loadingMedia' }); setError(''); setMessage(''); setReview(false); setRebuildReview(false); setResetReview(false); setBeepPreview(true);
+    setBusy({ id: 'loadingMedia' }); setError(''); setMessage(''); setReview(false); setRebuildReview(false); setResetReview(false);
     audio?.pause(); setRecording(null); setPreview(null); setTime(0); setPlaying(false);
     try {
       const data = await request(`/recordings/${id}`);
@@ -286,7 +280,7 @@ function Editor() {
     setBusy({ id: 'resetting' }); setError(''); setMessage(''); audio?.pause();
     try {
       await runJob(`/recordings/${id}/reset`, { revision: recording.revision, confirmed: true });
-      setPreview(null); setTime(0); setPlaying(false); setBeepPreview(true);
+      setPreview(null); setTime(0); setPlaying(false);
       const data = await request(`/recordings/${id}`);
       setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
       setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: Math.min(10000, data.duration_ms) });
@@ -335,14 +329,14 @@ function Editor() {
         {external && <p className="re-warnings">{t('externalAudio')}</p>}
         <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
           <TimeField label={t('position')} value={Math.round(time)} max={duration} onChange={seek} onFocus={() => audio?.pause()} /><span>/ {formatTime(duration)}</span>
-          <select aria-label={t('speed')} value={rate} onChange={e => { const value = Number(e.target.value); setRate(value); if (audio) audio.playbackRate = value; }}>{[0.5, 1, 1.5, 2].map(r => <option key={r} value={r}>{r}×</option>)}</select>
+          <select aria-label={t('speed')} value={rate} onChange={e => updatePreferences({ rate: Number(e.target.value) })}>{PLAYBACK_RATES.map(r => <option key={r} value={r}>{r}×</option>)}</select>
           <span className="re-volume"><button disabled={!audio} aria-pressed={silent} onClick={toggleMute}>{t(silent ? 'unmute' : 'mute')}</button>
             <label>{t('volume')} <input type="range" aria-label={t('volume')} min="0" max="100" step="1" value={Math.round(volume * 100)} disabled={!audio} onChange={changeVolume} /></label><output>{Math.round(volume * 100)}%</output>
           </span>
-          <label><input type="checkbox" checked={beepPreview} onChange={e => setBeepPreview(e.target.checked)} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
+          <label><input type="checkbox" checked={beepPreview} onChange={e => updatePreferences({ beepPreview: e.target.checked })} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
           {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
         </div>
-        <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => setZoom(Number(e.target.value))}>{[1, 2, 4, 8, 16].map(z => <option key={z} value={z}>{z}×</option>)}</select></label><span className="re-muted">{t('dragHint')}</span></div>
+        <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><span className="re-muted">{t('dragHint')}</span></div>
         <Timeline recording={recording} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
         <div className="re-selection"><strong>{t('selection')}</strong><TimeField label={t('selectionStart')} value={selection.start_ms} max={duration} onChange={v => { if (v > selection.end_ms) return false; setSelection({ ...selection, start_ms: v }); return true; }} /><span>–</span><TimeField label={t('selectionEnd')} value={selection.end_ms} max={duration} onChange={v => { if (v < selection.start_ms) return false; setSelection({ ...selection, end_ms: v }); return true; }} />
           <button onClick={() => setSelection({ start_ms: Math.round(time), end_ms: Math.max(Math.round(time), selection.end_ms) })}>{t('startHere')}</button><button onClick={() => setSelection({ start_ms: Math.min(selection.start_ms, Math.round(time)), end_ms: Math.round(time) })}>{t('endHere')}</button>

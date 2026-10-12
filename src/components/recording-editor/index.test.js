@@ -4,6 +4,7 @@ import { act, Simulate } from 'react-dom/test-utils';
 import RecordingEditor from './index';
 import { LANGUAGE_KEY } from './i18n';
 import useAudioPreview from './useAudioPreview';
+import { PREFERENCES_KEY, readPreferences } from './preferences';
 
 jest.mock('./SlidePreview', () => () => <div>slide preview</div>);
 jest.mock('./VideoPreview', () => () => <div>video preview</div>);
@@ -40,6 +41,7 @@ beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.spyOn(navigator, 'language', 'get').mockReturnValue('ja-JP');
   localStorage.removeItem(LANGUAGE_KEY);
+  localStorage.removeItem(PREFERENCES_KEY);
   calls = [];
   global.fetch = jest.fn(async (url, options) => {
     const payload = options?.body ? JSON.parse(options.body) : null;
@@ -61,7 +63,7 @@ beforeEach(async () => {
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
 });
 
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); localStorage.removeItem(LANGUAGE_KEY); jest.restoreAllMocks(); global.fetch = originalFetch; });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); localStorage.removeItem(LANGUAGE_KEY); localStorage.removeItem(PREFERENCES_KEY); jest.restoreAllMocks(); global.fetch = originalFetch; });
 
 test('editing, undo/redo and draft send meeting-time ranges with revision', async () => {
   await time('選択開始', '00:00:06.500');
@@ -163,7 +165,7 @@ test('clicking a later time during playback continues timeline paging without pa
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
-test('reopening restores saved beep intervals and enables edited audio preview', async () => {
+test('reopening restores saved beep intervals without changing the beep preview preference', async () => {
   const beeps = [{ start_ms: 6500, end_ms: 9500 }];
   const checkbox = container.querySelector('.re-transport input[type="checkbox"]');
   await act(async () => { Simulate.change(checkbox, { target: { checked: false } }); });
@@ -171,8 +173,72 @@ test('reopening restores saved beep intervals and enables edited audio preview',
     ? { status: 'done', result: { audio_url: '/demo.webm', peaks: [] } } : { ...manifest, beep_ranges: beeps } }));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
   expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:06.500');
-  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(true);
-  expect(useAudioPreview).toHaveBeenLastCalledWith(expect.anything(), beeps, true);
+  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(useAudioPreview).toHaveBeenLastCalledWith(expect.anything(), beeps, false);
+});
+
+test('language, volume, mute, beep preview, speed and zoom survive reopening the editor', async () => {
+  await volume(37);
+  await click('ミュート');
+  await act(async () => {
+    Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } });
+    Simulate.change(container.querySelector('.re-transport select'), { target: { value: '1.5' } });
+    Simulate.change(container.querySelector('.re-tools select'), { target: { value: '8' } });
+  });
+  await language('en');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<RecordingEditor />));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-language select').value).toBe('en');
+  expect(container.querySelector('.re-volume input').value).toBe('37');
+  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(container.querySelector('.re-transport select').value).toBe('1.5');
+  expect(container.querySelector('.re-tools select').value).toBe('8');
+  const audio = container.querySelector('audio');
+  expect(audio.volume).toBeCloseTo(0.37);
+  expect(audio.muted).toBe(true);
+  expect(audio.playbackRate).toBe(1.5);
+  expect(audio.paused).toBe(true);
+  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8 });
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('unmuting from zero after reopening restores the remembered nonzero volume', async () => {
+  await volume(37);
+  await volume(0);
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<RecordingEditor />));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('audio').volume).toBe(0);
+  await click('ミュート解除');
+  expect(container.querySelector('audio').volume).toBeCloseTo(0.37);
+});
+
+test('resetting a recording preserves listening preferences', async () => {
+  await volume(25);
+  await click('ミュート');
+  await act(async () => Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } }));
+  await click('初期状態に戻す…');
+  await click('確認して初期状態に戻す');
+  expect(container.querySelector('audio').volume).toBeCloseTo(0.25);
+  expect(container.querySelector('audio').muted).toBe(true);
+  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+});
+
+test('preferences remain editable when browser storage is blocked', async () => {
+  jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage disabled'); });
+  jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage disabled'); });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<RecordingEditor />));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await volume(20);
+  await act(async () => Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } }));
+  expect(container.querySelector('audio').volume).toBeCloseTo(0.2);
+  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });
 
 test('reset requires confirmation and clears edits, draft and undo without rebuilding', async () => {
