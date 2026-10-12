@@ -190,9 +190,9 @@ function Editor() {
   const rebuildPending = ['requesting', 'requested'].includes(recording?.rebuild?.status);
   const rebuilding = rebuildPending || recording?.rebuild?.processing;
   const needsRangeSave = recording?.record_ranges_persisted === false;
-  const canSaveRaw = dirty || needsRangeSave;
+  const canSaveRaw = edit.record_ranges.length > 0 && (dirty || needsRangeSave);
   const rebuildBlock = busy ? t('working') : !recording?.rebuild?.available ? t('rebuildSetup')
-    : rebuilding ? t('rebuildBlockedProcessing') : dirty ? t('saveBeforeRebuild')
+    : rebuilding ? t('rebuildBlockedProcessing') : !edit.record_ranges.length ? t('needRange') : dirty ? t('saveBeforeRebuild')
       : needsRangeSave ? t('saveCandidateRanges') : '';
   const videos = useMemo(() => recording ? externalVideos(recording.events, duration) : [], [recording, duration]);
   const videoTitles = useExternalVideoTitles(videos, recording?.id, loadExternalVideoTitle);
@@ -343,7 +343,7 @@ function Editor() {
 
   return <div className="recording-editor">
     <header className="re-header"><div><span className="re-brand">BigBlueButton</span><strong>{t('title')}</strong></div>
-      <div className="re-header-actions"><label className="re-language">{t('language')} <select aria-label={t('language')} value={locale} onChange={e => setLocale(e.target.value)}>{languages.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select></label>{recording && <><span className="re-dirty">{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('saved')}</span><button disabled={!!busy} onClick={draft}>{t('saveDraft')}</button><button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw} title={!canSaveRaw ? t('rawAlreadySaved') : ''} onClick={() => { setReview(!review); setRebuildReview(false); setResetReview(false); }}>{t('saveRaw')}</button><button disabled={!!rebuildBlock} title={rebuildBlock} aria-describedby={rebuildBlock ? 're-rebuild-reason' : undefined} onClick={() => { setRebuildReview(!rebuildReview); setReview(false); setResetReview(false); }}>{t('rebuildRecording')}</button></>}</div>
+      <div className="re-header-actions"><label className="re-language">{t('language')} <select aria-label={t('language')} value={locale} onChange={e => setLocale(e.target.value)}>{languages.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select></label>{recording && <><span className="re-dirty">{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('saved')}</span><button disabled={!!busy} onClick={draft}>{t('saveDraft')}</button><button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw} title={!edit.record_ranges.length ? t('needRange') : !canSaveRaw ? t('rawAlreadySaved') : ''} onClick={() => { setReview(!review); setRebuildReview(false); setResetReview(false); }}>{t('saveRaw')}</button><button disabled={!!rebuildBlock} title={rebuildBlock} aria-describedby={rebuildBlock ? 're-rebuild-reason' : undefined} onClick={() => { setRebuildReview(!rebuildReview); setReview(false); setResetReview(false); }}>{t('rebuildRecording')}</button></>}</div>
     </header>
     <div className="re-shell"><MeetingList meetings={meetings} selectedId={recording?.id} busy={busy} dirty={dirty} onRefresh={refreshList} onOpen={open} /><main className="re-main">
       {busy && <div className="re-notice" role="status">◌ {displayMessage(busy)}</div>}{error && <div className="re-error" role="alert">{displayMessage(error)}</div>}{message && <div className="re-success" role="status">{displayMessage(message)}</div>}

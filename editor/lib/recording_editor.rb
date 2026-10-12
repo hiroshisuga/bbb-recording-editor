@@ -254,7 +254,7 @@ module RecordingEditor
         begin
           if File.file?(File.join(raw_root, id, 'events.xml'))
             rec = recording(id)
-            ranges = rec.record_ranges(rec.current_doc, full_when_empty: false)
+            ranges = rec.record_ranges
             display_name = ranges.empty? ? rec.name : publication[:recording_title] || rec.name
             room_name = rec.name == id ? publication[:metadata_name] : rec.name
             item.merge!(name: display_name, meeting_name: room_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
@@ -336,10 +336,10 @@ module RecordingEditor
       nil
     end
 
-    def record_ranges(source_doc = current_doc, full_when_empty: true)
+    def record_ranges(source_doc = current_doc)
       start = nil
       marks = source_doc.xpath('/recording/event[@eventname="RecordStatusEvent"]').sort_by { |e| e['timestamp'].to_i }
-      return full_when_empty ? [{ 'start_ms' => 0, 'end_ms' => duration }] : [] if marks.empty?
+      return [] if marks.empty?
       marks.each_with_object([]) do |event, result|
         t = [[time(event), 0].max, duration].min
         if field(event, 'status') == 'true'
@@ -520,7 +520,7 @@ module RecordingEditor
              end
       { id: id, name: name, start_utc: start_utc, origin_timestamp: origin, duration_ms: duration,
         revision: revision, record_ranges: record_ranges, original_record_ranges: record_ranges(doc),
-        record_ranges_persisted: !record_ranges(current_doc, full_when_empty: false).empty?,
+        record_ranges_persisted: !record_ranges.empty?,
         playback_sync: sync, last_operation: history && history['operation'],
         rebuild: rebuild, reset: Original.new(repo, id).info,
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
@@ -1034,7 +1034,7 @@ module RecordingEditor
       raise Error, '再構築の影響を確認してください。' unless payload['confirmed'] == true
       rec = repo.recording(id)
       raise Error.new('events.xmlが変更されています。会議を読み直してください。', 409) unless payload['revision'] == rec.revision
-      raise Error, '録画に残す区間を1つ以上rawへ保存してから再構築してください。' if rec.record_ranges(rec.current_doc, full_when_empty: false).empty?
+      raise Error, '録画に残す区間を1つ以上rawへ保存してから再構築してください。' if rec.record_ranges.empty?
       repo.ensure_not_rebuilding(id)
       raise Error.new('再構築用の補助プログラムが未設置です。READMEの設置手順を確認してください。', 503) unless repo.rebuild_info(id)['available']
       info = { 'status' => 'requesting', 'requested_at' => Time.now.utc.iso8601(6), 'revision' => rec.revision }
