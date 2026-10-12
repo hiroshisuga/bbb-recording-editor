@@ -157,7 +157,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
         </React.Fragment>;
       })}
     </div>
-    <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />
+    {selection.end_ms > selection.start_ms && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
     <div className="re-playhead" style={{ left: pct(time) }} />
   </div></div><TimelineTooltip key={recording.id} targetRef={scrollRef} /></>;
 }
@@ -289,7 +289,7 @@ function Editor() {
       const data = await request(`/recordings/${id}`);
       setRecording(data);
       setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
-      setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: Math.min(10000, data.duration_ms) });
+      setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: 0 });
       const generated = await runJob(`/recordings/${id}/preview`, {});
       setPreview(generated);
     } catch (e) { setError(e.message); } finally { setBusy(''); }
@@ -330,7 +330,7 @@ function Editor() {
       setPreview(null); setTime(0); setPlaying(false);
       const data = await request(`/recordings/${id}`);
       setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
-      setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: Math.min(10000, data.duration_ms) });
+      setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: 0 });
       setReview(false); setRebuildReview(false); setResetReview(false);
       setPreview(await runJob(`/recordings/${id}/preview`, {}));
       setMessage({ id: data.record_ranges_persisted === false ? 'resetUnmarkedCompleted' : 'resetCompleted' }); await refreshList();
@@ -385,7 +385,7 @@ function Editor() {
         </div>
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><span className="re-muted">{t('dragHint')}</span></div>
         <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
-        <div className="re-selection"><strong>{t('selection')}</strong><TimeField label={t('selectionStart')} value={selection.start_ms} max={duration} onChange={v => { if (v > selection.end_ms) return false; setSelection({ ...selection, start_ms: v }); return true; }} /><span>–</span><TimeField label={t('selectionEnd')} value={selection.end_ms} max={duration} onChange={v => { if (v < selection.start_ms) return false; setSelection({ ...selection, end_ms: v }); return true; }} />
+        <div className="re-selection"><strong>{t('selection')}</strong><TimeField label={t('selectionStart')} value={selection.start_ms} max={duration} onChange={v => { if (v > selection.end_ms && validSelection) return false; setSelection({ ...selection, start_ms: v, end_ms: Math.max(v, selection.end_ms) }); return true; }} /><span>–</span><TimeField label={t('selectionEnd')} value={selection.end_ms} max={duration} onChange={v => { if (v < selection.start_ms) return false; setSelection({ ...selection, end_ms: v }); return true; }} />
           <button onClick={() => setSelection({ start_ms: Math.round(time), end_ms: Math.max(Math.round(time), selection.end_ms) })}>{t('startHere')}</button><button onClick={() => setSelection({ start_ms: Math.min(selection.start_ms, Math.round(time)), end_ms: Math.round(time) })}>{t('endHere')}</button>
           <button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', [...edit.record_ranges, selection])}>{t('keep')}</button><button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', removeRange(edit.record_ranges, selection, duration))}>{t('exclude')}</button><button className="re-beep-button" disabled={!validSelection || !!busy} onClick={() => change('beep_ranges', [...edit.beep_ranges, selection])}>{t('addBeep')}</button>
         </div>
