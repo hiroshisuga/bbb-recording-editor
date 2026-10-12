@@ -441,6 +441,11 @@ module RecordingEditor
     def visual_events
       presentation = nil
       page = 1
+      filenames = doc.xpath('/recording/event[@eventname="ConversionCompletedEvent"]').each_with_object({}) do |event, names|
+        id = field(event, 'presentationName')
+        name = field(event, 'originalFilename').to_s.strip
+        names[id] = File.basename(name.tr('\\', '/')) if id && !name.empty?
+      end
       doc.xpath('/recording/event').filter_map do |event|
         type = event['eventname']
         data = { 'time_ms' => time(event), 'type' => type }
@@ -448,10 +453,11 @@ module RecordingEditor
         when 'SharePresentationEvent'
           presentation = field(event, 'presentationName')
           page = 1
-          data.merge!('presentation' => presentation, 'page' => page, 'share' => field(event, 'share'))
+          data.merge!('presentation' => presentation, 'page' => page, 'share' => field(event, 'share'), 'presentation_filename' => filenames[presentation])
         when 'GotoSlideEvent'
           page = field(event, 'slide', 'id').to_i + 1
-          data.merge!('presentation' => field(event, 'presentationName') || presentation, 'page' => page)
+          selected = field(event, 'presentationName') || presentation
+          data.merge!('presentation' => selected, 'page' => page, 'presentation_filename' => filenames[selected])
         when 'ResizeAndMoveSlideEvent'
           data['camera'] = %w[xOffset yOffset widthRatio heightRatio].to_h { |k| [k, field(event, k).to_f] }
         when 'AddTldrawShapeEvent'

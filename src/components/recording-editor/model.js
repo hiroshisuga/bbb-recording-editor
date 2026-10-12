@@ -59,15 +59,19 @@ export const presentationRanges = (events, duration) => {
     if (current) current.end_ms = time;
     current = null;
   };
-  const start = (presentation, time) => {
-    if (current && current.presentation === presentation) return;
+  const start = (presentation, time, filename) => {
+    if (current && current.presentation === presentation) {
+      if (filename) current.filename = filename;
+      return;
+    }
     close(time);
     const last = ranges[ranges.length - 1];
     if (last && last.presentation === presentation && last.end_ms === time) {
       current = last;
       current.end_ms = duration;
+      if (filename) current.filename = filename;
     } else {
-      current = { presentation, start_ms: time, end_ms: duration, events: [] };
+      current = { presentation, filename, start_ms: time, end_ms: duration, events: [] };
       ranges.push(current);
     }
   };
@@ -75,10 +79,10 @@ export const presentationRanges = (events, duration) => {
     if (event.type === 'SharePresentationEvent') {
       if (event.share === false || event.share === 'false') {
         if (!event.presentation || event.presentation === current?.presentation) close(event.time_ms);
-      } else start(event.presentation || current?.presentation || null, event.time_ms);
+      } else start(event.presentation || current?.presentation || null, event.time_ms, event.presentation_filename);
     } else if (event.type === 'GotoSlideEvent') {
       // Older raw data can begin with navigation instead of a share event.
-      start(event.presentation || current?.presentation || null, event.time_ms);
+      start(event.presentation || current?.presentation || null, event.time_ms, event.presentation_filename);
       if (event.time_ms > current.start_ms) current.events.push(event);
     } else if (event.type === 'ResizeAndMoveSlideEvent' && current) {
       if (event.time_ms > current.start_ms) current.events.push(event);
