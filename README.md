@@ -225,7 +225,7 @@ sudo bash "/ダウンロード先/bbb-recording-editor/deploy.sh"
 
 `deploy.sh` は引数なしでエディターを導入します。`deploy-editor.sh` を直接実行しても構いません。旧形式の `deploy.sh --editor` は同じ導入処理への互換入口として残しています。
 
-前提はNode.js 20以上とnpm、Python 3.8以上、systemd、稼働中のBBB・Nginx、`bigbluebutton` ユーザー、Ubuntu標準のNginxグループ `www-data`、`/usr/bin/bbb-record` です。Node.jsやBBB本体はこのスクリプトでは導入しません。Ruby 3.0以上・Nokogiri・WEBrick、FFmpeg、sudo、`htpasswd` の不足分は `apt-get install` で補います。既存パッケージの依存関係を修復する処理は実行しません。
+前提はNode.js 20以上とnpm、Python 3.8以上、systemd、稼働中のBBB・Nginx、`bigbluebutton` ユーザー、Ubuntu標準のNginxグループ `www-data`、`/usr/bin/bbb-record` です。Node.jsやBBB本体はこのスクリプトでは導入しません。Ruby 3.0以上・Nokogiri・WEBrick、FFmpeg、sudoの不足分は `apt-get install` で補います。`htpasswd` / `apache2-utils` は、認証ファイルを新規作成する場合だけ必要です。既存の `/etc/nginx/bbb-recording-editor.htpasswd` があれば、OpenSSLで作成したものもそのまま保持し、認証のためにaptを実行することはありません。既存パッケージの依存関係を修復する処理は実行しません。
 
 スクリプトは次の処理をまとめて行います。
 
@@ -425,6 +425,17 @@ sudo bash editor/deploy/install-rebuild-helper.sh
 カスタムビルドのBBBでは、`bigbluebutton` メタパッケージが要求する `bbb-apps-akka` のバージョンと、導入済みのカスタム版のバージョンが一致せず、無関係なパッケージの追加もaptに拒否されることがあります。メタパッケージとカスタム版のバージョンが一致しているか、aptのエラー本文を確認してください。
 
 この状態で、編集アプリを入れるためだけに `apt --fix-broken install` を実行しないでください。既存のBBBパッケージを変更・削除する可能性があります。以下は、Ruby・RubyGems・OpenSSL・FFmpegがすでにある場合の代替手順です。apt全体の依存関係を修復するものではありません。
+
+以前の導入で管理者認証を設定済みなら、まずファイルの存在を確認します。パスワードやハッシュの表示は不要です。
+
+```bash
+sudo ls -l /etc/nginx/bbb-recording-editor.htpasswd
+git switch main
+git pull --ff-only
+sudo bash deploy.sh --skip-dependencies
+```
+
+認証ファイルが存在する場合は `htpasswd` がなくても導入・更新できます。`--skip-dependencies` はaptによる導入を省き、必要なRubyライブラリやコマンドが既にあるかを検査します。不足が表示された場合は、その依存関係を用意してから再実行してください。認証ファイルがまだない場合は、後述のOpenSSLの手順で初回認証を準備するか、手動導入手順を使います。
 
 NokogiriをRubyGemsから導入します。
 

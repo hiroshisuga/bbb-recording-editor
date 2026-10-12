@@ -67,6 +67,7 @@ class Installer:
 
     def dependencies(self):
         packages = []
+        needs_htpasswd = not self.path(self.AUTH).exists()
         if not self.available('/usr/bin/ruby') or self.run(
                 ['runuser', '-u', 'bigbluebutton', '--', '/usr/bin/ruby', '-e',
                  'abort "Ruby 3.0+ required" if RUBY_VERSION.to_f < 3; require "nokogiri"; require "webrick"'],
@@ -74,7 +75,7 @@ class Installer:
             packages += ['ruby', 'ruby-nokogiri', 'ruby-webrick']
         if not all(self.available(x) for x in ['ffmpeg', 'ffprobe']):
             packages.append('ffmpeg')
-        if not self.available('htpasswd'):
+        if needs_htpasswd and not self.available('htpasswd'):
             packages.append('apache2-utils')
         if not self.available('/usr/bin/sudo'):
             packages.append('sudo')
@@ -82,8 +83,11 @@ class Installer:
             if self.options.skip_dependencies:
                 raise InstallError('Missing dependencies: ' + ', '.join(packages))
             self.run(['apt-get', 'install', '--yes', *packages])
-        for command in ['/usr/bin/ruby', '/usr/bin/python3', '/usr/bin/sudo', '/usr/sbin/visudo',
-                        '/usr/bin/bbb-record', 'ffmpeg', 'ffprobe', 'htpasswd', 'nginx', 'systemctl', 'runuser']:
+        required = ['/usr/bin/ruby', '/usr/bin/python3', '/usr/bin/sudo', '/usr/sbin/visudo',
+                    '/usr/bin/bbb-record', 'ffmpeg', 'ffprobe', 'nginx', 'systemctl', 'runuser']
+        if needs_htpasswd:
+            required.append('htpasswd')
+        for command in required:
             if not self.available(command):
                 raise InstallError(f'Required executable is missing: {command}')
         self.run(['runuser', '-u', 'bigbluebutton', '--', '/usr/bin/ruby', '-e',

@@ -237,6 +237,25 @@ class InstallEditorTest(unittest.TestCase):
         apt = [args for args, _ in self.installer.commands if args[0] == 'apt-get']
         self.assertEqual(apt, [['apt-get', 'install', '--yes', 'apache2-utils']])
 
+    def test_existing_auth_update_needs_no_htpasswd_or_apt(self):
+        self.install()
+        auth = self.installer.path(self.installer.AUTH).read_bytes()
+        update = self.update_installer()
+        update.missing = {'htpasswd'}
+        self.install(update)
+        self.assertEqual(update.path(update.AUTH).read_bytes(), auth)
+        self.assertFalse(any(args[0] in ['apt-get', 'htpasswd'] for args, _ in update.commands))
+
+    def test_manual_auth_allows_first_install_without_htpasswd(self):
+        auth = self.installer.path(self.installer.AUTH)
+        auth.parent.mkdir(parents=True)
+        auth.write_text('admin:existing-openssl-password-hash\n')
+        self.options.skip_dependencies = True
+        self.installer.missing = {'htpasswd'}
+        self.install()
+        self.assertEqual(auth.read_text(), 'admin:existing-openssl-password-hash\n')
+        self.assertFalse(any(args[0] in ['apt-get', 'htpasswd'] for args, _ in self.installer.commands))
+
     def test_skip_dependencies_reports_missing_without_changes(self):
         self.options.skip_dependencies = True
         self.installer.missing = {'htpasswd'}
