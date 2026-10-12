@@ -448,7 +448,7 @@ module RecordingEditor
         when 'SharePresentationEvent'
           presentation = field(event, 'presentationName')
           page = 1
-          data.merge!('presentation' => presentation, 'page' => page)
+          data.merge!('presentation' => presentation, 'page' => page, 'share' => field(event, 'share'))
         when 'GotoSlideEvent'
           page = field(event, 'slide', 'id').to_i + 1
           data.merge!('presentation' => field(event, 'presentationName') || presentation, 'page' => page)

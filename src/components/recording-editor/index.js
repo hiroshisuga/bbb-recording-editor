@@ -8,7 +8,7 @@ import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
 import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
 import useExternalVideoTitles from './useExternalVideoTitles';
-import { audioAdapter, externalVideos, formatTime, normalizeRanges, parseTime, removeRange } from './model';
+import { audioAdapter, externalVideos, formatTime, normalizeRanges, parseTime, presentationRanges, removeRange } from './model';
 import './styles.css';
 
 const PREFIX = process.env.REACT_APP_EDITOR_PREFIX || '/recording-editor';
@@ -76,6 +76,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const ref = useRef(null);
   const scrollRef = useRef(null);
   const duration = recording.duration_ms || 1;
+  const presentations = useMemo(() => presentationRanges(recording.events, duration), [recording.events, duration]);
   const follow = useTimelineFollow(scrollRef, ref, { time, duration, playing, zoom, recordingId: recording.id });
   const pct = ms => `${ms / duration * 100}%`;
   const position = e => {
@@ -125,7 +126,22 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     {['video', 'deskshare'].map(kind => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
       {recording.assets.filter(a => a.kind === kind).map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} title={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
-    <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>{recording.events.filter(e => ['SharePresentationEvent', 'GotoSlideEvent'].includes(e.type)).map((e, i) => <button key={i} className="re-event-marker" style={{ left: pct(e.time_ms) }} title={`${formatTime(e.time_ms)} ${e.type}`} aria-label={t('seekEvent', { time: formatTime(e.time_ms) })} onPointerDown={e => e.stopPropagation()} onClick={() => seek(e.time_ms)} />)}</div>
+    <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>
+      {presentations.map((presentation, i) => {
+        const title = presentation.presentation || t('slides');
+        const description = `${title}\n${formatTime(presentation.start_ms)} – ${formatTime(presentation.end_ms)}`;
+        return <React.Fragment key={i}>
+          <button className="re-presentation-ribbon" style={{ left: pct(presentation.start_ms), width: pct(presentation.end_ms - presentation.start_ms) }}
+            title={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(presentation.start_ms)}>{title}</button>
+          {presentation.events.filter(event => event.time_ms < presentation.end_ms).map((event, j) => {
+            const label = event.type === 'GotoSlideEvent' ? t('slide', { page: event.page }) : t('slideCamera');
+            const details = `${formatTime(event.time_ms)} · ${label}`;
+            return <button key={j} className="re-event-marker re-presentation-marker" style={{ left: pct(event.time_ms) }} title={details}
+              aria-label={details} onPointerDown={e => e.stopPropagation()} onClick={() => seek(event.time_ms)} />;
+          })}
+        </React.Fragment>;
+      })}
+    </div>
     <div className="re-track re-external-track"><span className="re-track-label">{t('externalVideos')}</span>
       {videos.filter(video => video.clear > video.timestamp).map((video, i) => {
         const title = video.title?.trim() || videoTitles[video.url] || video.url || t('externalVideos');

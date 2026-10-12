@@ -66,6 +66,7 @@
   "camera": "Webcam",
   "screen": "Screen sharing",
   "slides": "Slides",
+  "slideCamera": "Slide pan / zoom",
   "externalVideos": "External video",
   "externalPlay": "Play",
   "externalPause": "Pause",

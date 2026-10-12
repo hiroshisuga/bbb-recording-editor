@@ -51,6 +51,42 @@ export const externalVideos = (events, duration) => {
   return videos;
 };
 
+// Follow the selected presentation even while another content type covers it.
+export const presentationRanges = (events, duration) => {
+  const ranges = [];
+  let current;
+  const close = time => {
+    if (current) current.end_ms = time;
+    current = null;
+  };
+  const start = (presentation, time) => {
+    if (current && current.presentation === presentation) return;
+    close(time);
+    const last = ranges[ranges.length - 1];
+    if (last && last.presentation === presentation && last.end_ms === time) {
+      current = last;
+      current.end_ms = duration;
+    } else {
+      current = { presentation, start_ms: time, end_ms: duration, events: [] };
+      ranges.push(current);
+    }
+  };
+  events.forEach(event => {
+    if (event.type === 'SharePresentationEvent') {
+      if (event.share === false || event.share === 'false') {
+        if (!event.presentation || event.presentation === current?.presentation) close(event.time_ms);
+      } else start(event.presentation || current?.presentation || null, event.time_ms);
+    } else if (event.type === 'GotoSlideEvent') {
+      // Older raw data can begin with navigation instead of a share event.
+      start(event.presentation || current?.presentation || null, event.time_ms);
+      if (event.time_ms > current.start_ms) current.events.push(event);
+    } else if (event.type === 'ResizeAndMoveSlideEvent' && current) {
+      if (event.time_ms > current.start_ms) current.events.push(event);
+    }
+  });
+  return ranges.filter(range => range.end_ms > range.start_ms);
+};
+
 const merge = (old, patch) => {
   const result = { ...old };
   Object.keys(patch).forEach(key => {
