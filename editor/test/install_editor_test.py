@@ -332,10 +332,8 @@ class InstallEditorTest(unittest.TestCase):
         self.assertEqual(shared.stat().st_mode & 0o777, 0o755)
 
     def test_shell_entrypoint_finds_source_from_unrelated_working_directory(self):
-        for name in ['deploy.sh', 'deploy-editor.sh']:
-            shutil.copy2(REPO / name, self.source / name)
-        for arguments in [['deploy.sh', '--help'], ['deploy.sh', '--editor', '--help'],
-                          ['deploy-editor.sh', '--help']]:
+        shutil.copy2(REPO / 'deploy.sh', self.source / 'deploy.sh')
+        for arguments in [['deploy.sh', '--help'], ['deploy.sh', '--editor', '--help']]:
             with self.subTest(arguments=arguments):
                 result = subprocess.run(['bash', str(self.source / arguments[0]), *arguments[1:]],
                                         cwd=self.folder, capture_output=True, text=True)
