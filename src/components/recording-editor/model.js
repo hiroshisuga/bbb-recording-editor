@@ -38,7 +38,7 @@ export const externalVideos = (events, duration) => {
     const timestamp = event.time_ms / 1000;
     if (event.type === 'StartExternalVideoRecordEvent') {
       if (current) current.clear = timestamp;
-      current = { timestamp, clear: duration / 1000, url: event.url, events: [] };
+      current = { timestamp, clear: duration / 1000, url: event.url, title: event.title, events: [] };
       videos.push(current);
     } else if (event.type === 'StopExternalVideoRecordEvent') {
       if (current) current.clear = timestamp;

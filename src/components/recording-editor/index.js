@@ -7,6 +7,7 @@ import MeetingList from './MeetingList';
 import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
 import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
+import useExternalVideoTitles from './useExternalVideoTitles';
 import { audioAdapter, externalVideos, formatTime, normalizeRanges, parseTime, removeRange } from './model';
 import './styles.css';
 
@@ -20,6 +21,20 @@ async function request(path, data) {
   const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
   return body;
+}
+const loadExternalVideoTitle = (id, url) => request(`/recordings/${id}/external-video-title`, { url });
+
+function externalEventDescription(event, t) {
+  const labels = { start: 'externalPlay', play: 'externalPlay', pause: 'externalPause', stop: 'externalPause',
+    seek: 'externalSeek', setPlaybackRate: 'externalRate', playbackRateChange: 'externalRate',
+    playerUpdate: 'externalUpdate', presenterReady: 'externalReady' };
+  const label = labels[event.type] ? t(labels[event.type]) : event.type || t('externalUpdate');
+  const details = [formatTime(event.timestamp * 1000), label];
+  const rate = Number.parseFloat(event.rate);
+  const position = Number.parseFloat(event.time);
+  if (Number.isFinite(rate) && rate > 0) details.push(`${rate}×`);
+  if (Number.isFinite(position)) details.push(t('externalPosition', { time: formatTime(position * 1000) }));
+  return details.join(' · ');
 }
 
 function TimeField({ value, onChange, label, max, onFocus }) {
@@ -56,7 +71,7 @@ function RangeRows({ label, ranges, onChange, duration, seek }) {
   </div>;
 }
 
-function Timeline({ recording, edit, change, selection, setSelection, time, playing, seek, peaks, zoom }) {
+function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
   const scrollRef = useRef(null);
@@ -110,7 +125,20 @@ function Timeline({ recording, edit, change, selection, setSelection, time, play
     {['video', 'deskshare'].map(kind => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
       {recording.assets.filter(a => a.kind === kind).map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} title={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
-    <div className="re-track re-slide-track"><span className="re-track-label">{t('slidesVideos')}</span>{recording.events.filter(e => ['SharePresentationEvent', 'GotoSlideEvent', 'StartExternalVideoRecordEvent'].includes(e.type)).map((e, i) => <button key={i} className="re-event-marker" style={{ left: pct(e.time_ms) }} title={`${formatTime(e.time_ms)} ${e.type}`} aria-label={t('seekEvent', { time: formatTime(e.time_ms) })} onPointerDown={e => e.stopPropagation()} onClick={() => seek(e.time_ms)} />)}</div>
+    <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>{recording.events.filter(e => ['SharePresentationEvent', 'GotoSlideEvent'].includes(e.type)).map((e, i) => <button key={i} className="re-event-marker" style={{ left: pct(e.time_ms) }} title={`${formatTime(e.time_ms)} ${e.type}`} aria-label={t('seekEvent', { time: formatTime(e.time_ms) })} onPointerDown={e => e.stopPropagation()} onClick={() => seek(e.time_ms)} />)}</div>
+    <div className="re-track re-external-track"><span className="re-track-label">{t('externalVideos')}</span>
+      {videos.filter(video => video.clear > video.timestamp).map((video, i) => {
+        const title = video.title?.trim() || videoTitles[video.url] || video.url || t('externalVideos');
+        const description = `${title}\n${formatTime(video.timestamp * 1000)} – ${formatTime(video.clear * 1000)}`;
+        return <React.Fragment key={i}>
+          <button className="re-external-ribbon" style={{ left: pct(video.timestamp * 1000), width: pct((video.clear - video.timestamp) * 1000) }}
+            title={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(video.timestamp * 1000)}>{title}</button>
+          {video.events.filter(event => event.timestamp > video.timestamp && event.timestamp < video.clear).map((event, j) => <button key={j}
+            className="re-event-marker re-external-marker" style={{ left: pct(event.timestamp * 1000) }} title={externalEventDescription(event, t)}
+            aria-label={externalEventDescription(event, t)} onPointerDown={e => e.stopPropagation()} onClick={() => seek(event.timestamp * 1000)} />)}
+        </React.Fragment>;
+      })}
+    </div>
     <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />
     <div className="re-playhead" style={{ left: pct(time) }} />
   </div></div>;
@@ -149,6 +177,7 @@ function Editor() {
     : rebuilding ? t('rebuildBlockedProcessing') : dirty ? t('saveBeforeRebuild')
       : needsRangeSave ? t('saveCandidateRanges') : '';
   const videos = useMemo(() => recording ? externalVideos(recording.events, duration) : [], [recording, duration]);
+  const videoTitles = useExternalVideoTitles(videos, recording?.id, loadExternalVideoTitle);
   const primary = useMemo(() => audio ? audioAdapter(audio, duration) : null, [audio, duration]);
   const getPrimary = useCallback(() => primary, [primary]);
   useEffect(() => {
@@ -337,7 +366,7 @@ function Editor() {
           {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
         </div>
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><span className="re-muted">{t('dragHint')}</span></div>
-        <Timeline recording={recording} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
+        <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
         <div className="re-selection"><strong>{t('selection')}</strong><TimeField label={t('selectionStart')} value={selection.start_ms} max={duration} onChange={v => { if (v > selection.end_ms) return false; setSelection({ ...selection, start_ms: v }); return true; }} /><span>–</span><TimeField label={t('selectionEnd')} value={selection.end_ms} max={duration} onChange={v => { if (v < selection.start_ms) return false; setSelection({ ...selection, end_ms: v }); return true; }} />
           <button onClick={() => setSelection({ start_ms: Math.round(time), end_ms: Math.max(Math.round(time), selection.end_ms) })}>{t('startHere')}</button><button onClick={() => setSelection({ start_ms: Math.min(selection.start_ms, Math.round(time)), end_ms: Math.round(time) })}>{t('endHere')}</button>
           <button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', [...edit.record_ranges, selection])}>{t('keep')}</button><button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', removeRange(edit.record_ranges, selection, duration))}>{t('exclude')}</button><button className="re-beep-button" disabled={!validSelection || !!busy} onClick={() => change('beep_ranges', [...edit.beep_ranges, selection])}>{t('addBeep')}</button>

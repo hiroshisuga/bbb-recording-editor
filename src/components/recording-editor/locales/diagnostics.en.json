@@ -1,4 +1,5 @@
 {
+  "この会議の外部動画ではありません。": "This external video does not belong to this meeting.",
   "処理待ちです。": "Queued.",
   "処理が見つかりません。サーバが再起動した場合は会議を読み直してください。": "Job not found. If the server restarted, reload the meeting.",
   "編集用のリクエストヘッダが必要です。": "The editor request header is required.",

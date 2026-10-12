@@ -4,6 +4,7 @@
 require 'webrick'
 require 'base64'
 require_relative 'lib/recording_editor'
+require_relative 'lib/external_video_title'
 
 module RecordingEditor
   # A single queue serializes media processing; this is not a retention lock.
@@ -128,6 +129,12 @@ module RecordingEditor
       when '/draft'
         require_method(req, 'POST')
         json(res, @editor.draft(id, payload(req)))
+      when '/external-video-title'
+        require_method(req, 'POST')
+        url = payload(req)['url']
+        event = @repo.recording(id).visual_events.find { |e| e['type'] == 'StartExternalVideoRecordEvent' && e['url'] == url }
+        raise Error, 'この会議の外部動画ではありません。' unless event
+        json(res, { title: event['title'].to_s.strip.empty? ? ExternalVideoTitle.fetch(url) : event['title'] })
       when '/save'
         require_method(req, 'POST')
         data = payload(req)

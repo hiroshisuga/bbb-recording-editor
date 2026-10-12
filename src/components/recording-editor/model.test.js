@@ -16,12 +16,28 @@ test('record-off selection splits an existing recording interval', () => {
 
 test('external video states use status as type and state as playing', () => {
   const videos = externalVideos([
-    { type: 'StartExternalVideoRecordEvent', time_ms: 1000, url: 'https://example.com/video.mp4' },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 1000, url: 'https://example.com/video.mp4', title: 'Recorded title' },
     { type: 'UpdateExternalVideoRecordEvent', time_ms: 2000, status: 'seek', state: '0', position: '45', rate: '1' },
     { type: 'StopExternalVideoRecordEvent', time_ms: 5000 },
   ], 6000);
   expect(videos[0].clear).toBe(5);
+  expect(videos[0].title).toBe('Recorded title');
   expect(videos[0].events[0]).toMatchObject({ timestamp: 2, type: 'seek', playing: false, time: '45' });
+});
+
+test('external sharing ends at stop, replacement or meeting end and ignores orphan updates', () => {
+  const videos = externalVideos([
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 0, status: 'seek' },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 1000, url: 'first' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 2000, status: 'pause', state: '0' },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 3000, url: 'replacement' },
+    { type: 'StopExternalVideoRecordEvent', time_ms: 4000 },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 4500, status: 'play' },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 5000, url: 'open-ended' },
+  ], 6000);
+  expect(videos.map(video => [video.timestamp, video.clear])).toEqual([[1, 3], [3, 4], [5, 6]]);
+  expect(videos[0].events[0].playing).toBe(false);
+  expect(videos[1].events).toEqual([]);
 });
 
 test('whiteboard partial updates, slide changes, deletions and backwards seeks', () => {

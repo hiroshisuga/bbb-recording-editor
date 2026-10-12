@@ -466,6 +466,7 @@ module RecordingEditor
           data.merge!('name' => field(event, 'sender', 'senderName', 'name'), 'message' => field(event, 'message'))
         when 'StartExternalVideoRecordEvent'
           data['url'] = field(event, 'externalVideoUrl', 'externalVideoURL')
+          data['title'] = field(event, 'externalVideoTitle', 'videoTitle', 'title')
         when 'UpdateExternalVideoRecordEvent'
           data.merge!('state' => field(event, 'state'), 'status' => field(event, 'status'), 'position' => field(event, 'time'), 'rate' => field(event, 'rate'))
         when 'StopExternalVideoRecordEvent', 'SetScreenshareAsContentEvent', 'SetPresentationIsOpenEvent', 'ParticipantJoinEvent', 'ParticipantLeftEvent', 'ParticipantTalkingEvent'
