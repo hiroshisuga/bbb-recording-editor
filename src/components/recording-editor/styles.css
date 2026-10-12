@@ -28,6 +28,7 @@
 .recording-editor .re-meeting { width:100%; display:flex; flex-direction:column; align-items:flex-start; white-space:normal; text-align:left; gap:4px; margin-bottom:7px; padding:12px; background:#192533; }
 .recording-editor .re-meeting.active { border-color:#63b7f1; background:#203b53; }
 .re-meeting strong { overflow-wrap:anywhere; font-size:13px; }
+.re-meeting-room { overflow-wrap:anywhere; }
 .re-meeting span,.re-meeting small { font-size:11px; }
 .re-meeting-filter { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:12px; }
 .re-meeting-filter select { flex:1; min-width:0; width:100%; }

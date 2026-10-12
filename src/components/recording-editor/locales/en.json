@@ -83,6 +83,7 @@
   "savingRaw": "Saving raw data…",
   "rawSaved": "Saved. XML backup: {backup}. Use Rebuild recording to apply the changes to playback.",
   "recentMeetings": "Recent meetings",
+  "roomName": "Room",
   "refreshList": "Refresh list",
   "recentHint": "Past 14 days · missing raw data is flagged",
   "show": "Show",

@@ -245,7 +245,8 @@ module RecordingEditor
           publication[:publication_status] = 'unknown'
           publication[:warnings] << '録画の再構築に失敗しました。BBBの処理ログを確認してください。'
         end
-        item = { id: id, name: publication[:recording_title] || publication[:metadata_name] || id, date: time.iso8601,
+        item = { id: id, name: publication[:recording_title] || publication[:metadata_name] || id,
+                 meeting_name: publication[:metadata_name], date: time.iso8601,
                  duration_ms: publication[:metadata_duration_ms], raw_available: false,
                  recording_status: 'unknown', recorded_duration_ms: nil,
                  publication_status: publication[:publication_status], playback_duration_ms: publication[:playback_duration_ms],
@@ -255,7 +256,8 @@ module RecordingEditor
             rec = recording(id)
             ranges = rec.record_ranges(rec.current_doc, full_when_empty: false)
             display_name = ranges.empty? ? rec.name : publication[:recording_title] || rec.name
-            item.merge!(name: display_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
+            room_name = rec.name == id ? publication[:metadata_name] : rec.name
+            item.merge!(name: display_name, meeting_name: room_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
                         recording_status: ranges.empty? ? 'unmarked' : 'marked',
                         recorded_duration_ms: ranges.sum { |r| r['end_ms'] - r['start_ms'] })
             item[:warnings].concat(rec.warnings)

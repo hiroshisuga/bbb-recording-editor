@@ -83,6 +83,7 @@
   "savingRaw": "rawデータを保存しています…",
   "rawSaved": "保存しました。XMLバックアップ: {backup}。録画へ反映するには「録画を再構築…」を実行してください。",
   "recentMeetings": "最近の会議",
+  "roomName": "会議室",
   "refreshList": "一覧を更新",
   "recentHint": "過去14日 · rawデータがない会議は警告",
   "show": "表示",

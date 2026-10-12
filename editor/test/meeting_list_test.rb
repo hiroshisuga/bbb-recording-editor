@@ -83,12 +83,14 @@ class MeetingListTest < Minitest::Test
     path = metadata(@repo.published_root, 'published', 'true', title: '  講義 <第1回> & introduction  ')
     metadata_before = File.binread(path)
     assert_equal '講義 <第1回> & introduction', item[:name]
+    assert_equal 'Raw meeting', item[:meeting_name]
     assert_equal 'published', item[:publication_status]
     assert_equal 'marked', item[:recording_status]
     assert_equal metadata_before, File.binread(path)
     FileUtils.remove_entry(File.dirname(path))
     metadata(@repo.unpublished_root, 'unpublished', 'false', title: '非公開の講義タイトル')
     assert_equal '非公開の講義タイトル', item[:name]
+    assert_equal 'Raw meeting', item[:meeting_name]
     assert_equal 'unpublished', item[:publication_status]
     assert_equal before, File.binread(raw_path)
   end
@@ -98,6 +100,7 @@ class MeetingListTest < Minitest::Test
     metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'Old recording title')
     assert_equal 'Raw meeting', item[:name]
     assert_equal 'unmarked', item[:recording_status]
+    assert_equal 'Raw meeting', item[:meeting_name]
     raw(marks)
     assert_equal 'Old recording title', item[:name]
   end
@@ -125,6 +128,7 @@ class MeetingListTest < Minitest::Test
   def test_renamed_titles_remain_available_when_raw_has_expired
     metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'Archived recording title')
     assert_equal 'Archived recording title', item[:name]
+    assert_equal 'Metadata meeting', item[:meeting_name]
     refute item[:raw_available]
     assert_equal 'unknown', item[:recording_status]
   end
