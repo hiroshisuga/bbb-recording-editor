@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tldraw, AssetRecordType } from '@bigbluebutton/tldraw';
 import '@bigbluebutton/tldraw/tldraw.css';
 import { createTldrawImageAsset, createTldrawBackgroundShape } from './tldraw';
@@ -15,6 +15,12 @@ export default function SlidePreview({ recording, time }) {
   const [dimensions, setDimensions] = useState({ width: 1440, height: 1080 });
   const [error, setError] = useState('');
   const container = useRef(null);
+  const mount = useCallback(instance => {
+    // Readonly prevents shape edits, but Tldraw still allows wheel/pinch panning.
+    // Recorded camera changes use setCamera, which remains available when locked.
+    instance.updateInstanceState({ canMoveCamera: false });
+    setEditor(instance);
+  }, []);
   useEffect(() => {
     if (!slide) return undefined;
     let alive = true;
@@ -78,7 +84,7 @@ export default function SlidePreview({ recording, time }) {
 
   if (!slide) return <div className="re-placeholder">{t('noSlide')}</div>;
   return <div className="re-slide" ref={container}>
-    <Tldraw hideUi onMount={setEditor} />
+    <Tldraw hideUi autoFocus={false} onMount={mount} />
     {error && <span className="re-render-warning">{message(error)}</span>}
     <span className="re-slide-label">{t('slide', { page: state.page })}</span>
   </div>;
