@@ -246,6 +246,91 @@ sudo bash "/ダウンロード先/bbb-recording-editor/deploy.sh"
 
 オプションは `sudo bash /取得先/deploy.sh --help` で確認できます。`--skip-dependencies` はapt導入を省いて依存関係の検査だけ行います。`--skip-build` は取得したソース内の `build-editor/` を利用しますが、設定とURLプレフィックスが一致するビルドが必要です。一括導入後の `/opt` 内はroot所有のため、更新は新しく取得したソースから再実行してください。
 
+### 導入スクリプトの使い方
+
+一括導入の入口はリポジトリ直下の **`deploy.sh`** です。スクリプトはBBBサーバ上で実行してください。ソースはホームディレクトリなど任意の場所に取得でき、導入先は `/opt/bbb-recording-editor` に固定されます。`/opt` 内のファイルを直接編集せず、取得したソースから導入・更新します。
+
+| スクリプト | 用途 |
+| --- | --- |
+| [deploy.sh](deploy.sh) | 通常使用する一括導入・更新の入口。旧形式の `--editor` も受け付ける。 |
+| [deploy-editor.sh](deploy-editor.sh) | 同じ一括導入処理を呼び出す別の入口。オプションは共通。 |
+| [editor/deploy/install-editor.py](editor/deploy/install-editor.py) | 上記のシェルスクリプトから実行されるインストーラー本体。 |
+| [editor/deploy/install-rebuild-helper.sh](editor/deploy/install-rebuild-helper.sh) | 手動導入した環境で、再構築用ヘルパーだけを設置・更新する。一括導入では別途実行不要。 |
+
+**初回導入**
+
+```bash
+git clone https://github.com/hiroshisuga/bbb-recording-editor.git
+cd bbb-recording-editor
+sudo bash deploy.sh
+```
+
+認証ファイルがまだなければ、管理者 `admin` のブラウザ用パスワードを対話入力します。`htpasswd` がない場合は `apache2-utils` の導入を試みます。認証ファイルを事前に準備してある場合は、そのユーザーとパスワードを引き継ぎます。
+
+**既存環境の更新**
+
+作業用ソースのディレクトリで、保存・再構築ジョブの完了を確認してから実行します。以下は `main` の公開済みコードを導入する例です。
+
+```bash
+git switch main &&
+git pull --ff-only &&
+sudo bash deploy.sh
+```
+
+既存の設定と認証情報を保持し、画面のビルドとサービス再起動も実行します。既存の `/etc/nginx/bbb-recording-editor.htpasswd` があれば、`htpasswd` コマンドは不要です。OpenSSLで作成した認証ファイルもそのまま使えます。
+
+**aptによる依存パッケージ導入を省く場合**
+
+カスタムBBBのパッケージ依存関係が不一致などでaptが使えず、必要なライブラリ・コマンドを既に用意してある場合に使います。
+
+```bash
+sudo bash deploy.sh --skip-dependencies
+```
+
+依存関係の検査は行います。不足がある場合はその内容を表示して停止し、通常どおりのビルド・導入には進みません。認証ファイルが未作成で `htpasswd` もない場合は、下の「aptが使えない場合」にあるOpenSSLの手順で認証ファイルを準備してください。
+
+**オプション一覧**
+
+| オプション | 動作・使用条件 |
+| --- | --- |
+| `--help` | 使用方法を表示して終了。導入処理は行わない。 |
+| `--admin-user 名前` | 初回に新規作成する認証ファイルのユーザー名を指定。省略時は `admin`。既存ファイルのユーザー名は変更しない。 |
+| `--password-file パス` | 初回のパスワードをファイルから標準入力で渡す。非対話導入用。既存の認証ファイルのパスワード変更は行わない。 |
+| `--skip-dependencies` | aptによる不足パッケージ導入を省く。依存関係の検査は続ける。 |
+| `--skip-build` | ソース内に用意した `build-editor/` を使用。既存環境のURLプレフィックスと一致するビルドが必要。 |
+
+例えば、初回ユーザー名を変更する場合は次のように実行します。
+
+```bash
+sudo bash deploy.sh --admin-user editor-admin
+```
+
+既存ユーザーのパスワードを変更する場合は、このオプションを使わず、下の手動導入手順にある `htpasswd` による認証ファイルの更新を行います。既存ファイルへの操作では `-c` を付けません。
+
+非対話の初回導入では、他ユーザーに読めないパスワードファイルを事前に用意します。ファイルにはパスワードを1行で記載し、導入後に管理者が削除してください。
+
+```bash
+sudo chmod 600 /安全な場所/editor-password.txt &&
+sudo bash deploy.sh --admin-user editor-admin \
+  --password-file /安全な場所/editor-password.txt
+```
+
+ビルド済み画面を使う場合は、ソースを変更した後にビルドし直してから指定します。以下は標準の `/recording-editor` 用です。
+
+```bash
+npm ci &&
+npm run build &&
+sudo bash deploy.sh --skip-build
+```
+
+別のカレントディレクトリから実行する場合も、スクリプトのパスを指定すれば同じ処理を行います。以下は `~/recordEditor/bbb-recording-editor` に取得した場合の例です。
+
+```bash
+sudo bash "$HOME/recordEditor/bbb-recording-editor/deploy.sh" --skip-dependencies
+```
+
+通常は認証情報を変更するための再導入は不要です。実際の認証はNginxが行い、`htpasswd` は認証ファイルの作成・管理に使うツールです。
+
 ### 手動導入
 
 例はUbuntu、配置先 `/opt/bbb-recording-editor`、サービス実行ユーザー `bigbluebutton`、既存BBBのNginxを前提にしています。公開URLはHTTPSです。以下の相対パスを使うコマンドは、リポジトリのルート `/opt/bbb-recording-editor` で実行してください。既存Playbackの配信先には上書きしません。
