@@ -52,14 +52,23 @@ class MeetingListTest < Minitest::Test
     assert item[:raw_available]
   end
 
-  def test_no_marks_are_not_a_recording_but_editor_can_still_offer_full_meeting
+  def test_no_marks_leave_recording_intervals_empty_in_the_list_and_editor
     raw
+    path = File.join(@repo.raw_root, @id, 'events.xml')
+    before = File.binread(path)
     assert_equal 'unmarked', item[:recording_status]
     assert_equal 0, item[:recorded_duration_ms]
-    assert_equal [{ 'start_ms' => 0, 'end_ms' => 10_000 }], @repo.recording(@id).record_ranges
+    rec = @repo.recording(@id)
+    assert_empty rec.record_ranges
+    manifest = rec.to_h
+    assert_empty manifest[:record_ranges]
+    assert_empty manifest[:original_record_ranges]
+    refute manifest[:record_ranges_persisted]
+    assert_equal before, File.binread(path)
     raw("<event timestamp='4000' eventname='RecordStatusEvent'><status>false</status></event>")
     assert_equal 'unmarked', item[:recording_status]
     assert_equal 0, item[:recorded_duration_ms]
+    assert_empty @repo.recording(@id).record_ranges
   end
 
   def test_unpublish_move_is_detected_without_raw_and_uses_metadata_name

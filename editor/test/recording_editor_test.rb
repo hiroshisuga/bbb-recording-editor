@@ -241,10 +241,16 @@ class RecordingEditorTest < Minitest::Test
     original = xml.to_xml
     File.binwrite(File.join(@raw, 'events.xml'), original)
     editor = RecordingEditor::Editor.new(@repo)
+    assert_empty @repo.recording(@id).to_h[:record_ranges]
     saved = editor.save(@id, payload)
+    refute_empty @repo.recording(@id).to_h[:record_ranges]
     editor.reset(@id, { 'revision' => saved['revision'], 'confirmed' => true })
     assert_equal original.b, File.binread(File.join(@raw, 'events.xml'))
     assert_empty @repo.recording(@id).current_doc.xpath('/recording/event[@eventname="RecordStatusEvent"]')
+    manifest = @repo.recording(@id).to_h
+    assert_empty manifest[:record_ranges]
+    assert_empty manifest[:original_record_ranges]
+    refute manifest[:record_ranges_persisted]
     assert_raises(RecordingEditor::Error) { editor.rebuild(@id, { 'revision' => @repo.recording(@id).revision, 'confirmed' => true }) }
   end
 

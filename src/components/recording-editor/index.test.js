@@ -417,20 +417,42 @@ test('reset with an unavailable helper explains setup without requiring another 
   expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
 });
 
-test('unmarked original offers saving candidate intervals before rebuild', async () => {
+test('unmarked meetings open with no keep intervals and require an explicit interval before saving', async () => {
   const fetch = global.fetch.getMockImplementation();
   global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
-    ? { ok: true, json: async () => ({ ...manifest, record_ranges_persisted: false, last_operation: 'reset', playback_sync: 'needs_rebuild' }) }
+    ? { ok: true, json: async () => ({ ...manifest, record_ranges: [], record_ranges_persisted: false }) }
+    : fetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-bar')).toBeNull();
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  expect(button('rawデータへ保存…').title).toContain('区間を1つ以上指定');
+  expect(button('録画を再構築…').disabled).toBe(true);
+  expect(container.querySelector('#re-rebuild-reason').textContent).toContain('区間を1つ以上指定');
+  expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
+  await selectRange();
+  await click('録画に残す');
+  expect(button('rawデータへ保存…').disabled).toBe(false);
+  expect(button('録画を再構築…').disabled).toBe(true);
+  await click('rawデータへ保存…');
+  await click('バックアップを作成して保存');
+  expect(calls.find(call => call.url.endsWith('/save')).payload.record_ranges).toEqual([{ start_ms: 1000, end_ms: 3000 }]);
+});
+
+test('resetting an unmarked original restores empty keep intervals', async () => {
+  const fetch = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, record_ranges: [], record_ranges_persisted: false, last_operation: 'reset', playback_sync: 'needs_rebuild' }) }
     : fetch(url, options));
   await click('初期状態に戻す…');
   await click('確認して初期状態に戻す');
-  expect(button('rawデータへ保存…').disabled).toBe(false);
+  expect(container.querySelector('.re-bar')).toBeNull();
+  expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
-  expect(container.querySelector('#re-rebuild-reason').textContent).toContain('編集候補');
+  expect(container.querySelector('#re-rebuild-reason').textContent).toContain('区間を1つ以上指定');
+  expect(container.textContent).toContain('録画に残す区間は空');
   expect(container.textContent).not.toContain('現在の編集内容はrawデータに保存済み');
-  await click('rawデータへ保存…');
-  await click('バックアップを作成して保存');
-  expect(calls.some(call => call.url.endsWith('/save'))).toBe(true);
+  expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
 });
 
 test('BBB processing blocks mutations and explains the disabled rebuild', async () => {

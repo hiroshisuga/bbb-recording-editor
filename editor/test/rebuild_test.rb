@@ -70,12 +70,12 @@ class RebuildTest < Minitest::Test
     assert_equal 'reflected', @repo.recording(@id).to_h[:playback_sync]
   end
 
-  def test_manifest_reports_candidate_ranges_and_processing_separately
+  def test_manifest_reports_empty_recording_ranges_and_processing_separately
     xml = '<recording><event timestamp="1000" eventname="ParticipantJoinEvent"/><event timestamp="5000" eventname="EndAndKickAllEvent"/></recording>'
     File.write(File.join(@repo.raw_root, @id, 'events.xml'), xml)
     data = @repo.recording(@id).to_h
     refute data[:record_ranges_persisted]
-    assert_equal [{ 'start_ms' => 0, 'end_ms' => 4000 }], data[:record_ranges]
+    assert_empty data[:record_ranges]
     dir = File.join(@repo.process_root, @id)
     FileUtils.mkdir_p(dir)
     File.write(File.join(dir, 'metadata.xml'), '<recording><state>processing</state></recording>')
@@ -91,7 +91,7 @@ class RebuildTest < Minitest::Test
     refute File.file?(File.join(@repo.state_dir(@id), 'rebuild-request.json'))
   end
 
-  def test_unmarked_raw_cannot_be_rebuilt_using_the_full_meeting_preview_fallback
+  def test_unmarked_raw_cannot_be_rebuilt_without_saving_recording_ranges
     xml = '<recording><event timestamp="1000" eventname="ParticipantJoinEvent"/><event timestamp="5000" eventname="EndAndKickAllEvent"/></recording>'
     File.write(File.join(@repo.raw_root, @id, 'events.xml'), xml)
     @payload['revision'] = Digest::SHA256.hexdigest(xml)
