@@ -31,6 +31,50 @@ async function scroll(left) {
   scroller.scrollLeft = left;
   await act(async () => Simulate.scroll(scroller));
 }
+async function pointer(type, clientX, clientY = 100) {
+  const event = new Event(type, { bubbles: true });
+  Object.assign(event, { clientX, clientY, pointerId: 1 });
+  await act(async () => window.dispatchEvent(event));
+}
+
+test('clicking past the paging threshold keeps following after pointer release', async () => {
+  await render({ playing: true, time: 8000 });
+  await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0, clientX: 950, clientY: 100, pointerId: 1 }));
+  await pointer('pointerup', 950);
+  await render({ time: 9500 });
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 800, behavior: 'smooth' });
+  await scroll(800);
+  await render({ time: 17000 });
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 1600, behavior: 'smooth' });
+});
+
+test('a click resumes following after manually browsing another timeline page', async () => {
+  await render({ playing: true, time: 8000 });
+  await scroll(1000);
+  await render({ time: 30000 });
+  expect(scroller.scrollTo).not.toHaveBeenCalled();
+  await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0, clientX: 950, clientY: 100, pointerId: 1 }));
+  await pointer('pointerup', 950);
+  await render({ time: 19500 });
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 1800, behavior: 'smooth' });
+});
+
+test('a drag detected at pointer release still suspends following', async () => {
+  await render({ playing: true, time: 8000 });
+  await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0, clientX: 500, clientY: 100, pointerId: 1 }));
+  await pointer('pointerup', 550);
+  await render({ time: 30000 });
+  expect(scroller.scrollTo).not.toHaveBeenCalled();
+});
+
+test('clicking the scrollbar does not undo manual-scroll suspension on release', async () => {
+  await render({ playing: true, time: 8000 });
+  await act(async () => Simulate.pointerDown(scroller, { button: 0, clientX: 950, clientY: 100, pointerId: 1 }));
+  await scroll(1000);
+  await pointer('pointerup', 950);
+  await render({ time: 30000 });
+  expect(scroller.scrollTo).not.toHaveBeenCalled();
+});
 
 beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -100,7 +144,11 @@ test.each(['pointer', 'scrollbar', 'keyboard', 'shift-wheel'])('%s navigation su
   await render({ time: 9000 });
   expect(scroller.scrollTo).toHaveBeenCalledTimes(1);
   await scroll(800);
-  if (kind === 'pointer') await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0 }));
+  if (kind === 'pointer') {
+    await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0, clientX: 500, clientY: 100, pointerId: 1 }));
+    await pointer('pointermove', 550);
+    await pointer('pointerup', 550);
+  }
   else if (kind === 'scrollbar') await scroll(300);
   else if (kind === 'keyboard') await act(async () => Simulate.keyDown(scroller, { key: 'ArrowRight' }));
   else await act(async () => Simulate.wheel(scroller, { deltaX: 0, deltaY: 100, shiftKey: true }));
@@ -119,11 +167,12 @@ test('pause stops an animation and zoom changes recompute the visible position',
 
 test('restarting playback while a range is being dragged does not move the viewport until release', async () => {
   await render({ playing: true });
-  await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0 }));
+  await act(async () => Simulate.pointerDown(container.querySelector('button'), { button: 0, clientX: 500, clientY: 100, pointerId: 1 }));
+  await pointer('pointermove', 550);
   await render({ playing: false, time: 30000 });
   await render({ playing: true });
   expect(scroller.scrollTo).not.toHaveBeenCalled();
-  await act(async () => window.dispatchEvent(new Event('pointerup')));
+  await pointer('pointerup', 550);
   await render({ time: 30100 });
   expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 2910, behavior: 'smooth' });
 });

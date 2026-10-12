@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 // Follow playback in pages, leaving a 20% overlap with the previous view.
 export default function useTimelineFollow(scrollRef, timelineRef, { time, duration, playing, zoom, recordingId }) {
   const suspended = useRef(false);
-  const pointerDown = useRef(false);
+  const pointerDown = useRef(null);
   const target = useRef(null);
   const lastScrollLeft = useRef(0);
   const stopScrolling = useCallback(() => {
@@ -16,6 +16,7 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
   }, [scrollRef]);
   const suspend = useCallback(() => {
     suspended.current = true;
+    if (pointerDown.current) pointerDown.current.dragged = true;
     stopScrolling();
   }, [stopScrolling]);
 
@@ -25,14 +26,31 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
   }, [playing, recordingId, stopScrolling]);
   useEffect(() => { stopScrolling(); }, [zoom, stopScrolling]);
   useEffect(() => {
-    const release = () => { pointerDown.current = false; };
+    const matches = event => pointerDown.current && (event.pointerId === undefined
+      || pointerDown.current.id === undefined || event.pointerId === pointerDown.current.id);
+    const move = event => {
+      const pointer = pointerDown.current;
+      if (matches(event) && !pointer.dragged && Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) >= 4) suspend();
+    };
+    const release = event => {
+      if (!matches(event)) return;
+      move(event);
+      // A click is playback navigation, so it keeps (or resumes) following.
+      // Only an actual drag or manual scroll suspends it until the next play.
+      if (event.type === 'pointerup' && !pointerDown.current.dragged) suspended.current = false;
+      pointerDown.current = null;
+    };
+    window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', release);
     window.addEventListener('pointercancel', release);
+    window.addEventListener('blur', release);
     return () => {
+      window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', release);
       window.removeEventListener('pointercancel', release);
+      window.removeEventListener('blur', release);
     };
-  }, []);
+  }, [suspend]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -58,7 +76,11 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
   }, [time, duration, playing, zoom, recordingId, scrollRef, timelineRef]);
 
   return {
-    onPointerDownCapture: () => { pointerDown.current = true; suspend(); },
+    onPointerDownCapture: event => {
+      if (event.button !== 0) return;
+      pointerDown.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragged: false };
+      stopScrolling();
+    },
     onWheelCapture: event => {
       if (event.deltaX || (event.shiftKey && event.deltaY)) suspend();
     },
@@ -69,7 +91,10 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
       const left = event.currentTarget.scrollLeft;
       if (target.current !== null) {
         if (Math.abs(left - target.current) < 1) target.current = null;
-      } else if (Math.abs(left - lastScrollLeft.current) >= 1) suspended.current = true;
+      } else if (Math.abs(left - lastScrollLeft.current) >= 1) {
+        suspended.current = true;
+        if (pointerDown.current) pointerDown.current.dragged = true;
+      }
       lastScrollLeft.current = left;
     },
   };
