@@ -118,6 +118,99 @@ test('reopening media preserves volume and mute settings', async () => {
   expect(container.querySelector('.re-volume input').value).toBe('25');
 });
 
+test('external video ribbons show titles and sharing intervals with only interior update markers', async () => {
+  const previousFetch = global.fetch;
+  const events = [
+    { type: 'SharePresentationEvent', time_ms: 0, presentation: 'Slides' },
+    { type: 'GotoSlideEvent', time_ms: 500, page: 1 },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 1000, url: 'https://example.com/one', title: 'Recorded <title>' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 1000, status: 'play' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 2000, status: 'playbackRateChange', rate: '2', position: '20' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 3000, status: 'pause', state: '0' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 4000, status: 'seek', position: '45' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 4500, status: 'play' },
+    { type: 'UpdateExternalVideoRecordEvent', time_ms: 5000, status: 'pause' },
+    { type: 'StopExternalVideoRecordEvent', time_ms: 5000 },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 30000, url: 'https://youtu.be/test-video' },
+  ];
+  global.fetch = jest.fn(async (url, options) => {
+    if (url.endsWith('/external-video-title')) {
+      expect(JSON.parse(options.body)).toEqual({ url: 'https://youtu.be/test-video' });
+      return { ok: true, json: async () => ({ title: 'Fetched title' }) };
+    }
+    if (url.endsWith(`/recordings/${id}`)) return { ok: true, json: async () => ({ ...manifest, events }) };
+    return previousFetch(url, options);
+  });
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const ribbons = container.querySelectorAll('.re-external-ribbon');
+  expect([...ribbons].map(ribbon => ribbon.textContent)).toEqual(['Recorded <title>', 'Fetched title']);
+  expect(ribbons[0].querySelector('title')).toBeNull();
+  expect(parseFloat(ribbons[0].style.left)).toBeCloseTo(100 / 60);
+  expect(parseFloat(ribbons[0].style.width)).toBeCloseTo(400 / 60);
+  expect(ribbons[1].style.left).toBe('50%');
+  expect(ribbons[1].style.width).toBe('50%');
+  const markers = container.querySelectorAll('.re-external-marker');
+  expect(markers).toHaveLength(4);
+  expect(markers[0].title).toContain('再生速度変更 · 2×');
+  expect(markers[0].title).toContain('動画内の位置 00:00:20.000');
+  expect(markers[1].title).toContain('一時停止');
+  expect(markers[2].title).toContain('シーク');
+  expect(container.querySelectorAll('.re-slide-track .re-event-marker')).toHaveLength(1);
+  await act(async () => Simulate.click(markers[2]));
+  expect(container.querySelector('audio').currentTime).toBe(4);
+  await act(async () => Simulate.click(ribbons[0]));
+  expect(container.querySelector('audio').currentTime).toBe(1);
+  await language('en');
+  expect(markers[0].title).toContain('Playback speed change');
+  expect(container.querySelector('.re-external-track .re-track-label').textContent).toBe('External video');
+  expect(button('Save to raw…').disabled).toBe(true);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('presentation ribbons group slides by deck with interior navigation and camera markers', async () => {
+  const previousFetch = global.fetch;
+  const events = [
+    { type: 'SharePresentationEvent', time_ms: 1000, presentation: 'Deck <A>' },
+    { type: 'GotoSlideEvent', time_ms: 1000, presentation: 'Deck <A>', page: 1 },
+    { type: 'SharePresentationEvent', time_ms: 3000, presentation: 'Deck <A>' },
+    { type: 'GotoSlideEvent', time_ms: 4000, presentation: 'Deck <A>', page: 2 },
+    { type: 'ResizeAndMoveSlideEvent', time_ms: 5000 },
+    { type: 'StartExternalVideoRecordEvent', time_ms: 6000, url: 'https://example.com/video.mp4', title: 'Video' },
+    { type: 'StopExternalVideoRecordEvent', time_ms: 7000 },
+    { type: 'GotoSlideEvent', time_ms: 8500, presentation: 'Deck <A>', page: 3 },
+    { type: 'SharePresentationEvent', time_ms: 10000, presentation: 'Deck B' },
+    { type: 'GotoSlideEvent', time_ms: 12000, presentation: 'Deck B', page: 2 },
+    { type: 'SharePresentationEvent', time_ms: 20000, presentation: 'Deck <A>' },
+    { type: 'GotoSlideEvent', time_ms: 22000, presentation: 'Deck <A>', page: 4 },
+    { type: 'SharePresentationEvent', time_ms: 25000, presentation: 'Deck <A>', share: 'false' },
+    { type: 'SharePresentationEvent', time_ms: 30000, presentation: 'Deck <A>' },
+    { type: 'GotoSlideEvent', time_ms: 35000, presentation: 'Deck <A>', page: 5 },
+  ];
+  global.fetch = jest.fn(async (url, options) => url.endsWith(`/recordings/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, events }) } : previousFetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const ribbons = container.querySelectorAll('.re-presentation-ribbon');
+  expect([...ribbons].map(ribbon => ribbon.textContent)).toEqual(['Deck <A>', 'Deck B', 'Deck <A>', 'Deck <A>']);
+  expect(ribbons[0].title).toBe('Deck <A>\n00:00:01.000 – 00:00:10.000');
+  expect(parseFloat(ribbons[0].style.width)).toBe(15);
+  expect(ribbons[2].title).toContain('00:00:20.000 – 00:00:25.000');
+  expect(ribbons[3].style.left).toBe('50%');
+  expect(ribbons[3].style.width).toBe('50%');
+  expect(ribbons[0].querySelector('a')).toBeNull();
+  const markers = container.querySelectorAll('.re-presentation-marker');
+  expect(markers).toHaveLength(6);
+  expect(markers[0].title).toContain('スライド 2');
+  expect(markers[1].title).toContain('パン／ズーム');
+  await act(async () => Simulate.click(markers[5]));
+  expect(container.querySelector('audio').currentTime).toBe(35);
+  await act(async () => Simulate.click(ribbons[2]));
+  expect(container.querySelector('audio').currentTime).toBe(20);
+  await language('en');
+  expect(markers[1].title).toContain('Slide pan / zoom');
+  expect(button('Save to raw…').disabled).toBe(true);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
 test('audio playback pages the zoomed timeline without seeking or saving edits', async () => {
   await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: '4' } }));
   const scroll = container.querySelector('.re-timeline-scroll');

@@ -2,6 +2,7 @@
 require 'minitest/autorun'
 require 'tmpdir'
 require 'net/http'
+require 'minitest/mock'
 require_relative '../server'
 
 class ServerTest < Minitest::Test
@@ -41,6 +42,37 @@ class ServerTest < Minitest::Test
     assert_equal '401', request("recordings/#{@id}/raw/audio/test.wav", auth: false).code
     assert_equal '401', request("recordings/#{@id}/events.xml", auth: false).code
     assert_equal @id, JSON.parse(request('recordings').body).first['id']
+  end
+
+  def test_external_video_title_route_is_authenticated_and_only_accepts_recorded_urls
+    url = 'https://youtu.be/video'
+    File.write(File.join(@raw, 'events.xml'), @xml.sub('</recording>', "<event timestamp=\"2000\" eventname=\"StartExternalVideoRecordEvent\"><externalVideoUrl>#{url}</externalVideoUrl></event></recording>"))
+    before = File.binread(File.join(@raw, 'events.xml'))
+    path = "recordings/#{@id}/external-video-title"
+    data = JSON.generate(url: url)
+    headers = { 'X-BBB-Editor' => '1' }
+    assert_equal '401', request(path, method: Net::HTTP::Post, auth: false, body: data).code
+    assert_equal '403', request(path, method: Net::HTTP::Post, body: data).code
+    assert_equal '405', request(path).code
+    RecordingEditor::ExternalVideoTitle.stub(:fetch, ->(video) { assert_equal url, video; 'Video title' }) do
+      response = request(path, method: Net::HTTP::Post, headers: headers, body: data)
+      assert_equal '200', response.code
+      assert_equal 'Video title', JSON.parse(response.body)['title']
+    end
+    RecordingEditor::ExternalVideoTitle.stub(:fetch, ->(*) { flunk 'Unrecorded URLs must not be fetched' }) do
+      assert_equal '400', request(path, method: Net::HTTP::Post, headers: headers, body: JSON.generate(url: 'https://youtu.be/other')).code
+    end
+    assert_equal before, File.binread(File.join(@raw, 'events.xml'))
+    assert_equal '0123456789', File.binread(File.join(@raw, 'audio', 'test.wav'))
+  end
+
+  def test_recorded_external_video_title_is_returned_without_network_access
+    File.write(File.join(@raw, 'events.xml'), @xml.sub('</recording>', '<event timestamp="2000" eventname="StartExternalVideoRecordEvent"><externalVideoUrl>https://example.com/video.mp4</externalVideoUrl><externalVideoTitle>Recorded &amp; title</externalVideoTitle></event></recording>'))
+    RecordingEditor::ExternalVideoTitle.stub(:fetch, ->(*) { flunk 'Recorded title should be used' }) do
+      response = request("recordings/#{@id}/external-video-title", method: Net::HTTP::Post,
+                         headers: { 'X-BBB-Editor' => '1' }, body: JSON.generate(url: 'https://example.com/video.mp4'))
+      assert_equal 'Recorded & title', JSON.parse(response.body)['title']
+    end
   end
 
   def test_byte_ranges_and_head_for_browser_seeks

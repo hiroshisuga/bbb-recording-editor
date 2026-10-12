@@ -69,6 +69,21 @@ class RecordingEditorTest < Minitest::Test
     assert_equal 'moderator', marks.first.at_xpath('userId').text
   end
 
+  def test_visual_events_preserve_presentation_sharing_state_for_timeline_boundaries
+    extra = <<~XML
+      <event timestamp="#{@origin + 1000}" eventname="SharePresentationEvent"><presentationName>deck-A</presentationName><share>true</share></event>
+      <event timestamp="#{@origin + 3000}" eventname="SharePresentationEvent"><presentationName>deck-A</presentationName><share>false</share></event>
+      <event timestamp="#{@origin + 4000}" eventname="SharePresentationEvent"><presentationName>deck-B</presentationName></event>
+    XML
+    bytes = @events.sub('</recording>', extra + '</recording>')
+    File.write(File.join(@raw, 'events.xml'), bytes)
+    shares = @repo.recording(@id).visual_events.select { |event| event['type'] == 'SharePresentationEvent' }
+    assert_equal [1000, 3000, 4000], shares.map { |event| event['time_ms'] }
+    assert_equal %w[deck-A deck-A deck-B], shares.map { |event| event['presentation'] }
+    assert_equal ['true', 'false', nil], shares.map { |event| event['share'] }
+    assert_equal bytes, File.read(File.join(@raw, 'events.xml'))
+  end
+
   def test_empty_recording_is_rejected_without_rewriting_xml
     rec = @repo.recording(@id)
     data = payload(rec)

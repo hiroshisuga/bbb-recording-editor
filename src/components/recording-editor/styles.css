@@ -91,6 +91,13 @@
 .recording-editor .re-handle { position:absolute; top:-2px; height:18px; width:7px; padding:0; border-radius:2px; background:#cbf5e7; border:0; cursor:ew-resize; z-index:4; }.re-handle.left { left:-2px; }.re-handle.right { right:-2px; }.beep_ranges .re-handle { background:#ffe4b7; }
 .re-clip { position:absolute; top:15px; bottom:3px; background:#344e83; border:1px solid #6892c1; color:#cfdfef; font-size:9px; padding:0 4px; overflow:hidden; white-space:nowrap; cursor:pointer; }.deskshare .re-clip { background:#674580; border-color:#a084c1; }.re-clip.missing { background:#573039; border-style:dashed; }
 .recording-editor .re-event-marker { position:absolute; top:18px; width:5px; height:12px; background:#b8ce7a; border:0; padding:0; }
+.re-external-track,.re-slide-track { height:43px; }
+.recording-editor .re-external-ribbon,.recording-editor .re-presentation-ribbon { position:absolute; top:18px; height:21px; min-width:2px; border:0; border-radius:2px; padding:0 5px; background:#64713b; color:#f3ffcc; font-size:11px; line-height:21px; text-align:left; overflow:hidden; text-overflow:ellipsis; }
+.recording-editor .re-external-ribbon:hover { background:#788847; }
+.recording-editor .re-external-marker,.recording-editor .re-presentation-marker { top:18px; width:3px; height:21px; border-radius:0; background:#e5f2b5; transform:translateX(-50%); z-index:2; }
+.recording-editor .re-presentation-ribbon { background:#356687; color:#d6eeff; }
+.recording-editor .re-presentation-ribbon:hover { background:#427da4; }
+.recording-editor .re-presentation-marker { background:#a7d6f4; }
 .re-selection-overlay { position:absolute; top:29px; bottom:0; border:1px solid #85cfff; background:#66b9f321; pointer-events:none; z-index:3; }.re-playhead { position:absolute; top:0; bottom:0; width:1px; background:#fa6868; pointer-events:none; z-index:5; }.re-playhead:before { content:''; position:absolute; top:0; left:-4px; border:5px solid transparent; border-top-color:#fa6868; }
 .re-selection { font-size:12px; border-bottom:1px solid var(--re-line); padding-bottom:15px; }.re-selection button { font-size:11px; padding:6px 8px; }.recording-editor .re-beep-button { background:#674c28; border-color:#a77c43; }
 .re-bottom { display:grid; grid-template-columns:minmax(410px,1fr) minmax(240px,1fr); gap:20px; margin-top:18px; }.re-range-list { padding:12px; border:1px solid var(--re-line); border-radius:5px; margin-bottom:12px; background:#15212e; }.re-range-list h3 { margin-bottom:10px; }.re-range-list small { margin-left:10px; font-weight:400; }.re-range-row { display:flex; align-items:center; gap:7px; margin:6px 0; }.re-range-row button { padding:4px 8px; }.re-range-row>.re-time { flex:1; min-width:110px; max-width:145px; }
