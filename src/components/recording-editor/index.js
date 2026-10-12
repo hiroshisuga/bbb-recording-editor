@@ -278,7 +278,7 @@ function Editor() {
   const validSelection = selection.end_ms > selection.start_ms;
 
   return <div className="recording-editor">
-    <header className="re-header"><div><span className="re-brand">BigBlueButton</span><strong>{t('title')}</strong><span className="re-badge">{t('admin')}</span></div>
+    <header className="re-header"><div><span className="re-brand">BigBlueButton</span><strong>{t('title')}</strong></div>
       <div className="re-header-actions"><label className="re-language">{t('language')} <select aria-label={t('language')} value={locale} onChange={e => setLocale(e.target.value)}>{languages.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select></label>{recording && <><span className="re-dirty">{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('saved')}</span><button disabled={!!busy} onClick={draft}>{t('saveDraft')}</button><button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw} title={!canSaveRaw ? t('rawAlreadySaved') : ''} onClick={() => { setReview(!review); setRebuildReview(false); setResetReview(false); }}>{t('saveRaw')}</button><button disabled={!!rebuildBlock} title={rebuildBlock} aria-describedby={rebuildBlock ? 're-rebuild-reason' : undefined} onClick={() => { setRebuildReview(!rebuildReview); setReview(false); setResetReview(false); }}>{t('rebuildRecording')}</button></>}</div>
     </header>
     <div className="re-shell"><MeetingList meetings={meetings} selectedId={recording?.id} busy={busy} dirty={dirty} onRefresh={refreshList} onOpen={open} /><main className="re-main">
