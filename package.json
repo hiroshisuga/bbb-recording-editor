@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "react-scripts": "^5.0.1",
-    "http-proxy-middleware": "^2.0.10"
+    "http-proxy-middleware": "^4.2.0"
   },
   "overrides": {
     "nth-check": "2.0.1",
