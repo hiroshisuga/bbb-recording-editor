@@ -1,6 +1,6 @@
 {
-  "name": "bbb-playback",
-  "version": "5.4.8",
+  "name": "bbb-recording-editor",
+  "version": "0.1.0",
   "homepage": "/playback/presentation/2.3",
   "dependencies": {
     "@bigbluebutton/tldraw": "^2.0.0-alpha.36",
@@ -14,9 +14,9 @@
     "react": "^18.1.0",
     "react-dom": "^18.1.0",
     "react-intl": "^6.2.5",
+    "react-player": "^2.16.0",
     "react-router-dom": "^7.18.4",
     "react-sizeme": "^3.0.2",
-    "react-player": "^2.16.0",
     "recharts": "^2.12.7",
     "sass": "^1.52.1",
     "semver": "^7.5.2",
@@ -68,7 +68,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bigbluebutton/bbb-playback.git"
+    "url": "git+https://github.com/hiroshisuga/bbb-recording-editor.git"
   },
   "keywords": [
     "bigbluebutton",
@@ -77,7 +77,7 @@
   "author": "Pedro Beschorner Marin <pedrobmarin@gmail.com>",
   "license": "LGPL-3.0",
   "bugs": {
-    "url": "https://github.com/bigbluebutton/bbb-playback/issues"
+    "url": "https://github.com/hiroshisuga/bbb-recording-editor/issues"
   },
   "engines": {
     "node": ">=20"
