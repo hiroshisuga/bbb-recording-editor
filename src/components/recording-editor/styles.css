@@ -68,6 +68,10 @@
 .re-transport,.re-tools,.re-selection { display:flex; align-items:center; flex-wrap:wrap; gap:9px; padding:11px 0; }
 .re-transport { border-bottom:1px solid var(--re-line); font-size:12px; }
 .re-transport label { margin-left:10px; display:flex; align-items:center; gap:5px; }
+.re-volume { display:inline-flex; align-items:center; gap:6px; }
+.re-transport .re-volume label { margin-left:0; }
+.recording-editor .re-volume input[type=range] { width:100px; padding:0; accent-color:#68bbff; }
+.re-volume output { min-width:4ch; text-align:right; font-variant-numeric:tabular-nums; }
 .re-transport audio { display:none; }.re-transport>span:last-of-type { margin-left:auto; }
 .recording-editor .re-play { min-width:105px; }.re-tools { font-size:12px; }.re-tools>.re-muted { margin-left:auto; }
 .re-time { width:124px; text-align:center; font:12px ui-monospace,monospace!important; font-variant-numeric:tabular-nums; }

@@ -129,6 +129,9 @@ function Editor() {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const lastVolume = useRef(1);
   const [zoom, setZoom] = useState(1);
   const [audio, setAudio] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -151,7 +154,24 @@ function Editor() {
   const videos = useMemo(() => recording ? externalVideos(recording.events, duration) : [], [recording, duration]);
   const primary = useMemo(() => audio ? audioAdapter(audio, duration) : null, [audio, duration]);
   const getPrimary = useCallback(() => primary, [primary]);
+  useEffect(() => {
+    if (!audio) return;
+    audio.volume = volume;
+    audio.muted = muted;
+  }, [audio, volume, muted]);
   useAudioPreview(audio, edit.beep_ranges, beepPreview);
+  const silent = muted || volume === 0;
+  const changeVolume = event => {
+    const value = Number(event.target.value) / 100;
+    if (value > 0) lastVolume.current = value;
+    setVolume(value); setMuted(false);
+  };
+  const toggleMute = () => {
+    if (silent) {
+      if (volume === 0) setVolume(lastVolume.current);
+      setMuted(false);
+    } else setMuted(true);
+  };
 
   const refreshList = useCallback(async () => {
     try { setMeetings(await request('/recordings')); } catch (e) { setError(e.message); }
@@ -316,6 +336,9 @@ function Editor() {
         <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
           <TimeField label={t('position')} value={Math.round(time)} max={duration} onChange={seek} onFocus={() => audio?.pause()} /><span>/ {formatTime(duration)}</span>
           <select aria-label={t('speed')} value={rate} onChange={e => { const value = Number(e.target.value); setRate(value); if (audio) audio.playbackRate = value; }}>{[0.5, 1, 1.5, 2].map(r => <option key={r} value={r}>{r}×</option>)}</select>
+          <span className="re-volume"><button disabled={!audio} aria-pressed={silent} onClick={toggleMute}>{t(silent ? 'unmute' : 'mute')}</button>
+            <label>{t('volume')} <input type="range" aria-label={t('volume')} min="0" max="100" step="1" value={Math.round(volume * 100)} disabled={!audio} onChange={changeVolume} /></label><output>{Math.round(volume * 100)}%</output>
+          </span>
           <label><input type="checkbox" checked={beepPreview} onChange={e => setBeepPreview(e.target.checked)} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
           {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
         </div>
