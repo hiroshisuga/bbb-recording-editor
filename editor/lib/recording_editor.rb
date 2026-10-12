@@ -177,10 +177,14 @@ module RecordingEditor
       end
       raise Error, '録画メタデータの参照先が不正です。' unless File.realpath(path).start_with?(File.realpath(root) + '/')
       doc = RecordingEditor.xml(File.binread(path))
-      text = ->(xpath) { doc.at_xpath(xpath)&.text&.strip }
+      text = lambda do |xpath|
+        value = doc.at_xpath(xpath)&.text&.strip
+        value unless value.to_s.empty?
+      end
       start_time, end_time = %w[start_time end_time].map { |key| Integer(text.call("/recording/#{key}"), exception: false) }
       playback = Integer(text.call('/recording/playback/duration'), exception: false)
       { state: text.call('/recording/state'), published: text.call('/recording/published'),
+        recording_title: text.call('/recording/meta/name'),
         name: text.call('/recording/meta/meetingName') || doc.at_xpath('/recording/meeting')&.[]('name'),
         duration_ms: start_time && end_time && end_time > start_time ? end_time - start_time : nil,
         playback_duration_ms: playback && playback >= 0 ? playback : nil }
@@ -221,7 +225,7 @@ module RecordingEditor
           warnings << '処理中の録画メタデータの状態を確認できません。' if status == 'unknown' && warnings.empty?
         end
       end
-      { publication_status: status, metadata_name: info&.[](:name), metadata_duration_ms: info&.[](:duration_ms),
+      { publication_status: status, recording_title: info&.[](:recording_title), metadata_name: info&.[](:name), metadata_duration_ms: info&.[](:duration_ms),
         playback_duration_ms: info&.[](:playback_duration_ms), warnings: warnings }
     end
 
@@ -241,7 +245,7 @@ module RecordingEditor
           publication[:publication_status] = 'unknown'
           publication[:warnings] << '録画の再構築に失敗しました。BBBの処理ログを確認してください。'
         end
-        item = { id: id, name: publication[:metadata_name] || id, date: time.iso8601,
+        item = { id: id, name: publication[:recording_title] || publication[:metadata_name] || id, date: time.iso8601,
                  duration_ms: publication[:metadata_duration_ms], raw_available: false,
                  recording_status: 'unknown', recorded_duration_ms: nil,
                  publication_status: publication[:publication_status], playback_duration_ms: publication[:playback_duration_ms],
@@ -250,7 +254,8 @@ module RecordingEditor
           if File.file?(File.join(raw_root, id, 'events.xml'))
             rec = recording(id)
             ranges = rec.record_ranges(rec.current_doc, full_when_empty: false)
-            item.merge!(name: rec.name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
+            display_name = ranges.empty? ? rec.name : publication[:recording_title] || rec.name
+            item.merge!(name: display_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
                         recording_status: ranges.empty? ? 'unmarked' : 'marked',
                         recorded_duration_ms: ranges.sum { |r| r['end_ms'] - r['start_ms'] })
             item[:warnings].concat(rec.warnings)
