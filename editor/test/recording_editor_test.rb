@@ -84,6 +84,27 @@ class RecordingEditorTest < Minitest::Test
     assert_equal bytes, File.read(File.join(@raw, 'events.xml'))
   end
 
+  def test_presentation_filenames_are_mapped_to_sharing_and_navigation_without_changing_raw
+    extra = <<~XML
+      <event timestamp="#{@origin + 100}" eventname="ConversionCompletedEvent"><presentationName>deck-A</presentationName><originalFilename>講義 &amp; introduction.pptx</originalFilename></event>
+      <event timestamp="#{@origin + 200}" eventname="ConversionCompletedEvent"><presentationName>deck-B</presentationName><originalFilename>C:\\uploads\\第二部.pdf</originalFilename></event>
+      <event timestamp="#{@origin + 300}" eventname="ConversionCompletedEvent"><presentationName>deck-A</presentationName><originalFilename> </originalFilename></event>
+      <event timestamp="#{@origin + 1000}" eventname="SharePresentationEvent"><presentationName>deck-A</presentationName><share>true</share></event>
+      <event timestamp="#{@origin + 2000}" eventname="GotoSlideEvent"><presentationName>deck-A</presentationName><slide>1</slide></event>
+      <event timestamp="#{@origin + 3000}" eventname="SharePresentationEvent"><presentationName>deck-B</presentationName><share>true</share></event>
+      <event timestamp="#{@origin + 4000}" eventname="GotoSlideEvent"><presentationName>unknown</presentationName><slide>1</slide></event>
+    XML
+    bytes = @events.sub('</recording>', extra + '</recording>')
+    File.write(File.join(@raw, 'events.xml'), bytes)
+    events = @repo.recording(@id).visual_events
+    a = events.select { |event| event['presentation'] == 'deck-A' }
+    assert_equal ['SharePresentationEvent', 'GotoSlideEvent'], a.map { |event| event['type'] }
+    assert a.all? { |event| event['presentation_filename'] == '講義 & introduction.pptx' }
+    assert_equal '第二部.pdf', events.find { |event| event['presentation'] == 'deck-B' }['presentation_filename']
+    assert_nil events.find { |event| event['presentation'] == 'unknown' }['presentation_filename']
+    assert_equal bytes, File.read(File.join(@raw, 'events.xml'))
+  end
+
   def test_empty_recording_is_rejected_without_rewriting_xml
     rec = @repo.recording(@id)
     data = payload(rec)

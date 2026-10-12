@@ -111,3 +111,13 @@ test('same-timestamp unshare and reshare leave a single continuous presentation 
   expect(ranges[0]).toMatchObject({ start_ms: 1000, end_ms: 6000 });
   expect(ranges[0].events[0].page).toBe(2);
 });
+
+test('presentation filenames label ribbons without replacing their identity or splitting navigation', () => {
+  const ranges = presentationRanges([
+    { type: 'SharePresentationEvent', time_ms: 0, presentation: 'id-A', presentation_filename: 'Lecture.pptx' },
+    { type: 'GotoSlideEvent', time_ms: 1000, presentation: 'id-A', page: 2 },
+    { type: 'GotoSlideEvent', time_ms: 2000, presentation: 'id-B', presentation_filename: 'Lecture.pptx', page: 1 },
+  ], 3000);
+  expect(ranges.map(r => [r.presentation, r.filename, r.start_ms, r.end_ms]))
+    .toEqual([['id-A', 'Lecture.pptx', 0, 2000], ['id-B', 'Lecture.pptx', 2000, 3000]]);
+});

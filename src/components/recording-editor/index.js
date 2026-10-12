@@ -128,7 +128,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     </div>)}
     <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>
       {presentations.map((presentation, i) => {
-        const title = presentation.presentation || t('slides');
+        const title = presentation.filename || presentation.presentation || t('slides');
         const description = `${title}\n${formatTime(presentation.start_ms)} – ${formatTime(presentation.end_ms)}`;
         return <React.Fragment key={i}>
           <button className="re-presentation-ribbon" style={{ left: pct(presentation.start_ms), width: pct(presentation.end_ms - presentation.start_ms) }}

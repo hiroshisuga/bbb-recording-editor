@@ -185,13 +185,13 @@ test('presentation ribbons group slides by deck with interior navigation and cam
     { type: 'SharePresentationEvent', time_ms: 25000, presentation: 'Deck <A>', share: 'false' },
     { type: 'SharePresentationEvent', time_ms: 30000, presentation: 'Deck <A>' },
     { type: 'GotoSlideEvent', time_ms: 35000, presentation: 'Deck <A>', page: 5 },
-  ];
+  ].map(event => ({ ...event, presentation_filename: event.presentation === 'Deck <A>' ? '講義 <A>.pptx' : event.presentation === 'Deck B' ? 'Second.pdf' : undefined }));
   global.fetch = jest.fn(async (url, options) => url.endsWith(`/recordings/${id}`)
     ? { ok: true, json: async () => ({ ...manifest, events }) } : previousFetch(url, options));
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   const ribbons = container.querySelectorAll('.re-presentation-ribbon');
-  expect([...ribbons].map(ribbon => ribbon.textContent)).toEqual(['Deck <A>', 'Deck B', 'Deck <A>', 'Deck <A>']);
-  expect(ribbons[0].title).toBe('Deck <A>\n00:00:01.000 – 00:00:10.000');
+  expect([...ribbons].map(ribbon => ribbon.textContent)).toEqual(['講義 <A>.pptx', 'Second.pdf', '講義 <A>.pptx', '講義 <A>.pptx']);
+  expect(ribbons[0].title).toBe('講義 <A>.pptx\n00:00:01.000 – 00:00:10.000');
   expect(parseFloat(ribbons[0].style.width)).toBe(15);
   expect(ribbons[2].title).toContain('00:00:20.000 – 00:00:25.000');
   expect(ribbons[3].style.left).toBe('50%');

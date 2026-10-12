@@ -95,7 +95,7 @@
 .recording-editor .re-external-ribbon,.recording-editor .re-presentation-ribbon { position:absolute; top:18px; height:21px; min-width:2px; border:0; border-radius:2px; padding:0 5px; background:#64713b; color:#f3ffcc; font-size:11px; line-height:21px; text-align:left; overflow:hidden; text-overflow:ellipsis; }
 .recording-editor .re-external-ribbon:hover { background:#788847; }
 .recording-editor .re-external-marker,.recording-editor .re-presentation-marker { top:18px; width:3px; height:21px; border-radius:0; background:#e5f2b5; transform:translateX(-50%); z-index:2; }
-.recording-editor .re-presentation-ribbon { background:#356687; color:#d6eeff; }
+.recording-editor .re-presentation-ribbon { background:#356687; color:#d6eeff; border:1px solid #91c8ee; line-height:19px; }
 .recording-editor .re-presentation-ribbon:hover { background:#427da4; }
 .recording-editor .re-presentation-marker { background:#a7d6f4; }
 .re-selection-overlay { position:absolute; top:29px; bottom:0; border:1px solid #85cfff; background:#66b9f321; pointer-events:none; z-index:3; }.re-playhead { position:absolute; top:0; bottom:0; width:1px; background:#fa6868; pointer-events:none; z-index:5; }.re-playhead:before { content:''; position:absolute; top:0; left:-4px; border:5px solid transparent; border-top-color:#fa6868; }
