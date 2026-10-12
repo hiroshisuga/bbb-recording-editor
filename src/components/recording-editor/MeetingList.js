@@ -39,8 +39,10 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
     {visible.map(meeting => {
       const publication = publicationLabels[meeting.publication_status] ? meeting.publication_status : 'unknown';
       const recording = recordingLabels[meeting.recording_status] ? meeting.recording_status : 'unknown';
+      const roomName = typeof meeting.meeting_name === 'string' ? meeting.meeting_name.trim() : '';
       return <button className={`re-meeting ${selectedId === meeting.id ? 'active' : ''}`} key={meeting.id} disabled={!!busy} onClick={() => onOpen(meeting.id)}>
         <strong>{meeting.name || meeting.id.slice(0, 8)}</strong>
+        {roomName && roomName !== meeting.name?.trim() && <small className="re-meeting-room">{t('roomName')}: {roomName}</small>}
         <span>{new Date(meeting.date || Number(meeting.id.split('-')[1])).toLocaleString(locale)}</span>
         <span>{t('durations', { meeting: durationText(meeting.duration_ms), recorded: durationText(meeting.recorded_duration_ms) })}</span>
         <span className="re-meeting-status">

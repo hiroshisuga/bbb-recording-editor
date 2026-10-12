@@ -2,6 +2,7 @@
 
 require 'minitest/autorun'
 require 'tmpdir'
+require 'cgi'
 require_relative '../lib/recording_editor'
 
 class MeetingListTest < Minitest::Test
@@ -30,10 +31,11 @@ class MeetingListTest < Minitest::Test
       "<event timestamp='7000' eventname='RecordStatusEvent'><status>true</status></event>"
   end
 
-  def metadata(root, state, published, id = @id)
+  def metadata(root, state, published, id = @id, title: nil)
     path = File.join(root, id, 'metadata.xml')
     FileUtils.mkdir_p(File.dirname(path))
-    File.write(path, "<recording><state>#{state}</state><published>#{published}</published><start_time>100000</start_time><end_time>110000</end_time><meta><meetingName>Metadata meeting</meetingName></meta><playback><duration>3000</duration></playback></recording>")
+    name = title.nil? ? '' : "<name>#{CGI.escapeHTML(title)}</name>"
+    File.write(path, "<recording><state>#{state}</state><published>#{published}</published><start_time>100000</start_time><end_time>110000</end_time><meta><meetingName>Metadata meeting</meetingName>#{name}</meta><playback><duration>3000</duration></playback></recording>")
     path
   end
 
@@ -72,6 +74,63 @@ class MeetingListTest < Minitest::Test
     FileUtils.remove_entry(File.dirname(path))
     metadata(@repo.unpublished_root, 'unpublished', 'false')
     assert_equal 'unpublished', item[:publication_status]
+  end
+
+  def test_marked_recordings_use_renamed_titles_for_published_and_unpublished_states
+    raw(marks)
+    raw_path = File.join(@repo.raw_root, @id, 'events.xml')
+    before = File.binread(raw_path)
+    path = metadata(@repo.published_root, 'published', 'true', title: '  講義 <第1回> & introduction  ')
+    metadata_before = File.binread(path)
+    assert_equal '講義 <第1回> & introduction', item[:name]
+    assert_equal 'Raw meeting', item[:meeting_name]
+    assert_equal 'published', item[:publication_status]
+    assert_equal 'marked', item[:recording_status]
+    assert_equal metadata_before, File.binread(path)
+    FileUtils.remove_entry(File.dirname(path))
+    metadata(@repo.unpublished_root, 'unpublished', 'false', title: '非公開の講義タイトル')
+    assert_equal '非公開の講義タイトル', item[:name]
+    assert_equal 'Raw meeting', item[:meeting_name]
+    assert_equal 'unpublished', item[:publication_status]
+    assert_equal before, File.binread(raw_path)
+  end
+
+  def test_unmarked_meetings_keep_the_room_name_even_if_old_recording_metadata_has_a_title
+    raw
+    metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'Old recording title')
+    assert_equal 'Raw meeting', item[:name]
+    assert_equal 'unmarked', item[:recording_status]
+    assert_equal 'Raw meeting', item[:meeting_name]
+    raw(marks)
+    assert_equal 'Old recording title', item[:name]
+  end
+
+  def test_missing_empty_or_invalid_title_metadata_falls_back_to_the_raw_meeting_name
+    raw(marks)
+    assert_equal 'Raw meeting', item[:name]
+    path = metadata(@repo.published_root, 'published', 'true')
+    assert_equal 'Raw meeting', item[:name]
+    metadata(@repo.published_root, 'published', 'true', title: '  ')
+    assert_equal 'Raw meeting', item[:name]
+    File.write(path, 'invalid XML')
+    assert_equal 'Raw meeting', item[:name]
+    assert item[:raw_available]
+  end
+
+  def test_title_changes_are_reread_when_the_list_is_refreshed
+    raw(marks)
+    metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'First title')
+    assert_equal 'First title', item[:name]
+    metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'Updated title')
+    assert_equal 'Updated title', item[:name]
+  end
+
+  def test_renamed_titles_remain_available_when_raw_has_expired
+    metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'Archived recording title')
+    assert_equal 'Archived recording title', item[:name]
+    assert_equal 'Metadata meeting', item[:meeting_name]
+    refute item[:raw_available]
+    assert_equal 'unknown', item[:recording_status]
   end
 
   def test_saved_intervals_update_list_without_changing_publication_status

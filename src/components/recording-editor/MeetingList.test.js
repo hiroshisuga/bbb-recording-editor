@@ -41,6 +41,26 @@ test('shows independent badges, meeting length, marked duration and missing raw'
   expect(rows()[4].querySelector('.re-status-missing').textContent).toBe('rawデータなし');
 });
 
+test('renamed public and private recordings also show room names without duplicate or missing-name rows', async () => {
+  const entries = [
+    { ...meeting('講義 <第1回> & introduction', 'published'), meeting_name: '会議室 Alpha' },
+    { ...meeting('非公開の講義', 'unpublished'), meeting_name: '会議室 Beta' },
+    { ...meeting('会議室 Gamma', 'unpublished', 'unmarked'), meeting_name: '会議室 Gamma' },
+    meeting('タイトルのみ', 'published'),
+  ];
+  await act(async () => root.render(localized(<MeetingList meetings={entries} onOpen={onOpen} onRefresh={onRefresh} />)));
+  expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(entries.map(entry => entry.name));
+  expect(rows()[0].querySelector('.re-meeting-room').textContent).toBe('会議室: 会議室 Alpha');
+  expect(rows()[1].querySelector('.re-meeting-room').textContent).toBe('会議室: 会議室 Beta');
+  expect(rows()[2].querySelector('.re-meeting-room')).toBeNull();
+  expect(rows()[3].querySelector('.re-meeting-room')).toBeNull();
+  expect(rows()[0].querySelector('strong').children).toHaveLength(0);
+  await filter('unpublished');
+  expect(rows()[0].querySelector('.re-meeting-room').textContent).toBe('会議室: 会議室 Beta');
+  await act(async () => Simulate.click(rows()[0]));
+  expect(onOpen).toHaveBeenCalledWith(entries[1].id);
+});
+
 test('all status filters include correct meetings and counts without changing selection', async () => {
   const expectations = { published: ['Public'], unpublished: ['Private', 'Missing raw'],
     not_generated: ['No marks'], processing: ['Working'], unmarked: ['No marks'],
