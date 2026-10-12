@@ -75,6 +75,27 @@ test('editing, undo/redo and draft send meeting-time ranges with revision', asyn
   expect(calls.some(c => c.url.endsWith('/save'))).toBe(false);
 });
 
+test('audio playback pages the zoomed timeline without seeking or saving edits', async () => {
+  await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: '4' } }));
+  const scroll = container.querySelector('.re-timeline-scroll');
+  Object.defineProperties(scroll, { clientWidth: { value: 300 }, scrollWidth: { value: 1200 } });
+  Object.defineProperty(container.querySelector('.re-timeline'), 'offsetWidth', { value: 1200 });
+  scroll.scrollTo = jest.fn();
+  const audio = container.querySelector('audio');
+  Object.defineProperties(audio, { paused: { configurable: true, value: false }, ended: { value: false } });
+  audio.currentTime = 13.5;
+  await act(async () => audio.dispatchEvent(new Event('play')));
+  expect(scroll.scrollTo).toHaveBeenLastCalledWith({ left: 240, behavior: 'smooth' });
+  expect(audio.currentTime).toBe(13.5);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+  Object.defineProperty(audio, 'paused', { value: true });
+  await act(async () => audio.dispatchEvent(new Event('pause')));
+  scroll.scrollTo.mockClear();
+  audio.currentTime = 30;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  expect(scroll.scrollTo).not.toHaveBeenCalled();
+});
+
 test('reopening restores saved beep intervals and enables edited audio preview', async () => {
   const beeps = [{ start_ms: 6500, end_ms: 9500 }];
   const checkbox = container.querySelector('.re-transport input[type="checkbox"]');
