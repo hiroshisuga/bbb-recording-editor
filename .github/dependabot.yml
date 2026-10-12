@@ -1,11 +1,11 @@
 version: 2
 updates:
-- package-ecosystem: github-actions
+- package-ecosystem: npm
   directory: /
   schedule:
     interval: monthly
 
-- package-ecosystem: docker
-  directory: /
+- package-ecosystem: bundler
+  directory: /editor
   schedule:
     interval: monthly

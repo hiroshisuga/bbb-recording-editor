@@ -117,7 +117,7 @@ export default function RecordingEditor() {
 }
 
 function Editor() {
-  const { intl, locale, setLocale, t, diagnostic, message: displayMessage } = useEditorI18n();
+  const { locale, setLocale, t, diagnostic, message: displayMessage } = useEditorI18n();
   const [meetings, setMeetings] = useState([]);
   const [recording, setRecording] = useState(null);
   const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [] });
@@ -307,7 +307,7 @@ function Editor() {
           <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><button onClick={() => setReview(false)}>{t('close')}</button><small>{t('noRebuild')}</small>
         </div>}
         <div className="re-preview"><div className="re-content-preview">
-          {external && primary ? <ExternalVideoPlayer videos={videos} intl={intl} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} /> : <SlidePreview recording={recording} time={time} />}
+          {external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} /> : <SlidePreview recording={recording} time={time} />}
         </div><div className="re-cameras">{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</div></div>
         {external && <p className="re-warnings">{t('externalAudio')}</p>}
         <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>

@@ -138,7 +138,7 @@ class Installer:
         includes = re.findall(r'^\s*include\s+["\']?([^;"\'\s]+)["\']?\s*;', text, re.MULTILINE)
         if not any(fnmatch.fnmatch(self.NGINX, pattern) for pattern in includes):
             raise InstallError('The existing BBB HTTPS server must include /etc/bigbluebutton/nginx/*.nginx. '
-                               'See editor/README.md for custom Nginx layouts.')
+                               'See README.md for custom Nginx layouts.')
 
     def copy_and_build(self):
         target = self.path(self.APP)
@@ -158,7 +158,7 @@ class Installer:
             environment = {'PATH': os.environ.get('PATH', os.defpath), 'LANG': 'C.UTF-8',
                            'npm_config_cache': str(self.stage / '.npm-cache'), 'CI': 'true',
                            'BUILD_PATH': 'build-editor', 'PUBLIC_URL': self.prefix,
-                           'REACT_APP_RECORDING_EDITOR': '1', 'REACT_APP_EDITOR_PREFIX': self.prefix}
+                           'REACT_APP_EDITOR_PREFIX': self.prefix}
             self.run(['runuser', '-u', self.builder.pw_name, '--', 'npm', 'ci', '--no-audit', '--no-fund'],
                      cwd=self.stage, env=environment)
             self.run(['runuser', '-u', self.builder.pw_name, '--', 'node',
@@ -411,7 +411,7 @@ def main():
     parser.add_argument('--skip-build', action='store_true', help='Use a prebuilt build-editor directory with a matching URL prefix.')
     options = parser.parse_args()
     if os.geteuid() != 0:
-        parser.error('Run with sudo: sudo bash /path/to/source/deploy.sh --editor')
+        parser.error('Run with sudo: sudo bash /path/to/source/deploy.sh')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+', options.admin_user) or options.admin_user.startswith('-'):
         parser.error('Invalid administrator username.')
     try:

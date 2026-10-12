@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import logger from 'utils/logger';
-import player from 'utils/player';
 import { getVideoState } from './timeline';
 
 const SYNC_INTERVAL_MS = 250;
@@ -10,7 +8,7 @@ const SEEK_COOLDOWN_MS = 1000;
 const PLAY_START_TIMEOUT_MS = 5000;
 const PRIMARY_EVENTS = ['play', 'pause', 'ended', 'seeking', 'seeked',
   'ratechange', 'volumechange', 'waiting', 'playing', 'canplay'];
-const getPrimaryPlayer = () => player.primary;
+const noPrimary = () => null;
 const initialView = {
   video: null, playing: false, playbackRate: 1, volume: 1, muted: false,
   autoPlayBlocked: false, error: null,
@@ -20,7 +18,7 @@ const newPlaybackStatus = () => ({
   forceSeek: true, lastSeekAt: -Infinity, lastEventIndex: -1,
 });
 
-export default function useExternalVideoSync(videos, getPrimary = getPrimaryPlayer) {
+export default function useExternalVideoSync(videos, getPrimary = noPrimary) {
   const [view, setView] = useState(initialView);
   const playerRef = useRef(null);
   const desiredView = useRef(initialView);
@@ -172,7 +170,7 @@ export default function useExternalVideoSync(videos, getPrimary = getPrimaryPlay
         case 'error': {
           clearPlayTimeout();
           const code = error?.data ?? error?.code ?? error?.message ?? error;
-          logger.error('external_video: playback failed', error);
+          console.error('external_video: playback failed', error);
           publish({ error: String(code), playing: false });
           return;
         }

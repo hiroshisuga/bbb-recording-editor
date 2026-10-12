@@ -2,7 +2,6 @@
   "title": "録画エディター",
   "admin": "管理者用 · raw",
   "language": "言語",
-  "loadingApp": "録画エディターを読み込んでいます…",
   "unsaved": "未保存の変更あり",
   "saved": "raw保存済み",
   "saveDraft": "下書きを保存",
@@ -130,5 +129,7 @@
   "saveCandidateRanges": "rawのXMLには有効な録画区間がありません。画面の区間は編集候補です。録画に残す区間を確認して「rawへ保存」してから再構築してください。",
   "rebuildBlockedProcessing": "録画の再構築・処理中は、次の再構築を依頼できません。完了を待ってください。",
   "rebuildInstallHint": "BBBサーバーのエディター設置ディレクトリ（標準: /opt/bbb-recording-editor）で次を実行し、ブラウザを再読み込みしてください。このコマンドは録画自体を再構築せず、専用ヘルパーと実行権限を設置します。",
-  "resetUnmarkedCompleted": "初期状態をrawに復元しました。ただし、初期XMLに有効な録画区間がありません。現在の区間は編集候補です。再構築するには、残す区間をrawへ保存してXMLに録画区間を追加する必要があります。"
+  "resetUnmarkedCompleted": "初期状態をrawに復元しました。ただし、初期XMLに有効な録画区間がありません。現在の区間は編集候補です。再構築するには、残す区間をrawへ保存してXMLに録画区間を追加する必要があります。",
+  "externalVideoAutoPlayWarning": "動画が始まらない場合は、動画内の再生ボタンを押してください。",
+  "externalVideoError": "外部動画を再生できませんでした（エラー: {code}）。"
 }

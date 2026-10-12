@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { IntlProvider, useIntl } from 'react-intl';
-import playbackEn from 'locales/messages/en.json';
-import playbackJa from 'locales/messages/ja.json';
 import en from './locales/en.json';
 import ja from './locales/ja.json';
 import diagnostics from './locales/diagnostics.en.json';
@@ -21,7 +19,6 @@ export function initialLocale(fallback = navigator.language) {
   } catch { /* The selector still works when browser storage is unavailable. */ }
   return supportedLocale(fallback);
 }
-
 // Translate only diagnostics displayed by the editor. Meeting names, chat,
 // filenames and the API's original messages are not rewritten.
 export function translateDiagnostic(message, locale) {
@@ -47,8 +44,7 @@ export function useEditorI18n() {
 }
 
 export function EditorLanguageProvider({ children }) {
-  const parent = useIntl();
-  const [locale, setLanguage] = useState(() => initialLocale(parent.locale));
+  const [locale, setLanguage] = useState(() => initialLocale());
   const setLocale = value => {
     if (!catalogs[value]) return;
     setLanguage(value);
@@ -61,8 +57,8 @@ export function EditorLanguageProvider({ children }) {
       window.history.replaceState(window.history.state, '', url);
     }
   };
-  const messages = useMemo(() => ({ ...playbackEn, ...(locale === 'ja' ? playbackJa : {}),
-    ...Object.fromEntries(Object.entries(catalogs[locale]).map(([id, text]) => [`recordingEditor.${id}`, text])) }), [locale]);
+  const messages = useMemo(() => Object.fromEntries(Object.entries(catalogs[locale])
+    .map(([id, text]) => [`recordingEditor.${id}`, text])), [locale]);
   useEffect(() => {
     const html = document.documentElement;
     const previous = { lang: html.getAttribute('lang'), dir: html.getAttribute('dir'), title: document.title };
@@ -75,9 +71,4 @@ export function EditorLanguageProvider({ children }) {
     };
   }, [locale]);
   return <LanguageContext.Provider value={{ setLocale }}><IntlProvider locale={locale} messages={messages}>{children}</IntlProvider></LanguageContext.Provider>;
-}
-
-export function EditorLoading() {
-  const parent = useIntl();
-  return <p>{catalogs[initialLocale(parent.locale)].loadingApp}</p>;
 }

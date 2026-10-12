@@ -1,6 +1,21 @@
 # BigBlueButton raw録画エディター
 
-`hiroshisuga/bbb-playback` の `refactor/external-video-hooks` ブランチをベースにした、管理者向け編集画面とRuby APIです。BBB 4.0を主対象として、BBB 3.0で共通する録画イベントも読み込みます。実サーバのraw録画を使った確認は、導入前に別コピーで行ってください。
+BigBlueButtonのraw録画を編集する、管理者向けの独立したアプリです。Reactの編集画面とRuby APIで構成し、BBBサーバ内で動作します。BBB 4.0を主対象として、BBB 3.0で共通する録画イベントも読み込みます。実サーバのraw録画を使った確認は、導入前に別コピーで行ってください。
+
+リポジトリ: [hiroshisuga/bbb-recording-editor](https://github.com/hiroshisuga/bbb-recording-editor)。[bbb-playback](https://github.com/bigbluebutton/bbb-playback)と[hiroshisuga/bbb-playback](https://github.com/hiroshisuga/bbb-playback)での開発から派生しました。外部動画の同期とTldrawの描画補助を引き継ぎ、エディターに必要な部分だけを使用しています。ライセンスは既存のLGPL-3.0を引き継ぎます（[LICENSE](LICENSE)）。
+
+## クイックスタート
+
+既存のUbuntu BBBサーバで、Node.js 20以上・npm・Python 3.8以上を用意して実行します。ソースの取得場所は任意です。
+
+```bash
+git clone https://github.com/hiroshisuga/bbb-recording-editor.git
+sudo bash bbb-recording-editor/deploy.sh
+```
+
+初回はブラウザ用管理者パスワードを設定し、`https://<BBB-host>/recording-editor/` を開きます。アプリは `/opt/bbb-recording-editor` に配置されます。詳しい前提・更新・認証・独自Nginx構成については、下の「BBBサーバへの設置」を参照してください。
+
+`npm start` はエディターの開発画面、`npm run build` は `build-editor/` にエディターをビルドします。旧コマンド `npm run build:editor` と `deploy.sh --editor` も互換用に利用できます。Playbackアプリのビルド・配備はこのリポジトリでは行いません。
 
 ## 編集できる内容
 
@@ -19,7 +34,7 @@ raw保存だけでは公開済み録画は変わりません。保存後、管�
 
 切り替えにページの再読み込みは不要です。選択中の会議、一覧の絞り込み、未保存の録画・ピー音区間、元に戻す履歴、再生位置は保持します。画面内のボタン、状態、警告、保存確認、時刻入力のラベルなどを切り替えます。会議名、チャット、ユーザーID、ファイル名、元のイベントは翻訳しません。
 
-翻訳は `src/components/recording-editor/locales/ja.json` と `en.json` に分離しています。APIの既存の診断メッセージは `diagnostics.en.json` で画面表示時に英訳するため、サーバ側のログ・APIレスポンスは変更しません。FFmpegやOSなどが返す詳細なエラー本文は元のまま表示します。言語の追加時は同じメッセージIDのカタログと診断文の翻訳を用意し、`i18n.js` の対応言語・フォールバック処理に登録してください。通常のPlaybackの言語選択とは独立しています。
+翻訳は `src/components/recording-editor/locales/ja.json` と `en.json` に分離しています。APIの既存の診断メッセージは `diagnostics.en.json` で画面表示時に英訳するため、サーバ側のログ・APIレスポンスは変更しません。FFmpegやOSなどが返す詳細なエラー本文は元のまま表示します。言語の追加時は同じメッセージIDのカタログと診断文の翻訳を用意し、`i18n.js` の対応言語・フォールバック処理に登録してください。このアプリの翻訳カタログだけを使用します。
 
 ## 会議リストの状態表示と絞り込み
 
@@ -205,10 +220,10 @@ XMLバックアップ、加工素材、元素材のバックアップ、編集JS
 既存のUbuntu BBBサーバに、ZIPで展開したソースまたはGitのチェックアウトから導入できます。取得先や実行時のカレントディレクトリに依存せず、スクリプト自身の場所からソースを読み取り、最終的に `/opt/bbb-recording-editor` へ配置します。
 
 ```bash
-sudo bash "/ダウンロード先/bbb-playback/deploy.sh" --editor
+sudo bash "/ダウンロード先/bbb-recording-editor/deploy.sh"
 ```
 
-`deploy-editor.sh` を同じように直接実行しても構いません。引数なしの `deploy.sh` は従来のPlayback用です。エディターを設置する場合は `--editor` を付けてください。
+`deploy.sh` は引数なしでエディターを導入します。`deploy-editor.sh` を直接実行しても構いません。旧形式の `deploy.sh --editor` は同じ導入処理への互換入口として残しています。
 
 前提はNode.js 20以上とnpm、Python 3.8以上、systemd、稼働中のBBB・Nginx、`bigbluebutton` ユーザー、Ubuntu標準のNginxグループ `www-data`、`/usr/bin/bbb-record` です。Node.jsやBBB本体はこのスクリプトでは導入しません。Ruby 3.0以上・Nokogiri・WEBrick、FFmpeg、sudo、`htpasswd` の不足分は `apt-get install` で補います。既存パッケージの依存関係を修復する処理は実行しません。
 
@@ -229,7 +244,7 @@ sudo bash "/ダウンロード先/bbb-playback/deploy.sh" --editor
 
 更新前のアプリは `/opt/bbb-recording-editor.previous-*`、設定は `/var/backups/bbb-recording-editor/日時-識別子/` に退避します。後者の `installation.json` に結果と退避先を記録します。ビルド失敗時は既存アプリを切り替えません。設定検証・起動・reloadに失敗した場合は、退避したアプリと設定、サービスの有効化・起動状態へ戻す処理を行います。aptで導入したパッケージは戻しません。電源断などで処理そのものが中断した場合や復旧処理も失敗した場合は、退避先とログを使った管理者による復旧が必要です。退避ファイルは自動削除しません。
 
-オプションは `sudo bash /取得先/deploy.sh --editor --help` で確認できます。`--skip-dependencies` はapt導入を省いて依存関係の検査だけ行います。`--skip-build` は取得したソース内の `build-editor/` を利用しますが、設定とURLプレフィックスが一致するビルドが必要です。一括導入後の `/opt` 内はroot所有のため、更新は新しく取得したソースから再実行してください。
+オプションは `sudo bash /取得先/deploy.sh --help` で確認できます。`--skip-dependencies` はapt導入を省いて依存関係の検査だけ行います。`--skip-build` は取得したソース内の `build-editor/` を利用しますが、設定とURLプレフィックスが一致するビルドが必要です。一括導入後の `/opt` 内はroot所有のため、更新は新しく取得したソースから再実行してください。
 
 ### 手動導入
 
@@ -243,19 +258,19 @@ sudo bash "/ダウンロード先/bbb-playback/deploy.sh" --editor
    sudo unzip bbb-recording-editor.zip -d /opt
    cd /opt/bbb-recording-editor
    npm ci
-   npm run build:editor
+   npm run build
    ```
 
    GitHubのブランチから取得する場合:
 
    ```bash
-   git clone --branch feat/raw-recording-editor https://github.com/hiroshisuga/bbb-playback.git /opt/bbb-recording-editor
+   git clone https://github.com/hiroshisuga/bbb-recording-editor.git /opt/bbb-recording-editor
    cd /opt/bbb-recording-editor
    npm ci
-   npm run build:editor
+   npm run build
    ```
 
-   Node.js 20以上が必要です。編集画面は `build-editor/` に生成されます。従来のPlaybackは `npm run build` で従来どおりビルドできます。
+   Node.js 20以上が必要です。編集画面は `build-editor/` に生成されます。通常の `npm run build` と互換用の `npm run build:editor` は同じエディターをビルドします。
 
 2. Ruby依存関係とFFmpegを用意する。
 
@@ -362,7 +377,7 @@ sudo bash "/ダウンロード先/bbb-playback/deploy.sh" --editor
 ```bash
 cd /opt/bbb-recording-editor
 git pull --ff-only
-npm run build:editor
+npm run build
 # ビルドが成功したことを確認してから実行
 sudo systemctl restart bbb-recording-editor
 ```
@@ -407,7 +422,7 @@ sudo bash editor/deploy/install-rebuild-helper.sh
 
 ### aptが使えない場合
 
-カスタムビルドのBBBでは、`bigbluebutton` メタパッケージが要求する `bbb-apps-akka` のバージョンと、導入済みのカスタム版のバージョンが一致せず、無関係なパッケージの追加もaptに拒否されることがあります。今回のgl2では、要求バージョン `2:4.0.0~rc.5+20261007T140917-git.local-build-0a2ccd433e` と、カスタム版 `0.0.4` の不一致が表示されました。
+カスタムビルドのBBBでは、`bigbluebutton` メタパッケージが要求する `bbb-apps-akka` のバージョンと、導入済みのカスタム版のバージョンが一致せず、無関係なパッケージの追加もaptに拒否されることがあります。メタパッケージとカスタム版のバージョンが一致しているか、aptのエラー本文を確認してください。
 
 この状態で、編集アプリを入れるためだけに `apt --fix-broken install` を実行しないでください。既存のBBBパッケージを変更・削除する可能性があります。以下は、Ruby・RubyGems・OpenSSL・FFmpegがすでにある場合の代替手順です。apt全体の依存関係を修復するものではありません。
 
@@ -417,7 +432,7 @@ NokogiriをRubyGemsから導入します。
 sudo /usr/bin/gem install nokogiri --no-document
 ```
 
-WEBrickも読み込めない場合だけ、追加します（今回のgl2ではOSパッケージが導入済みでした）。
+WEBrickも読み込めない場合だけ、追加します。
 
 ```bash
 sudo /usr/bin/gem install webrick --version '~> 1.8' --no-document
@@ -479,29 +494,13 @@ sudo nginx -T 2>&1 | grep -n -C 5 -E \
 sudo tail -n 30 /var/log/nginx/error.log
 ```
 
-ログの日時にも注意してください。gl2では、13:34のNokogiriエラーが残っていても、13:52の最新ログではWEBrickが正常起動していました。
-
-### gl2での導入経過と、初版READMEに不足していた説明
-
-2026-10-10、BBB 4.0のgl2で初版READMEに沿って導入し、ブラウザから編集画面へ接続できることを確認しました。録画編集・再構築の動作確認まで完了したという意味ではありません。
-
-| 作業・つまずき | 実施した対処・結果 | 初版READMEの記載状況 |
-|---|---|---|
-| コード配置・編集画面ビルド・systemd設定 | READMEに沿って導入。サービスの起動ログが記録された | 記載あり |
-| 公開URLでGreenlightのReact Routerによる404 | 配信HTMLがGreenlightであることを確認し、localhostのバックエンドと別に切り分けた | 切り分け手順・期待するHTTPステータスの記載なし |
-| サービスがNokogiriのLoadErrorで停止 | `ruby-nokogiri` のapt導入を試したが、BBBのバージョン依存関係で失敗。RubyGemsでNokogiriを導入 | aptの必要パッケージは記載あり。aptが失敗する環境向けのRubyGems手順は記載なし |
-| 連続失敗によるsystemdの起動制限と、再起動直後のcurl失敗 | `reset-failed` と `restart` を実行。最新のWEBrick起動ログを確認し、curl再実行でlocalhostが200になった | 起動確認、reset-failed、古いログとの区別の記載なし。直後のcurl失敗は起動タイミングによる可能性があるが、原因は断定していない |
-| localhostは200だが公開URLでは引き続きGreenlightの404 | 同梱設定を `/etc/bigbluebutton/nginx/recording-editor.nginx` にインストールし、設定チェック・reloadで編集アプリへ振り分けた | 「locationをserverブロックに追加」とチェック・reloadは記載あり。具体的な配置先とインストールコマンドは記載なし |
-| 認証情報が不明／403を表示 | Linuxログインとは別の認証であることを確認。403の具体的な原因はログでは確認されていない | `htpasswd ... admin` とGreenlight・モデレーター権限との違いは記載あり。Linuxログインとの違いは明記なし |
-| `htpasswd: command not found`、`apt install htpasswd` も失敗 | OpenSSLで認証ファイルを作成し、パスワードを設定すると編集画面が動いた | `apache2-utils` とhtpasswd作成コマンドは記載あり。両者の対応、OpenSSLの代替手順、認証ファイルの権限設定は記載なし |
-
-上記の不足を、設置手順とトラブル対処へ反映しています。技術的な参考: [BBBのNginx追加設定](https://docs.bigbluebutton.org/administration/customize/)、[Nokogiriの導入](https://nokogiri.org/tutorials/installing_nokogiri.html)、[NginxのBasic認証](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)。
+ログの日時を確認し、過去の起動エラーと最新の起動結果を区別してください。
 
 ## アンインストール
 
 以下は、標準の配置先・設定ファイル名で導入した場合の手順です。配置先や環境変数を変更している場合は、削除前に `/etc/bbb-recording-editor.env` を確認してパスを合わせてください。
 
-**アンインストールは編集内容の取り消しではありません。** 編集済みのraw `events.xml` とピー音入り素材はそのまま残ります。元の録画へ戻したい場合は、先に「現時点の制約と復旧」の手順でXMLを復旧してください。公開済み録画を変更するための再構築は、引き続き管理者が実行します。
+**アンインストールは編集内容の取り消しではありません。** 編集済みのraw `events.xml` とピー音入り素材はそのまま残ります。元の録画へ戻したい場合は、アンインストール前に「初期状態に戻す…」を実行し、構築済みの録画にも反映する場合は「録画を再構築…」を実行してください。手動で復旧する場合は、後述の「現時点の制約と復旧」を参照してください。
 
 1. 保存・プレビュー生成ジョブが終わっていることを確認し、サービスを停止・自動起動を解除する。
 
@@ -588,12 +587,14 @@ ruby editor/test/server_test.rb
 ruby editor/test/rebuild_test.rb
 python3 -B -m unittest discover -s editor/test -p '*_test.py'
 CI=true npm test -- --watchAll=false --runInBand
-npm run build:editor
+npm run build
 ```
 
 音声テストは合成したWAV、映像＋AAC、OpusをFFmpegで生成します。元素材の保持、全音声の置換、映像パケットの保持、XMLイベントと時計、空区間、競合、危険な参照、認証、Range、保存ジョブを検証します。会議リストのテストでは、公開・非公開・処理中・rawなし・不明の判定、録画区間の合計、絞り込みと保存後の更新も確認します。
 
 Pythonの導入テストは隔離した一時ファイルシステムと模擬OSコマンドを使い、取得場所に依存しない導入、設定・認証・履歴の保持、カスタムパス、ビルド・Nginx・起動・切替失敗時の復旧を検証します。実サーバの `/opt`、Nginx、systemdには変更を加えません。
+
+Node.js 20以上とnpm、Rubyの依存ライブラリ、FFmpegを用意し、最初に `npm ci` を実行してください。フロントエンドの直接依存はReact・React DOM・React Intl・ReactPlayer・BBB版Tldrawと、Tldrawの投票結果描画に必要なRecharts・styled-componentsです。`src/` はエディターと外部動画プレビュー、`editor/` はRuby API・導入設定・テストで構成します。
 
 実録画を使わずに動かす例:
 
@@ -606,7 +607,7 @@ ruby editor/server.rb
 # http://127.0.0.1:8099/recording-editor/
 ```
 
-開発サーバの場合は、APIを先に起動し、`BBB_EDITOR_PROXY=http://127.0.0.1:8099 npm start` で起動後 `http://localhost:3000/?editor=1` を開きます。開発用URLで使う場合、OriginとHostを一致させるため、プロキシの `changeOrigin` は有効にしません。
+開発サーバの場合は、APIを先に起動し、`BBB_EDITOR_PROXY=http://127.0.0.1:8099 npm start` で起動後 `http://localhost:3000/recording-editor/` を開きます。開発用URLで使う場合、OriginとHostを一致させるため、プロキシの `changeOrigin` は有効にしません。
 
 ## 現時点の制約と復旧
 

@@ -315,11 +315,14 @@ class InstallEditorTest(unittest.TestCase):
     def test_shell_entrypoint_finds_source_from_unrelated_working_directory(self):
         for name in ['deploy.sh', 'deploy-editor.sh']:
             shutil.copy2(REPO / name, self.source / name)
-        result = subprocess.run(['bash', str(self.source / 'deploy.sh'), '--editor', '--help'],
-                                cwd=self.folder, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('/opt/bbb-recording-editor', result.stdout)
-        self.assertIn('--skip-build', result.stdout)
+        for arguments in [['deploy.sh', '--help'], ['deploy.sh', '--editor', '--help'],
+                          ['deploy-editor.sh', '--help']]:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(['bash', str(self.source / arguments[0]), *arguments[1:]],
+                                        cwd=self.folder, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('/opt/bbb-recording-editor', result.stdout)
+                self.assertIn('--skip-build', result.stdout)
 
 
 if __name__ == '__main__':

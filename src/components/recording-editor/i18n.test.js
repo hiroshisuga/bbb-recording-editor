@@ -1,14 +1,14 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
-import { createIntl, IntlProvider } from 'react-intl';
+import { createIntl } from 'react-intl';
 import { EditorLanguageProvider, LANGUAGE_KEY, catalogs, initialLocale, supportedLocale, translateDiagnostic, useEditorI18n } from './i18n';
 import diagnostics from './locales/diagnostics.en.json';
 
 beforeEach(() => { localStorage.clear(); window.history.replaceState(null, '', '/'); });
 afterEach(() => { localStorage.clear(); window.history.replaceState(null, '', '/'); });
 
-test('language priority is URL, saved preference, browser/playback language, English fallback', () => {
+test('language priority is URL, saved preference, browser language, English fallback', () => {
   expect(initialLocale('ja-JP')).toBe('ja');
   expect(initialLocale('fr-FR')).toBe('en');
   expect(supportedLocale('ja_JP')).toBe('ja');
@@ -36,7 +36,7 @@ test('English and Japanese catalogs cover the same UI messages', () => {
     const intl = createIntl({ locale, messages, onError });
     for (const id of Object.keys(messages)) {
       intl.formatMessage({ id }, { count: 2, record: 1, beep: 0, label: 'Test', number: 1,
-        time: '00:01', meeting: '14:11', recorded: '03:49', backup: '/tmp/events.xml', file: 'test.webm', page: 3 });
+        time: '00:01', meeting: '14:11', recorded: '03:49', backup: '/tmp/events.xml', file: 'test.webm', page: 3, code: '123' });
     }
     expect(onError).not.toHaveBeenCalled();
   }
@@ -54,14 +54,14 @@ test('diagnostics retain dynamic details and translate nested causes', () => {
   expect(translateDiagnostic('ffmpeg: invalid input', 'en')).toBe('ffmpeg: invalid input');
 });
 
-test('a saved language is restored and overrides playback locale without changing its provider', async () => {
+test('a saved language is restored without an enclosing IntlProvider', async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.setItem(LANGUAGE_KEY, 'en');
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   function Probe() { const { t } = useEditorI18n(); return <span>{t('title')}</span>; }
   try {
-    await act(async () => { root.render(<IntlProvider locale="ja" messages={{}}><EditorLanguageProvider><Probe /></EditorLanguageProvider></IntlProvider>); });
+    await act(async () => { root.render(<EditorLanguageProvider><Probe /></EditorLanguageProvider>); });
     expect(container.textContent).toBe('Recording editor');
     expect(document.documentElement.lang).toBe('en');
   } finally {
@@ -80,7 +80,7 @@ test('switching language works without storage and keeps an explicit locale URL 
     return <button onClick={() => setLocale(locale === 'en' ? 'ja' : 'en')}>{t('title')}</button>;
   }
   try {
-    await act(async () => { root.render(<IntlProvider locale="ja" messages={{}}><EditorLanguageProvider><Probe /></EditorLanguageProvider></IntlProvider>); });
+    await act(async () => { root.render(<EditorLanguageProvider><Probe /></EditorLanguageProvider>); });
     await act(async () => { Simulate.click(container.querySelector('button')); });
     expect(container.textContent).toBe('Recording editor');
     expect(new URLSearchParams(window.location.search).get('locale')).toBe('en');

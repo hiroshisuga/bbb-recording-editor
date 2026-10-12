@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Tldraw, AssetRecordType } from '@bigbluebutton/tldraw';
 import '@bigbluebutton/tldraw/tldraw.css';
-import { createTldrawImageAsset, createTldrawBackgroundShape } from 'utils/tldraw';
+import { createTldrawImageAsset, createTldrawBackgroundShape } from './tldraw';
 import { slideState } from './model';
 import { useEditorI18n } from './i18n';
 

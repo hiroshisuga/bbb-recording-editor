@@ -12,7 +12,7 @@
   "会議全体の音声と波形を生成しています。": "Generating audio and waveform for the full meeting.",
   "この素材は配信できません。": "This media file cannot be served.",
   "操作が見つかりません。": "Operation not found.",
-  "npm run build:editorで編集画面をビルドしてください。": "Build the editor with npm run build:editor.",
+  "npm run buildで編集画面をビルドしてください。": "Build the editor with npm run build.",
   "参照先が不正です。": "Invalid file reference.",
   "ファイルがありません。": "File not found.",
   "Rangeが不正です。": "Invalid Range header.",

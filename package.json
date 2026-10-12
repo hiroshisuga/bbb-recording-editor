@@ -1,32 +1,19 @@
 {
   "name": "bbb-recording-editor",
   "version": "0.1.0",
-  "homepage": "/playback/presentation/2.3",
+  "homepage": "/recording-editor",
   "dependencies": {
     "@bigbluebutton/tldraw": "^2.0.0-alpha.36",
-    "bowser": "^2.11.0",
-    "classnames": "^2.3.1",
-    "darkreader": "^4.9.46",
-    "dompurify": "^3.3.0",
-    "linkify-react": "^4.3.2",
-    "linkifyjs": "^4.3.2",
-    "prop-types": "^15.8.1",
     "react": "^18.1.0",
     "react-dom": "^18.1.0",
     "react-intl": "^6.2.5",
     "react-player": "^2.16.0",
-    "react-router-dom": "^7.18.4",
-    "react-sizeme": "^3.0.2",
     "recharts": "^2.12.7",
-    "sass": "^1.52.1",
-    "semver": "^7.5.2",
-    "styled-components": "~6.3.12",
-    "tldraw-v1": "npm:@tldraw/tldraw@^1.2.7",
-    "video.js": "^7.21.1",
-    "videojs-seek-buttons": "^3.0.1"
+    "styled-components": "~6.3.12"
   },
   "devDependencies": {
-    "react-scripts": "^5.0.1"
+    "react-scripts": "^5.0.1",
+    "http-proxy-middleware": "^2.0.10"
   },
   "overrides": {
     "nth-check": "2.0.1",
@@ -40,10 +27,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "start:proxy": "bash start-proxy.sh",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "build:editor": "BUILD_PATH=build-editor PUBLIC_URL=/recording-editor REACT_APP_RECORDING_EDITOR=1 react-scripts build"
+    "build": "BUILD_PATH=build-editor PUBLIC_URL=/recording-editor react-scripts build",
+    "build:editor": "npm run build",
+    "test": "react-scripts test"
   },
   "eslintConfig": {
     "extends": "react-app"
@@ -72,7 +58,7 @@
   },
   "keywords": [
     "bigbluebutton",
-    "playback"
+    "recording-editor"
   ],
   "author": "Pedro Beschorner Marin <pedrobmarin@gmail.com>",
   "license": "LGPL-3.0",

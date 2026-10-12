@@ -1,7 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
-import { IntlProvider } from 'react-intl';
 import RecordingEditor from './index';
 import { LANGUAGE_KEY } from './i18n';
 import useAudioPreview from './useAudioPreview';
@@ -36,6 +35,7 @@ async function language(value) {
 
 beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
+  jest.spyOn(navigator, 'language', 'get').mockReturnValue('ja-JP');
   localStorage.removeItem(LANGUAGE_KEY);
   calls = [];
   global.fetch = jest.fn(async (url, options) => {
@@ -54,7 +54,7 @@ beforeEach(async () => {
   });
   jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  await act(async () => { root.render(<IntlProvider locale="ja" messages={{}}><RecordingEditor /></IntlProvider>); });
+  await act(async () => { root.render(<RecordingEditor />); });
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
 });
 

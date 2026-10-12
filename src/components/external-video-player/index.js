@@ -1,26 +1,16 @@
 import React from 'react';
 import ReactPlayer from 'react-player';
-import { defineMessages } from 'react-intl';
+import { useEditorI18n } from '../recording-editor/i18n';
 import useExternalVideoSync from './useExternalVideoSync';
 import './styles.css';
-
-const messages = defineMessages({
-  autoPlayWarning: {
-    id: 'player.externalVideo.autoPlayWarning',
-    defaultMessage: 'If the video does not start, press play in the video.',
-  },
-  error: {
-    id: 'player.externalVideo.error',
-    defaultMessage: 'The external video could not be played (error: {code}).',
-  },
-});
 
 const config = {
   youtube: { playerVars: { autoplay: 0, controls: 1, enablejsapi: 1, rel: 0 } },
   file: { attributes: { playsInline: true } },
 };
 
-export default function ExternalVideoPlayer({ videos, intl, getPrimary }) {
+export default function ExternalVideoPlayer({ videos, getPrimary }) {
+  const { t } = useEditorI18n();
   const { video, playing, playbackRate, volume, muted, autoPlayBlocked, error,
     playerRef, notify } = useExternalVideoSync(videos, getPrimary);
   if (!video) return null;
@@ -28,8 +18,7 @@ export default function ExternalVideoPlayer({ videos, intl, getPrimary }) {
     <div className="externalVideos-wrapper">
       {(autoPlayBlocked || error) && (
         <p className="autoPlayWarning" role="status">
-          {error ? intl.formatMessage(messages.error, { code: error })
-            : intl.formatMessage(messages.autoPlayWarning)}
+          {error ? t('externalVideoError', { code: error }) : t('externalVideoAutoPlayWarning')}
         </p>
       )}
       <ReactPlayer

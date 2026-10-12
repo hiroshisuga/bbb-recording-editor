@@ -1,6 +1,6 @@
 {
-  "short_name": "Playback",
-  "name": "BigBlueButton recording playback",
+  "short_name": "Recording Editor",
+  "name": "BigBlueButton recording editor",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,6 +10,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#10161e",
+  "background_color": "#10161e"
 }

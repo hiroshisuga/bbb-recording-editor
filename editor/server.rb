@@ -173,7 +173,7 @@ module RecordingEditor
     end
 
     def static(req, res, path)
-      raise Error.new('npm run build:editorで編集画面をビルドしてください。', 503) unless File.directory?(@build_root)
+      raise Error.new('npm run buildで編集画面をビルドしてください。', 503) unless File.directory?(@build_root)
       candidate = File.expand_path(path.delete_prefix('/'), @build_root)
       raise Error.new('参照先が不正です。', 403) unless candidate.start_with?(@build_root + '/') || candidate == @build_root
       candidate = File.join(@build_root, 'index.html') unless File.file?(candidate)

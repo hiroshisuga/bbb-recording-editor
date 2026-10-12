@@ -2,7 +2,6 @@
   "title": "Recording editor",
   "admin": "Administrator · raw",
   "language": "Language",
-  "loadingApp": "Loading recording editor…",
   "unsaved": "Unsaved changes",
   "saved": "Raw saved",
   "saveDraft": "Save draft",
@@ -130,5 +129,7 @@
   "saveCandidateRanges": "The raw XML has no valid recording intervals. On-screen intervals are editing candidates. Check the intervals and save to raw before rebuilding.",
   "rebuildBlockedProcessing": "Another rebuild cannot be requested while recording processing is in progress. Wait for it to finish.",
   "rebuildInstallHint": "In the editor installation directory on the BBB server (default: /opt/bbb-recording-editor), run the command below and reload the browser. It installs the helper and permissions; it does not rebuild recordings.",
-  "resetUnmarkedCompleted": "Original state restored to raw, but its XML has no valid recording intervals. Current intervals are editing candidates. To rebuild, save the intervals you want to keep to raw, adding them to the XML."
+  "resetUnmarkedCompleted": "Original state restored to raw, but its XML has no valid recording intervals. Current intervals are editing candidates. To rebuild, save the intervals you want to keep to raw, adding them to the XML.",
+  "externalVideoAutoPlayWarning": "If the video does not start, press play in the video.",
+  "externalVideoError": "The external video could not be played (error: {code})."
 }
