@@ -85,6 +85,7 @@
 .re-track,.re-wave { position:relative; height:35px; border-bottom:1px solid #2b3b4e; }
 .re-wave { height:68px; }.re-wave svg { position:absolute; inset:0; width:100%; height:100%; stroke:#7cacbf; stroke-width:.75; }
 .re-track-label { position:sticky; display:inline-block; vertical-align:top; margin-top:2px; font-size:10px; color:#c4d4e4; left:6px; top:2px; z-index:6; background:#102130; padding:0 3px; border-radius:2px; pointer-events:none; }
+.re-timeline-tooltip { position:fixed; z-index:10000; pointer-events:none; box-sizing:border-box; max-width:min(360px,calc(100vw - 16px)); max-height:calc(100vh - 16px); overflow:hidden; padding:7px 10px; border:1px solid #7297b7; border-radius:5px; background:#192b3d; color:#edf3fa; box-shadow:0 3px 12px #0008; font:12px/1.5 system-ui,sans-serif; white-space:pre-line; overflow-wrap:anywhere; }
 .re-wave-pending { position:absolute; inset:0; display:flex; justify-content:center; align-items:center; color:#8395a9; font-size:12px; }
 .re-bar { position:absolute; top:17px; bottom:3px; background:#34846f; border:1px solid #6fd1b1; color:#d5fff0; font-size:10px; text-align:center; min-width:2px; }
 .beep_ranges .re-bar { background:#98652a; border-color:#e5b261; color:#ffe9c7; }.re-bar>span { pointer-events:none; }

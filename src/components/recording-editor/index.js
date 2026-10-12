@@ -6,6 +6,7 @@ import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
+import TimelineTooltip from './TimelineTooltip';
 import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
 import useExternalVideoTitles from './useExternalVideoTitles';
 import { audioAdapter, externalVideos, formatTime, normalizeRanges, parseTime, presentationRanges, removeRange } from './model';
@@ -111,20 +112,20 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up, { once: true });
   };
   const rangeTrack = (kind, label) => <div className={`re-track ${kind}`}><span className="re-track-label">{label}</span>
-    {edit[kind].map((r, i) => <div className="re-bar" key={i} style={{ left: pct(r.start_ms), width: pct(r.end_ms - r.start_ms) }} onPointerDown={e => e.stopPropagation()} onClick={() => setSelection(r)} title={`${formatTime(r.start_ms)} – ${formatTime(r.end_ms)}`}>
+    {edit[kind].map((r, i) => <div className="re-bar" key={i} style={{ left: pct(r.start_ms), width: pct(r.end_ms - r.start_ms) }} onPointerDown={e => e.stopPropagation()} onClick={() => setSelection(r)} data-tooltip={`${formatTime(r.start_ms)} – ${formatTime(r.end_ms)}`}>
       <button className="re-handle left" aria-label={t('dragStart', { label, number: i + 1 })} onPointerDown={e => handle(e, kind, i, 'start_ms')} />
       <span>{i + 1}</span>
       <button className="re-handle right" aria-label={t('dragEnd', { label, number: i + 1 })} onPointerDown={e => handle(e, kind, i, 'end_ms')} />
     </div>)}
   </div>;
-  return <div className="re-timeline-scroll" ref={scrollRef} {...follow}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDown={select}>
+  return <><div className="re-timeline-scroll" ref={scrollRef} {...follow}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDown={select}>
     <div className="re-ruler">{Array.from({ length: 11 }, (_, i) => <span key={i} style={{ left: `${i * 10}%` }}>{formatTime(duration * i / 10).slice(0, 8)}</span>)}</div>
     <div className="re-wave"><span className="re-track-label">{t('meetingAudio')}</span><svg viewBox="0 0 2048 64" preserveAspectRatio="none" aria-label={t('waveform')}>
       {(peaks || []).map((p, i) => <line key={i} x1={i} x2={i} y1={32 - Math.min(1, p) * 30} y2={32 + Math.min(1, p) * 30} />)}
     </svg>{!peaks && <span className="re-wave-pending">{t('wavePending')}</span>}</div>
     {rangeTrack('record_ranges', t('keep'))}{rangeTrack('beep_ranges', t('beep'))}
     {['video', 'deskshare'].map(kind => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
-      {recording.assets.filter(a => a.kind === kind).map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} title={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
+      {recording.assets.filter(a => a.kind === kind).map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} data-tooltip={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
     <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>
       {presentations.map((presentation, i) => {
@@ -132,11 +133,11 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
         const description = `${title}\n${formatTime(presentation.start_ms)} – ${formatTime(presentation.end_ms)}`;
         return <React.Fragment key={i}>
           <button className="re-presentation-ribbon" style={{ left: pct(presentation.start_ms), width: pct(presentation.end_ms - presentation.start_ms) }}
-            title={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(presentation.start_ms)}>{title}</button>
+            data-tooltip={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(presentation.start_ms)}>{title}</button>
           {presentation.events.filter(event => event.time_ms < presentation.end_ms).map((event, j) => {
             const label = event.type === 'GotoSlideEvent' ? t('slide', { page: event.page }) : t('slideCamera');
             const details = `${formatTime(event.time_ms)} · ${label}`;
-            return <button key={j} className="re-event-marker re-presentation-marker" style={{ left: pct(event.time_ms) }} title={details}
+            return <button key={j} className="re-event-marker re-presentation-marker" style={{ left: pct(event.time_ms) }} data-tooltip={details}
               aria-label={details} onPointerDown={e => e.stopPropagation()} onClick={() => seek(event.time_ms)} />;
           })}
         </React.Fragment>;
@@ -148,16 +149,16 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
         const description = `${title}\n${formatTime(video.timestamp * 1000)} – ${formatTime(video.clear * 1000)}`;
         return <React.Fragment key={i}>
           <button className="re-external-ribbon" style={{ left: pct(video.timestamp * 1000), width: pct((video.clear - video.timestamp) * 1000) }}
-            title={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(video.timestamp * 1000)}>{title}</button>
+            data-tooltip={description} aria-label={description} onPointerDown={e => e.stopPropagation()} onClick={() => seek(video.timestamp * 1000)}>{title}</button>
           {video.events.filter(event => event.timestamp > video.timestamp && event.timestamp < video.clear).map((event, j) => <button key={j}
-            className="re-event-marker re-external-marker" style={{ left: pct(event.timestamp * 1000) }} title={externalEventDescription(event, t)}
+            className="re-event-marker re-external-marker" style={{ left: pct(event.timestamp * 1000) }} data-tooltip={externalEventDescription(event, t)}
             aria-label={externalEventDescription(event, t)} onPointerDown={e => e.stopPropagation()} onClick={() => seek(event.timestamp * 1000)} />)}
         </React.Fragment>;
       })}
     </div>
     <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />
     <div className="re-playhead" style={{ left: pct(time) }} />
-  </div></div>;
+  </div></div><TimelineTooltip key={recording.id} targetRef={scrollRef} /></>;
 }
 
 export default function RecordingEditor() {
