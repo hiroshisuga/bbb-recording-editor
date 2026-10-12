@@ -96,6 +96,32 @@ test('audio playback pages the zoomed timeline without seeking or saving edits',
   expect(scroll.scrollTo).not.toHaveBeenCalled();
 });
 
+test('clicking a later time during playback continues timeline paging without pause/play', async () => {
+  await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: '4' } }));
+  const scroll = container.querySelector('.re-timeline-scroll');
+  const timeline = container.querySelector('.re-timeline');
+  Object.defineProperties(scroll, { clientWidth: { value: 300 }, scrollWidth: { value: 1200 } });
+  Object.defineProperty(timeline, 'offsetWidth', { value: 1200 });
+  timeline.getBoundingClientRect = () => ({ left: 0, width: 1200 });
+  timeline.setPointerCapture = jest.fn();
+  scroll.scrollTo = jest.fn();
+  const audio = container.querySelector('audio');
+  Object.defineProperties(audio, { paused: { value: false }, ended: { value: false } });
+  audio.currentTime = 5;
+  await act(async () => audio.dispatchEvent(new Event('play')));
+  expect(scroll.scrollTo).not.toHaveBeenCalled();
+  await act(async () => Simulate.pointerDown(timeline, { button: 0, clientX: 285, clientY: 100, pointerId: 1 }));
+  const up = new Event('pointerup', { bubbles: true });
+  Object.assign(up, { clientX: 285, clientY: 100, pointerId: 1 });
+  await act(async () => timeline.dispatchEvent(up));
+  expect(audio.currentTime).toBe(14.25);
+  expect(scroll.scrollTo).toHaveBeenLastCalledWith({ left: 240, behavior: 'smooth' });
+  audio.currentTime = 30;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  expect(scroll.scrollTo).toHaveBeenLastCalledWith({ left: 570, behavior: 'smooth' });
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
 test('reopening restores saved beep intervals and enables edited audio preview', async () => {
   const beeps = [{ start_ms: 6500, end_ms: 9500 }];
   const checkbox = container.querySelector('.re-transport input[type="checkbox"]');
