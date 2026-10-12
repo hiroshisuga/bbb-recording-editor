@@ -32,6 +32,9 @@ async function time(label, text) {
 async function language(value) {
   await act(async () => { Simulate.change(container.querySelector('.re-language select'), { target: { value } }); });
 }
+async function volume(value) {
+  await act(async () => Simulate.change(container.querySelector('.re-volume input'), { target: { value: String(value) } }));
+}
 
 beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -73,6 +76,44 @@ test('editing, undo/redo and draft send meeting-time ranges with revision', asyn
   expect(draft.payload).toMatchObject({ revision: 'revision-one', beep_ranges: [{ start_ms: 6500, end_ms: 9500 }] });
   expect(draft.headers['X-BBB-Editor']).toBe('1');
   expect(calls.some(c => c.url.endsWith('/save'))).toBe(false);
+});
+
+test('volume and mute affect preview playback without changing edits or saving raw data', async () => {
+  const audio = container.querySelector('audio');
+  expect(audio.volume).toBe(1);
+  await volume(35);
+  expect(audio.volume).toBeCloseTo(0.35);
+  expect(container.querySelector('.re-volume output').textContent).toBe('35%');
+  await click('ミュート');
+  expect(audio.muted).toBe(true);
+  expect(audio.volume).toBeCloseTo(0.35);
+  expect(button('ミュート解除').getAttribute('aria-pressed')).toBe('true');
+  await click('ミュート解除');
+  expect(audio.muted).toBe(false);
+  expect(audio.volume).toBeCloseTo(0.35);
+  await volume(0);
+  expect(audio.volume).toBe(0);
+  await click('ミュート解除');
+  expect(audio.volume).toBeCloseTo(0.35);
+  await click('ミュート');
+  await volume(60);
+  expect(audio.muted).toBe(false);
+  expect(audio.volume).toBeCloseTo(0.6);
+  expect(button('rawへ保存…').disabled).toBe(true);
+  expect(button('↶ 元に戻す').disabled).toBe(true);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+  await language('en');
+  expect(container.querySelector('input[aria-label="Volume"]').value).toBe('60');
+  expect(button('Mute').getAttribute('aria-pressed')).toBe('false');
+});
+
+test('reopening media preserves volume and mute settings', async () => {
+  await volume(25);
+  await click('ミュート');
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('audio').volume).toBeCloseTo(0.25);
+  expect(container.querySelector('audio').muted).toBe(true);
+  expect(container.querySelector('.re-volume input').value).toBe('25');
 });
 
 test('audio playback pages the zoomed timeline without seeking or saving edits', async () => {

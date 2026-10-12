@@ -34,6 +34,11 @@ test('external preview follows the editor audio clock, seek, pause, rate and mut
     expect(view).toMatchObject({ video: videos[0], playing: true, playbackRate: 3, volume: 0.4, muted: true });
     expect(provider.seekTo).toHaveBeenLastCalledWith(54, 'seconds', true);
 
+    await act(async () => { audio.volume = 0.25; audio.muted = false; audio.dispatchEvent(new Event('volumechange')); });
+    expect(view).toMatchObject({ volume: 0.25, muted: false });
+    await act(async () => { audio.muted = true; audio.dispatchEvent(new Event('volumechange')); });
+    expect(view).toMatchObject({ volume: 0.25, muted: true });
+
     await act(async () => { audio.currentTime = 55; audio.dispatchEvent(new Event('seeked')); });
     expect(provider.seekTo).toHaveBeenLastCalledWith(140, 'seconds', true);
 

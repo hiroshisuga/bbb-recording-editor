@@ -41,7 +41,7 @@ export default function useAudioPreview(audio, ranges, enabled) {
       tone.gain.cancelScheduledValues(now);
       original.gain.setValueAtTime(1, now);
       tone.gain.setValueAtTime(0, now);
-      if (!enabled || audio.paused || audio.ended || audio.readyState < 3 || !rate) return;
+      if (!enabled || audio.muted || audio.volume === 0 || audio.paused || audio.ended || audio.readyState < 3 || !rate) return;
       ranges.forEach(range => {
         if (range.end_ms <= position) return;
         const start = now + Math.max(0, range.start_ms - position) / 1000 / rate;
