@@ -510,6 +510,7 @@ module RecordingEditor
       events = visual_events
       history = history_data
       rebuild = repo.rebuild_info(id)
+      published = repo.publication_info(id)[:publication_status] == 'published'
       sync = if !history || history['revision'] != revision
                'unknown'
              elsif rebuild['status'] == 'completed' && rebuild['revision'] == revision &&
@@ -525,7 +526,7 @@ module RecordingEditor
         rebuild: rebuild, reset: Original.new(repo, id).info,
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
         assets: media, slides: slides, events: events, warnings: warnings.uniq,
-        published_url: "/playback/presentation/2.3/#{id}",
+        published_url: published ? "/playback/presentation/2.3/#{id}" : nil,
         preview_key: Digest::SHA256.hexdigest(['preview-clock-v2', revision, *media.filter_map { |a| a['relative'] && File.stat(repo.raw_file(id, a['relative'])).then { |s| "#{a['relative']}:#{s.size}:#{s.mtime.to_f}" } }].join('|'))[0, 24] }
     end
 

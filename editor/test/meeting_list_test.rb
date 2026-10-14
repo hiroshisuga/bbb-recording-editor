@@ -85,6 +85,33 @@ class MeetingListTest < Minitest::Test
     assert_equal 'unpublished', item[:publication_status]
   end
 
+  def test_editor_playback_link_follows_publication_changes
+    raw(marks)
+    raw_path = File.join(@repo.raw_root, @id, 'events.xml')
+    before = File.binread(raw_path)
+    assert_nil @repo.recording(@id).to_h[:published_url]
+    path = metadata(@repo.published_root, 'published', 'true')
+    assert_equal "/playback/presentation/2.3/#{@id}", @repo.recording(@id).to_h[:published_url]
+    FileUtils.remove_entry(File.dirname(path))
+    path = metadata(@repo.unpublished_root, 'unpublished', 'false')
+    assert_nil @repo.recording(@id).to_h[:published_url]
+    FileUtils.remove_entry(File.dirname(path))
+    metadata(@repo.process_root, 'processing', 'false')
+    assert_nil @repo.recording(@id).to_h[:published_url]
+    assert_equal before, File.binread(raw_path)
+  end
+
+  def test_editor_playback_link_is_hidden_when_publication_is_unknown
+    raw(marks)
+    path = metadata(@repo.published_root, 'published', 'false')
+    assert_nil @repo.recording(@id).to_h[:published_url]
+    File.write(path, 'invalid XML')
+    assert_nil @repo.recording(@id).to_h[:published_url]
+    metadata(@repo.published_root, 'published', 'true')
+    metadata(@repo.unpublished_root, 'unpublished', 'false')
+    assert_nil @repo.recording(@id).to_h[:published_url]
+  end
+
   def test_marked_recordings_use_renamed_titles_for_published_and_unpublished_states
     raw(marks)
     raw_path = File.join(@repo.raw_root, @id, 'events.xml')
