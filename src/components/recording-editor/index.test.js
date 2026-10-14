@@ -70,6 +70,23 @@ beforeEach(async () => {
 
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); localStorage.removeItem(LANGUAGE_KEY); localStorage.removeItem(PREFERENCES_KEY); jest.restoreAllMocks(); global.fetch = originalFetch; });
 
+test('published recording link is shown only when the manifest has a public playback URL', async () => {
+  const link = container.querySelector('.re-title a');
+  expect(link.getAttribute('href')).toBe('/playback/test');
+  expect(link.target).toBe('_blank');
+  const fetch = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, published_url: null }) }
+    : fetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-title a')).toBeNull();
+  await language('en');
+  expect(container.textContent).not.toContain('Published recording');
+  global.fetch.mockImplementation(fetch);
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-title a').textContent).toBe('Published recording ↗');
+});
+
 test('opening and reopening begin unselected and allow entering the start time first', async () => {
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
   expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:00.000');
