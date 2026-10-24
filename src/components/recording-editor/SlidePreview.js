@@ -72,8 +72,10 @@ export default function SlidePreview({ recording, time }) {
       const w = width * ((camera?.widthRatio || 100) / 100);
       const h = height * ((camera?.heightRatio || 100) / 100);
       const z = Math.min(bounds.width / w, bounds.height / h);
-      const x = width * (camera?.xOffset || 0) / 100 + (bounds.width / z - w) / 2;
-      const y = height * (camera?.yOffset || 0) / 100 + (bounds.height / z - h) / 2;
+      // BBB pan offsets already use Tldraw slide coordinates. Only the
+      // width/height ratios are percentages; scaling offsets again hides slides.
+      const x = (camera?.xOffset || 0) + (bounds.width / z - w) / 2;
+      const y = (camera?.yOffset || 0) + (bounds.height / z - h) / 2;
       if (Number.isFinite(z) && z > 0) editor.setCamera({ x, y, z });
     };
     fit();

@@ -48,8 +48,8 @@ const recording = {
 };
 let container, root, styles;
 const originalResizeObserver = global.ResizeObserver;
-const render = time => act(async () => {
-  root.render(<EditorLanguageProvider><SlidePreview recording={recording} time={time} /></EditorLanguageProvider>);
+const render = (time, source = recording) => act(async () => {
+  root.render(<EditorLanguageProvider><SlidePreview recording={source} time={time} /></EditorLanguageProvider>);
 });
 const wheel = deltaY => mockEditor.dispatch({
   type: 'wheel', name: 'wheel', delta: { x: 0, y: deltaY, z: 0 }, point: { x: 200, y: 100 },
@@ -106,6 +106,37 @@ test('recorded zoom, slide changes and backwards seeks still set the camera', as
   expect(mockEditor.getCamera().z).toBeCloseTo(initial.z * 2);
   await render(0);
   expect(mockEditor.getCamera()).toEqual(initial);
+});
+
+test.each([
+  { widthRatio: 50, heightRatio: 50, xOffset: -200.77533039647577, yOffset: -184.12334801762117 },
+  { widthRatio: 50, heightRatio: 50, xOffset: -720, yOffset: -400.7577092511013 },
+  { widthRatio: 100, heightRatio: 100, xOffset: 0, yOffset: -93.9912023334251 },
+])('recorded pan offsets remain in slide coordinates and keep the background visible: %j', async camera => {
+  const source = { ...recording, events: recording.events.map(event => event.camera ? { ...event, camera } : event) };
+  await render(0, source);
+  const initial = { ...mockEditor.getCamera() };
+  await render(1000, source);
+  const viewport = mockEditor.getViewportPageBounds();
+  const background = [...mockEditor.getCurrentPageShapeIds()].map(id => mockEditor.getShape(id)).find(shape => shape.type === 'image');
+  const bounds = mockEditor.getShapePageBounds(background);
+  expect(Math.min(viewport.maxX, bounds.maxX) - Math.max(viewport.minX, bounds.minX)).toBeGreaterThan(0);
+  expect(Math.min(viewport.maxY, bounds.maxY) - Math.max(viewport.minY, bounds.minY)).toBeGreaterThan(0);
+  const center = mockEditor.pageToScreen({
+    x: -camera.xOffset + 1440 * camera.widthRatio / 200,
+    y: -camera.yOffset + 1080 * camera.heightRatio / 200,
+  });
+  expect(center.x).toBeCloseTo(300);
+  expect(center.y).toBeCloseTo(165);
+  await render(2000, source);
+  expect(mockEditor.getCamera()).toEqual(initial);
+  await render(1000, source);
+  const afterSeek = mockEditor.pageToScreen({
+    x: -camera.xOffset + 1440 * camera.widthRatio / 200,
+    y: -camera.yOffset + 1080 * camera.heightRatio / 200,
+  });
+  expect(afterSeek.x).toBeCloseTo(300);
+  expect(afterSeek.y).toBeCloseTo(165);
 });
 
 test('image descendants cannot capture pointer events despite the bundled Tldraw styles', async () => {
