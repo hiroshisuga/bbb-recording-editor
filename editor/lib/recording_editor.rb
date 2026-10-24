@@ -527,7 +527,7 @@ module RecordingEditor
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
         assets: media, slides: slides, events: events, warnings: warnings.uniq,
         published_url: published ? "/playback/presentation/2.3/#{id}" : nil,
-        preview_key: Digest::SHA256.hexdigest(['preview-clock-v2', revision, *media.filter_map { |a| a['relative'] && File.stat(repo.raw_file(id, a['relative'])).then { |s| "#{a['relative']}:#{s.size}:#{s.mtime.to_f}" } }].join('|'))[0, 24] }
+        preview_key: Digest::SHA256.hexdigest(['preview-clock-v3', revision, *media.filter_map { |a| a['relative'] && File.stat(repo.raw_file(id, a['relative'])).then { |s| "#{a['relative']}:#{s.size}:#{s.mtime.to_f}" } }].join('|'))[0, 24] }
     end
 
     def edited_xml(record_ranges, replacements = {})
@@ -565,6 +565,11 @@ module RecordingEditor
   end
 
   class Media
+    # Initialize the resampler even when input/output rates match. Otherwise
+    # the first soft timestamp correction can reinitialize it mid-stream,
+    # resetting first_pts and inserting silence equal to the elapsed time.
+    CLOCK_RESAMPLE = 'aresample=async=1000:first_pts=0:flags=res'.freeze
+
     attr_reader :rec
     def initialize(rec)
       @rec = rec
@@ -601,7 +606,7 @@ module RecordingEditor
           # adelay can emit NOPTS for leading silence while atempo buffers
           # input. Rebuild PTS from samples AFTER all silence/delay has been
           # materialized, preserving source gaps and the event-clock offset.
-          filter << "[#{i}:a:0]aresample=48000:async=1000:first_pts=0#{tempo},atrim=duration=#{seconds},apad=whole_dur=#{seconds},adelay=#{asset['start_ms']}:all=1,asetpts=N/SR/TB[a#{i}]"
+          filter << "[#{i}:a:0]#{CLOCK_RESAMPLE}:osr=48000#{tempo},atrim=duration=#{seconds},apad=whole_dur=#{seconds},adelay=#{asset['start_ms']}:all=1,asetpts=N/SR/TB[a#{i}]"
         end
         labels = batch.each_index.map { |i| "[a#{i}]" }.join
         # Bound trailing padding as well as output duration: unlimited apad
@@ -731,7 +736,7 @@ module RecordingEditor
           "gte(t,#{a})*lt(t,#{b})*max(0,min(1,min((t-#{a})/0.005,(#{b}-t)/0.005)))"
         end.join('+')
         envelope = '0' if envelope.empty?
-        filter = "aresample=async=1000:first_pts=0,aeval=exprs='if(#{expression(mask)},0.12*sin(2*PI*1000*t)*(#{envelope}),val(ch))':c=same"
+        filter = "#{CLOCK_RESAMPLE},aeval=exprs='if(#{expression(mask)},0.12*sin(2*PI*1000*t)*(#{envelope}),val(ch))':c=same"
         command = [rec.repo.ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', backup, '-filter_complex', "[0:a:0]#{filter}[censored]",
                    '-map', '0:v?', '-map', '[censored]', '-c:v', 'copy', '-c:a', codec]
         command += ['-ar', asset['sample_rate'].to_s] if asset['sample_rate']
