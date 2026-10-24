@@ -52,6 +52,38 @@ class RecordingEditorTest < Minitest::Test
     Math.sqrt(values.sum { |v| v * v } / values.size)
   end
 
+  def timestamp_gap_source
+    path = File.join(@raw, 'audio', 'microphone.webm')
+    # A late 20ms PTS gap starts soft compensation at matching 48kHz rates.
+    # Distinct later tones expose both inserted silence and delayed audio.
+    signal = "aevalsrc='0.1*sin(2*PI*if(lt(t,4),440,if(lt(t,8),880,1320))*t)':s=48000:d=12"
+    RecordingEditor.run('ffmpeg', '-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', signal,
+      '-af', 'asetnsamples=n=960:p=0,asetpts=PTS+if(gte(T\,4)\,960\,0)', '-ac', '2', '-c:a', 'libopus', path)
+    pts = RecordingEditor.run('ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_packets',
+      '-show_entries', 'packet=pts_time', '-of', 'csv=p=0', path).lines.filter_map { |line| Float(line.strip.split(',').first, exception: false) }
+    assert pts.each_cons(2).any? { |a, b| (b - a - 0.04).abs < 0.001 }, 'fixture must retain the 20ms gap'
+    File.write(File.join(@raw, 'events.xml'), <<~XML)
+      <recording>
+        <event timestamp="#{@origin}" eventname="ParticipantJoinEvent"><userId>moderator</userId></event>
+        <event timestamp="#{@origin + 500}" module="bbb-webrtc-sfu" eventname="AudioTrackPublishedEvent"><filename>/server/audio/microphone.webm</filename></event>
+        <event timestamp="#{@origin + 500}" eventname="RecordStatusEvent"><status>true</status></event>
+        <event timestamp="#{@origin + 12_520}" module="bbb-webrtc-sfu" eventname="AudioTrackUnpublishedEvent"><filename>/server/audio/microphone.webm</filename></event>
+        <event timestamp="#{@origin + 12_520}" eventname="RecordStatusEvent"><status>false</status></event>
+        <event timestamp="#{@origin + 14_000}" eventname="EndAndKickAllEvent"/>
+      </recording>
+    XML
+    path
+  end
+
+  def assert_tone_at(path, position, frequency)
+    values = samples(path, position)
+    assert_operator rms(values), :>, 0.03, "missing audio at #{position}s"
+    crossings = values.each_cons(2).count { |a, b| a <= 0 && b > 0 }
+    # Soft clock correction may briefly alter pitch by a few percent.
+    assert_in_delta frequency, crossings * 16_000.0 / values.size, frequency * 0.05,
+                    "wrong tone at #{position}s"
+  end
+
   def test_xml_only_keeps_non_mark_events_and_uses_both_clocks
     rec = @repo.recording(@id)
     assert_equal 6000, rec.duration
@@ -183,6 +215,68 @@ class RecordingEditorTest < Minitest::Test
     assert_in_delta 6, @repo.probe(file).dig('format', 'duration').to_f, 0.05
     assert_operator rms(samples(file, 0.2)), :>, 0.04
     assert_equal result, RecordingEditor::Media.new(rec).preview(key)
+  end
+
+  def test_preview_with_late_timestamp_gap_preserves_clock
+    source = timestamp_gap_source
+    original = Digest::SHA256.file(source).hexdigest
+    xml_before = File.binread(File.join(@raw, 'events.xml'))
+    rec = @repo.recording(@id)
+    key = rec.to_h[:preview_key]
+    result = RecordingEditor::Media.new(rec).preview(key)
+    file = File.join(@repo.state_dir(@id), 'preview', key, 'audio.webm')
+    assert_in_delta 14, @repo.probe(file).dig('format', 'duration').to_f, 0.05
+    assert_operator rms(samples(file, 0.1)), :<, 0.003
+    assert_tone_at(file, 2, 440)
+    assert_tone_at(file, 5, 880)
+    assert_tone_at(file, 9, 1320)
+    assert_tone_at(file, 12, 1320)
+    assert_operator rms(samples(file, 13.5)), :<, 0.003
+    assert_equal 2048, result[:peaks].size
+    assert_operator result[:peaks][(9.0 / 14 * 2048).to_i], :>, 0.03
+    assert_equal original, Digest::SHA256.file(source).hexdigest
+    assert_equal xml_before, File.binread(File.join(@raw, 'events.xml'))
+  end
+
+  def test_preview_does_not_reuse_the_old_clock_cache
+    # No media files are needed to check the v2-to-v3 cache migration.
+    rec = @repo.recording(@id)
+    old_key = Digest::SHA256.hexdigest(['preview-clock-v2', rec.revision].join('|'))[0, 24]
+    old_dir = File.join(@repo.state_dir(@id), 'preview', old_key)
+    FileUtils.mkdir_p(old_dir)
+    File.write(File.join(old_dir, 'audio.webm'), 'old broken preview')
+    File.write(File.join(old_dir, 'peaks.json'), '[0]')
+    key = rec.to_h[:preview_key]
+    refute_equal old_key, key
+    result = RecordingEditor::Media.new(rec).preview(key)
+    file = File.join(@repo.state_dir(@id), 'preview', key, 'audio.webm')
+    assert_in_delta 6, @repo.probe(file).dig('format', 'duration').to_f, 0.05
+    assert_equal 2048, result[:peaks].size
+    assert_equal 'old broken preview', File.read(File.join(old_dir, 'audio.webm'))
+    assert_equal @events, File.read(File.join(@raw, 'events.xml'))
+  end
+
+  def test_beep_save_with_late_timestamp_gap_preserves_duration_and_later_audio
+    source = timestamp_gap_source
+    original = Digest::SHA256.file(source).hexdigest
+    rec = @repo.recording(@id)
+    data = { 'revision' => rec.revision, 'record_ranges' => rec.record_ranges,
+             'beep_ranges' => [{ 'start_ms' => 6500, 'end_ms' => 7500 }] }
+    result = RecordingEditor::Editor.new(@repo).save(@id, data)
+    file = File.join(@raw, result['outputs'].first[:relative])
+    assert_in_delta @repo.probe(source).dig('format', 'duration').to_f,
+                    @repo.probe(file).dig('format', 'duration').to_f, 0.05
+    # Non-monotonic PTS can hide extra silence from format duration and seeks.
+    # Check the actual decoded sample count during continuous playback too.
+    decoded = RecordingEditor.run('ffmpeg', '-nostdin', '-v', 'error', '-i', file,
+      '-ac', '1', '-ar', '8000', '-f', 'f32le', '-')
+    assert_in_delta @repo.probe(source).dig('format', 'duration').to_f, decoded.bytesize / 32_000.0, 0.05
+    assert_tone_at(file, 2, 440)
+    assert_tone_at(file, 4.5, 880)
+    assert_tone_at(file, 6.25, 1000)
+    assert_tone_at(file, 8.5, 1320)
+    assert_tone_at(file, 11.5, 1320)
+    assert_equal original, Digest::SHA256.file(source).hexdigest
   end
 
   def test_reopening_restores_beeps_and_resaving_uses_original_sources
