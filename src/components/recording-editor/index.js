@@ -76,6 +76,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const { t } = useEditorI18n();
   const ref = useRef(null);
   const scrollRef = useRef(null);
+  const shiftSelection = useRef(false);
   const duration = recording.duration_ms || 1;
   const presentations = useMemo(() => presentationRanges(recording.events, duration), [recording.events, duration]);
   const follow = useTimelineFollow(scrollRef, ref, { time, duration, playing, zoom, recordingId: recording.id });
@@ -84,13 +85,35 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     const bounds = ref.current.getBoundingClientRect();
     return Math.round(Math.max(0, Math.min(duration, (e.clientX - bounds.left) / bounds.width * duration)));
   };
+  const selectFromPlayhead = e => {
+    shiftSelection.current = e.button === 0 && e.shiftKey;
+    if (!shiftSelection.current) return;
+    e.preventDefault(); e.stopPropagation();
+    const anchor = Math.round(time);
+    const end = position(e);
+    setSelection({ start_ms: Math.min(anchor, end), end_ms: Math.max(anchor, end) });
+  };
+  const suppressShiftClick = e => {
+    if (!shiftSelection.current) return;
+    shiftSelection.current = false;
+    if (e.detail === 0) return; // Keep keyboard activation of timeline buttons.
+    e.preventDefault(); e.stopPropagation();
+  };
   const select = e => {
     if (e.button !== 0) return;
     const start = position(e);
+    const startX = e.clientX;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
-    setSelection({ start_ms: start, end_ms: start });
-    const move = next => { const end = position(next); setSelection({ start_ms: Math.min(start, end), end_ms: Math.max(start, end) }); };
+    // Clicks only seek so Set start/end here survive navigation. A real drag
+    // replaces the selection; tolerate a few pixels of ordinary click jitter.
+    let dragged = false;
+    const move = next => {
+      if (!dragged && Math.abs(next.clientX - startX) < 4) return;
+      dragged = true;
+      const end = position(next);
+      setSelection({ start_ms: Math.min(start, end), end_ms: Math.max(start, end) });
+    };
     const up = next => { move(next); seek(position(next)); target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); };
     e.currentTarget.addEventListener('pointermove', move);
     e.currentTarget.addEventListener('pointerup', up, { once: true });
@@ -118,7 +141,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       <button className="re-handle right" aria-label={t('dragEnd', { label, number: i + 1 })} onPointerDown={e => handle(e, kind, i, 'end_ms')} />
     </div>)}
   </div>;
-  return <><div className="re-timeline-scroll" ref={scrollRef} {...follow}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDown={select}>
+  return <><div className="re-timeline-scroll" ref={scrollRef} {...follow}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDownCapture={selectFromPlayhead} onClickCapture={suppressShiftClick} onPointerCancelCapture={() => { shiftSelection.current = false; }} onPointerDown={select}>
     <div className="re-ruler">{Array.from({ length: 11 }, (_, i) => <span key={i} style={{ left: `${i * 10}%` }}>{formatTime(duration * i / 10).slice(0, 8)}</span>)}</div>
     <div className="re-wave"><span className="re-track-label">{t('meetingAudio')}</span><svg viewBox="0 0 2048 64" preserveAspectRatio="none" aria-label={t('waveform')}>
       {(peaks || []).map((p, i) => <line key={i} x1={i} x2={i} y1={32 - Math.min(1, p) * 30} y2={32 + Math.min(1, p) * 30} />)}
