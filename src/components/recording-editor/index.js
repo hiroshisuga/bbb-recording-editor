@@ -102,10 +102,18 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const select = e => {
     if (e.button !== 0) return;
     const start = position(e);
+    const startX = e.clientX;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
-    setSelection({ start_ms: start, end_ms: start });
-    const move = next => { const end = position(next); setSelection({ start_ms: Math.min(start, end), end_ms: Math.max(start, end) }); };
+    // Clicks only seek so Set start/end here survive navigation. A real drag
+    // replaces the selection; tolerate a few pixels of ordinary click jitter.
+    let dragged = false;
+    const move = next => {
+      if (!dragged && Math.abs(next.clientX - startX) < 4) return;
+      dragged = true;
+      const end = position(next);
+      setSelection({ start_ms: Math.min(start, end), end_ms: Math.max(start, end) });
+    };
     const up = next => { move(next); seek(position(next)); target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); };
     e.currentTarget.addEventListener('pointermove', move);
     e.currentTarget.addEventListener('pointerup', up, { once: true });

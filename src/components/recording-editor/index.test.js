@@ -194,6 +194,56 @@ test('shift-clicking the playhead leaves an empty selection', async () => {
   expect(audio.currentTime).toBe(15);
 });
 
+test.each([
+  ['開始を現在位置に', 200, '終了を現在位置に', 300],
+  ['終了を現在位置に', 300, '開始を現在位置に', 200],
+])('timeline clicks preserve the boundary set by %s until the other boundary is set', async (first, firstX, second, secondX) => {
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  timeline.setPointerCapture = jest.fn();
+  const wave = container.querySelector('.re-wave');
+  const audio = container.querySelector('audio');
+  await timelineClick(wave, firstX, { shiftKey: false });
+  expect(audio.currentTime).toBe((firstX - 100) / 10);
+  await click(first);
+  const boundary = [...container.querySelectorAll('.re-selection input')].map(input => input.value);
+  await timelineClick(wave, secondX, { shiftKey: false });
+  expect(audio.currentTime).toBe((secondX - 100) / 10);
+  expect([...container.querySelectorAll('.re-selection input')].map(input => input.value)).toEqual(boundary);
+  await click(second);
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:20.000');
+  expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  await click('録画から除外');
+  expect(container.querySelector('[aria-label="録画に残す区間1 終了"]').value).toBe('00:00:10.000');
+  expect(container.querySelector('[aria-label="録画に残す区間2 開始"]').value).toBe('00:00:20.000');
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('ordinary clicks preserve an existing selection while dragging replaces it', async () => {
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  timeline.setPointerCapture = jest.fn();
+  await time('選択開始', '00:00:10.000');
+  await time('選択終了', '00:00:20.000');
+  await timelineClick(container.querySelector('.re-wave'), 400, { shiftKey: false });
+  expect(container.querySelector('audio').currentTime).toBe(30);
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:20.000');
+  await act(async () => {
+    [['pointerdown', 400], ['pointermove', 200], ['pointerup', 200]].forEach(([type, clientX]) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX });
+      Object.assign(event, { pointerId: 2 });
+      timeline.dispatchEvent(event);
+    });
+  });
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:30.000');
+  expect(container.querySelector('audio').currentTime).toBe(10);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+});
+
 test('editing, undo/redo and draft send meeting-time ranges with revision', async () => {
   await time('選択開始', '00:00:06.500');
   await time('選択終了', '00:00:09.500');
