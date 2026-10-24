@@ -33,7 +33,7 @@
   "undo": "↶ Undo",
   "redo": "↷ Redo",
   "zoom": "Zoom",
-  "dragHint": "Drag the waveform to select an interval. Drag its edges to adjust it.",
+  "dragHint": "Drag the waveform to select an interval. Shift-click to select from the playhead. Drag its edges to adjust it.",
   "selection": "Selection",
   "selectionStart": "Selection start",
   "selectionEnd": "Selection end",

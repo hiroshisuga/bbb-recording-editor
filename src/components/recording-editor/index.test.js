@@ -41,6 +41,16 @@ async function language(value) {
 async function volume(value) {
   await act(async () => Simulate.change(container.querySelector('.re-volume input'), { target: { value: String(value) } }));
 }
+async function timelineClick(target, clientX, { shiftKey = true, clickShiftKey = shiftKey, button = 0 } = {}) {
+  await act(async () => {
+    ['pointerdown', 'pointerup', 'click'].forEach(type => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, button,
+        detail: 1, shiftKey: type === 'click' ? clickShiftKey : shiftKey });
+      Object.assign(event, { pointerId: 1 });
+      target.dispatchEvent(event);
+    });
+  });
+}
 
 beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -106,6 +116,82 @@ test('opening and reopening begin unselected and allow entering the start time f
   expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
   expect(button('ピー音を追加').disabled).toBe(true);
   expect(button('rawデータへ保存…').disabled).toBe(true);
+});
+
+test('shift-click selects from the playhead to the beginning before excluding the selection', async () => {
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  const audio = container.querySelector('audio');
+  audio.currentTime = 15;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  await timelineClick(container.querySelector('.re-wave'), 100);
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:00.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:15.000');
+  expect(audio.currentTime).toBe(15);
+  expect(button('↶ 元に戻す').disabled).toBe(true);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  await click('録画から除外');
+  expect(container.querySelector('[aria-label="録画に残す区間1 開始"]').value).toBe('00:00:15.000');
+  expect(button('↶ 元に戻す').disabled).toBe(false);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('shift-click on a ribbon selects forward while playback continues without seeking', async () => {
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  const audio = container.querySelector('audio');
+  Object.defineProperties(audio, { paused: { value: false }, ended: { value: false } });
+  audio.currentTime = 20.123;
+  await act(async () => audio.dispatchEvent(new Event('play')));
+  HTMLMediaElement.prototype.pause.mockClear();
+  // Releasing Shift before the click must not activate the ribbon's own click.
+  await timelineClick(container.querySelector('.re-bar span'), 555, { clickShiftKey: false });
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:20.123');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:45.500');
+  expect(audio.currentTime).toBe(20.123);
+  expect(audio.paused).toBe(false);
+  expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
+  expect(button('↶ 元に戻す').disabled).toBe(true);
+  // Normal ribbon clicks still select that entire existing interval.
+  await timelineClick(container.querySelector('.re-bar'), 200, { shiftKey: false });
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:01.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:59.000');
+});
+
+test('shift-click uses the zoomed and scrolled timeline coordinates before adding a keep interval', async () => {
+  const fetch = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, record_ranges: [], record_ranges_persisted: false }) }
+    : fetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: '4' } }));
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: -900, width: 2400 });
+  const audio = container.querySelector('audio');
+  audio.currentTime = 5;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  await timelineClick(container.querySelector('.re-wave'), 500);
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:05.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:35.000');
+  expect(audio.currentTime).toBe(5);
+  expect(container.querySelector('.re-bar')).toBeNull();
+  await click('録画に残す');
+  expect(container.querySelector('[aria-label="録画に残す区間1 開始"]').value).toBe('00:00:05.000');
+  expect(container.querySelector('[aria-label="録画に残す区間1 終了"]').value).toBe('00:00:35.000');
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('shift-clicking the playhead leaves an empty selection', async () => {
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  const audio = container.querySelector('audio');
+  audio.currentTime = 15;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  await timelineClick(timeline, 250);
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(button('録画に残す').disabled).toBe(true);
+  expect(button('録画から除外').disabled).toBe(true);
+  expect(audio.currentTime).toBe(15);
 });
 
 test('editing, undo/redo and draft send meeting-time ranges with revision', async () => {
