@@ -4,7 +4,7 @@ export const PREFERENCES_KEY = 'bbb-recording-editor.preferences';
 export const PLAYBACK_RATES = [0.5, 1, 1.5, 2];
 export const TIMELINE_ZOOMS = [1, 2, 4, 8, 16];
 export const DEFAULT_PREFERENCES = Object.freeze({
-  volume: 1, muted: false, lastVolume: 1, beepPreview: true, rate: 1, zoom: 1,
+  volume: 1, muted: false, lastVolume: 1, beepPreview: true, rate: 1, zoom: 1, detailWaveOpen: false, detailWaveSpan: 10000,
 });
 const validVolume = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 
@@ -20,6 +20,8 @@ export function readPreferences() {
       beepPreview: typeof saved.beepPreview === 'boolean' ? saved.beepPreview : true,
       rate: PLAYBACK_RATES.includes(saved.rate) ? saved.rate : 1,
       zoom: TIMELINE_ZOOMS.includes(saved.zoom) ? saved.zoom : 1,
+      detailWaveOpen: saved.detailWaveOpen === true,
+      detailWaveSpan: [5000, 10000, 30000].includes(saved.detailWaveSpan) ? saved.detailWaveSpan : 10000,
     };
   } catch {
     return { ...DEFAULT_PREFERENCES };

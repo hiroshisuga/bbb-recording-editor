@@ -75,6 +75,31 @@ class ServerTest < Minitest::Test
     end
   end
 
+  def test_detail_waveform_is_authenticated_bounded_and_independent_of_media_jobs
+    key = 'a' * 24
+    path = "recordings/#{@id}/preview/#{key}/waveform/407"
+    assert_equal '401', request(path, auth: false).code
+    assert_equal '405', request(path, method: Net::HTTP::Post, headers: { 'X-BBB-Editor' => '1' }).code
+    assert_equal '404', request(path).code
+    @repo.stub(:recording, ->(*) { flunk 'Detailed waveforms must not parse XML or probe every asset' }) do
+      @repo.detail_waveform.stub(:chunk, ->(id, preview_key, index) {
+        assert_equal [@id, key, 407], [id, preview_key, index]
+        { start_ms: 4070000, step_ms: 10, min: [-0.2], max: [0.4] }
+      }) do
+        @jobs.stub(:add, ->(*) { flunk 'Detailed waveforms must not queue behind saves or rebuilds' }) do
+          response = request(path)
+          assert_equal '200', response.code
+          assert_equal [-0.2], JSON.parse(response.body)['min']
+        end
+      end
+    end
+    @repo.detail_waveform.stub(:chunk, ->(*) { raise RecordingEditor::Error.new('busy', 429) }) do
+      assert_equal '429', request(path).code
+    end
+    assert_equal @xml, File.read(File.join(@raw, 'events.xml'))
+    assert_equal '0123456789', File.read(File.join(@raw, 'audio', 'test.wav'))
+  end
+
   def test_byte_ranges_and_head_for_browser_seeks
     response = request("recordings/#{@id}/raw/audio/test.wav", headers: { 'Range' => 'bytes=2-5' })
     assert_equal '206', response.code

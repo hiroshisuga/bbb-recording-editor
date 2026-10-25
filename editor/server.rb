@@ -162,6 +162,10 @@ module RecordingEditor
         require_method(req, 'GET', 'HEAD')
         res['Content-Disposition'] = 'attachment; filename="events.xml"'
         serve_file(req, res, @repo.raw_file(id, 'events.xml'))
+      when %r{\A/preview/([a-f0-9]{24})/waveform/(\d{1,6})\z}
+        require_method(req, 'GET')
+        key, index = Regexp.last_match(1), Regexp.last_match(2).to_i
+        json(res, @repo.detail_waveform.chunk(id, key, index))
       when %r{\A/preview/([a-f0-9]{24})/audio\.webm\z}
         require_method(req, 'GET', 'HEAD')
         key = Regexp.last_match(1)
