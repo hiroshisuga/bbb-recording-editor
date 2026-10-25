@@ -8,6 +8,7 @@ require 'open3'
 require 'securerandom'
 require 'time'
 require 'uri'
+require_relative 'detail_waveform'
 
 module RecordingEditor
   class Error < StandardError
@@ -72,7 +73,7 @@ module RecordingEditor
 
   class Repository
     REBUILD_HELPER = '/usr/local/sbin/bbb-recording-editor-rebuild'
-    attr_reader :raw_root, :state_root, :published_root, :unpublished_root, :process_root, :status_root, :prefix, :ffmpeg, :ffprobe
+    attr_reader :raw_root, :state_root, :published_root, :unpublished_root, :process_root, :status_root, :prefix, :ffmpeg, :ffprobe, :detail_waveform
     def initialize(raw_root:, state_root:, published_root: '/var/bigbluebutton/published/presentation',
                    unpublished_root: '/var/bigbluebutton/unpublished/presentation', process_root: nil, status_root: nil,
                    prefix: '/recording-editor', ffmpeg: 'ffmpeg', ffprobe: 'ffprobe')
@@ -85,6 +86,7 @@ module RecordingEditor
       @prefix = prefix.delete_suffix('/')
       @ffmpeg, @ffprobe = ffmpeg, ffprobe
       @probes = {}
+      @detail_waveform = DetailWaveform.new(self)
       @rebuild_mutex = Mutex.new
       FileUtils.mkdir_p(@state_root, mode: 0o700)
     end

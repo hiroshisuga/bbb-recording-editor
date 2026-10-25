@@ -143,5 +143,14 @@
   "rebuildInstallHint": "In the editor installation directory on the BBB server (default: /opt/bbb-recording-editor), run the command below and reload the browser. It installs the helper and permissions; it does not rebuild recordings.",
   "resetUnmarkedCompleted": "Original state restored to raw, but its XML has no valid recording intervals. The intervals to keep are empty. To rebuild, choose the intervals you want to keep and save them to raw, adding them to the XML.",
   "externalVideoAutoPlayWarning": "If the video does not start, press play in the video.",
-  "externalVideoError": "The external video could not be played (error: {code})."
+  "externalVideoError": "The external video could not be played (error: {code}).",
+  "detailWave": "Detailed waveform",
+  "showDetailWave": "Show detailed waveform",
+  "hideDetailWave": "Hide detailed waveform",
+  "detailSpan": "Visible duration",
+  "detailSeconds": "{seconds} seconds",
+  "detailHint": "Click to seek · Drag to select · Shift-click to select from the playhead",
+  "detailLoading": "Loading this section…",
+  "detailError": "Could not load the detailed waveform.",
+  "detailRetry": "Retry"
 }

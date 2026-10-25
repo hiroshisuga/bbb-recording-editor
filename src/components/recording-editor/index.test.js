@@ -494,7 +494,7 @@ test('language, volume, mute, beep preview, speed and zoom survive reopening the
   expect(audio.muted).toBe(true);
   expect(audio.playbackRate).toBe(1.5);
   expect(audio.paused).toBe(true);
-  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8 });
+  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: false, detailWaveSpan: 10000 });
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
@@ -759,4 +759,41 @@ test('polling a completed rebuild updates the message and unlocks raw saving', a
     await click('ピー音を追加');
     expect(button('rawデータへ保存…').disabled).toBe(false);
   } finally { jest.useRealTimers(); }
+});
+
+test('detailed waveform is opt-in, shares selection with beep editing, and saves its display preferences', async () => {
+  const previous = global.fetch.getMockImplementation();
+  const detailedUrl = `/recording-editor/api/recordings/${id}/preview/${'a'.repeat(24)}/audio.webm`;
+  global.fetch.mockImplementation(async (url, options) => {
+    if (url.endsWith('/preview')) return { ok: true, json: async () => ({ status: 'done', result: { audio_url: detailedUrl, peaks: [] } }) };
+    if (url.includes('/waveform/')) return { ok: true, json: async () => ({ start_ms: Number(url.split('/').pop()) * 10000,
+      step_ms: 10, min: [-0.2], max: [0.4] }) };
+    return previous(url, options);
+  });
+  try {
+    await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+    await act(async () => new Promise(resolve => setTimeout(resolve, 180)));
+    expect(global.fetch.mock.calls.some(([url]) => url.includes('/waveform/'))).toBe(false);
+    await click('詳細波形を表示');
+    await act(async () => new Promise(resolve => setTimeout(resolve, 180)));
+    expect(global.fetch.mock.calls.filter(([url]) => url.includes('/waveform/'))).toHaveLength(1);
+    const plot = container.querySelector('.re-detail-plot');
+    plot.getBoundingClientRect = () => ({ left: 0, width: 500 });
+    plot.setPointerCapture = jest.fn();
+    await act(async () => {
+      Simulate.pointerDown(plot, { button: 0, clientX: 50, pointerId: 1 });
+      Simulate.pointerMove(plot, { clientX: 100, pointerId: 1 });
+      Simulate.pointerUp(plot, { clientX: 100, pointerId: 1 });
+    });
+    expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:01.000');
+    expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:02.000');
+    expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
+    await click('ピー音を追加');
+    expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:01.000');
+    expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+    await act(async () => Simulate.change(container.querySelector('.re-detail-tools select'), { target: { value: '5000' } }));
+    expect(readPreferences()).toEqual(expect.objectContaining({ detailWaveOpen: true, detailWaveSpan: 5000 }));
+    await click('詳細波形を閉じる');
+    expect(container.querySelector('.re-detail-wave')).toBeNull();
+  } finally { global.fetch.mockImplementation(previous); }
 });
