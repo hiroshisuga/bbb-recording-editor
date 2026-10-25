@@ -156,13 +156,14 @@ test.each(['pointer', 'scrollbar', 'keyboard', 'shift-wheel'])('%s navigation su
   expect(scroller.scrollTo).toHaveBeenCalledTimes(1);
 });
 
-test('pause stops an animation and zoom changes recompute the visible position', async () => {
+test('pause stops an animation and zoom changes center the playhead before playback follows', async () => {
   await render({ playing: true, time: 9000 });
   await scroll(300);
   await render({ playing: false });
   expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 300, behavior: 'auto' });
   await render({ playing: true, zoom: 8, time: 15000 });
-  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 2900, behavior: 'smooth' });
+  expect(scroller.scrollLeft).toBe(2500);
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 300, behavior: 'auto' });
 });
 
 test('restarting playback while a range is being dragged does not move the viewport until release', async () => {
@@ -197,4 +198,61 @@ test('without scrollTo the fallback still moves only the scroll position', async
   await render({ playing: true, time: 9000 });
   expect(scroller.scrollLeft).toBe(800);
   expect(options.time).toBe(9000);
+});
+
+
+test('zooming in and out while paused keeps the playhead centered without moving playback', async () => {
+  await render({ zoom: 1, time: 20000 });
+  expect(scroller.scrollLeft).toBe(0);
+  await render({ zoom: 4 });
+  expect(scroller.scrollLeft).toBe(1500);
+  await render({ zoom: 8 });
+  expect(scroller.scrollLeft).toBe(3500);
+  await render({ zoom: 2 });
+  expect(scroller.scrollLeft).toBe(500);
+  await render({ zoom: 1 });
+  expect(scroller.scrollLeft).toBe(0);
+  expect(options.time).toBe(20000);
+  expect(scroller.scrollTo).not.toHaveBeenCalled();
+});
+
+test.each([[100, 0], [39900, 15000], [40000, 15000]])('zoom clamps to the scrollable bounds near %sms', async (time, left) => {
+  await render({ zoom: 1, time });
+  await render({ zoom: 16 });
+  expect(scroller.scrollLeft).toBe(left);
+});
+
+test('centering after a zoom is not treated as manual scrolling and playback still pages at 90%', async () => {
+  await render({ zoom: 1, time: 20000, playing: true });
+  await render({ zoom: 4 });
+  expect(scroller.scrollLeft).toBe(1500);
+  await scroll(1500);
+  await render({ time: 23900 });
+  expect(scroller.scrollTo).not.toHaveBeenCalled();
+  await render({ time: 24000 });
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 2300, behavior: 'smooth' });
+});
+
+test('zoom centers even after manual navigation suspended playback following', async () => {
+  await render({ playing: true, time: 20000 });
+  await scroll(1900);
+  await act(async () => Simulate.wheel(scroller, { deltaX: 100, deltaY: 0 }));
+  await render({ zoom: 8 });
+  expect(scroller.scrollLeft).toBe(3500);
+  const calls = scroller.scrollTo.mock.calls.length;
+  await scroll(3500);
+  await render({ time: 30000 });
+  expect(scroller.scrollTo).toHaveBeenCalledTimes(calls);
+});
+
+test('zoom interrupts a paging animation and immediately centers using the new width', async () => {
+  await render({ playing: true, time: 9000 });
+  await scroll(300);
+  await render({ zoom: 8 });
+  expect(scroller.scrollLeft).toBe(1300);
+  expect(scroller.scrollTo).toHaveBeenLastCalledWith({ left: 300, behavior: 'auto' });
+  const calls = scroller.scrollTo.mock.calls.length;
+  await scroll(1300);
+  await render({ time: 9500 });
+  expect(scroller.scrollTo).toHaveBeenCalledTimes(calls);
 });

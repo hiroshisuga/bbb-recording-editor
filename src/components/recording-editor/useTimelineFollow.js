@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 // Follow playback in pages, leaving a 20% overlap with the previous view.
 export default function useTimelineFollow(scrollRef, timelineRef, { time, duration, playing, zoom, recordingId }) {
@@ -6,6 +6,7 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
   const pointerDown = useRef(null);
   const target = useRef(null);
   const lastScrollLeft = useRef(0);
+  const previousView = useRef({ zoom, recordingId });
   const stopScrolling = useCallback(() => {
     const element = scrollRef.current;
     if (element && target.current !== null) {
@@ -24,7 +25,25 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
     stopScrolling();
     suspended.current = false;
   }, [playing, recordingId, stopScrolling]);
-  useEffect(() => { stopScrolling(); }, [zoom, stopScrolling]);
+  // Read the resized timeline after React updates its width, before paint.
+  // Zooming is navigation even while paused or follow is manually suspended.
+  // Ordinary playback ticks and seeks must not repeatedly recenter the view.
+  useLayoutEffect(() => {
+    const previous = previousView.current;
+    previousView.current = { zoom, recordingId };
+    if (previous.zoom === zoom || previous.recordingId !== recordingId) return;
+    stopScrolling();
+    const element = scrollRef.current;
+    const timeline = timelineRef.current;
+    if (!element || !timeline || duration <= 0 || element.clientWidth <= 0) return;
+    const point = Math.max(0, Math.min(duration, time)) / duration * timeline.offsetWidth;
+    const max = Math.max(0, element.scrollWidth - element.clientWidth);
+    const next = Math.max(0, Math.min(max, point - element.clientWidth / 2));
+    // An immediate assignment also gives the paging effect the final position.
+    // Record it so the resulting scroll event is not mistaken for user input.
+    element.scrollLeft = next;
+    lastScrollLeft.current = next;
+  }, [zoom, recordingId, time, duration, scrollRef, timelineRef, stopScrolling]);
   useEffect(() => {
     const matches = event => pointerDown.current && (event.pointerId === undefined
       || pointerDown.current.id === undefined || event.pointerId === pointerDown.current.id);

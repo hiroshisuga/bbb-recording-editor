@@ -797,3 +797,28 @@ test('detailed waveform is opt-in, shares selection with beep editing, and saves
     expect(container.querySelector('.re-detail-wave')).toBeNull();
   } finally { global.fetch.mockImplementation(previous); }
 });
+
+test('changing timeline zoom centers the paused playhead and preserves playback and selection', async () => {
+  await selectRange();
+  const timeline = container.querySelector('.re-timeline');
+  const scroller = container.querySelector('.re-timeline-scroll');
+  Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 1000 });
+  Object.defineProperty(timeline, 'offsetWidth', { configurable: true, get: () => parseFloat(timeline.style.width) * 10 });
+  Object.defineProperty(scroller, 'scrollWidth', { configurable: true, get: () => timeline.offsetWidth });
+  const audio = container.querySelector('audio');
+  audio.currentTime = 30;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  expect(audio.paused).toBe(true);
+  expect(scroller.scrollLeft).toBe(0);
+  const before = calls.length;
+  for (const [zoom, left] of [[4, 1500], [8, 3500], [2, 500], [1, 0]]) {
+    await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: String(zoom) } }));
+    expect(scroller.scrollLeft).toBe(left);
+    expect(audio.currentTime).toBe(30);
+    expect(audio.paused).toBe(true);
+    expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:01.000');
+    expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:03.000');
+  }
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  expect(calls).toHaveLength(before);
+});
