@@ -4,7 +4,7 @@ import { act, Simulate } from 'react-dom/test-utils';
 import VideoPreview from './VideoPreview';
 import { EditorLanguageProvider, LANGUAGE_KEY } from './i18n';
 
-let container, root, props;
+let container, root, props, clock;
 const states = new WeakMap();
 const state = video => {
   if (!states.has(video)) states.set(video, { time: 0, ready: 0, seeking: false, paused: true, duration: 30, writes: [] });
@@ -25,6 +25,8 @@ async function event(name, values = {}) {
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.setItem(LANGUAGE_KEY, 'en');
+  clock = 0;
+  jest.spyOn(performance, 'now').mockImplementation(() => clock);
   for (const [name, key] of Object.entries({ currentTime: 'time', readyState: 'ready', seeking: 'seeking', paused: 'paused', duration: 'duration' })) {
     jest.spyOn(HTMLMediaElement.prototype, name, 'get').mockImplementation(function get() { return state(this)[key]; });
   }
@@ -67,16 +69,19 @@ test.each(['deskshare', 'video'])('nonzero raw container timestamps are included
   expect(state(video()).paused).toBe(true);
 });
 
-test('a slow pending seek is not restarted by every audio tick and seeked applies the latest target', async () => {
+test('a slow seek can finish and render before following the moving audio clock', async () => {
   await render({ time: 3000, playing: true });
   await event('loadedmetadata', { ready: 1 });
   expect(state(video()).writes).toEqual([2]);
   await render({ time: 3100 }); await render({ time: 3500 }); await render({ time: 6000 });
   expect(state(video()).writes).toEqual([2]);
   await event('seeked', { ready: 4, seeking: false });
-  expect(state(video()).writes).toEqual([2, 5]);
+  expect(state(video()).writes).toEqual([2]);
+  clock = 1000;
+  await render({ time: 6100 });
+  expect(state(video()).writes).toEqual([2, 5.1]);
   await event('seeked', { seeking: false });
-  expect(state(video()).writes).toEqual([2, 5]);
+  expect(state(video()).writes).toEqual([2, 5.1]);
 });
 
 test('normal playback advances without repeated play calls or seeks, and rate changes do not restart playback', async () => {
@@ -207,4 +212,104 @@ test('rejections from a cancelled raw-media load cannot override a new play requ
   expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
   await act(async () => resolveNew());
+});
+
+
+test('buffer starvation never starts automatic seeks, even as the audio clock keeps advancing', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 1 });
+  for (const ready of [1, 2]) {
+    clock += 5000;
+    await event('waiting', { ready });
+    await render({ time: clock + 1000 });
+  }
+  expect(state(video()).writes).toEqual([]);
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+  // A stale waiting flag also prevents correction until playback becomes ready.
+  await render({ time: 12000 }); state(video()).ready = 4;
+  await render({ time: 12100 });
+  expect(state(video()).writes).toEqual([]);
+  await event('canplay');
+  expect(state(video()).writes).toEqual([11.1]);
+  expect(state(video()).paused).toBe(false);
+});
+
+test('small drift adjusts only the video rate, returns to the requested rate, and respects its direction', async () => {
+  await render({ playing: true, rate: 2 }); await event('loadedmetadata', { ready: 4 });
+  clock = 1000;
+  await render({ time: 1400 });
+  expect(video().playbackRate).toBeCloseTo(2.1);
+  await event('waiting');
+  expect(video().playbackRate).toBe(2);
+  state(video()).time = 0.8; await event('canplay');
+  expect(video().playbackRate).toBeCloseTo(1.9);
+  state(video()).time = 0.4; await render({ time: 1450 });
+  expect(video().playbackRate).toBe(2);
+  expect(state(video()).writes).toEqual([]);
+});
+
+test('automatic seeks wait three seconds after a slow seek completes; explicit seeks bypass the cooldown', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 4 });
+  clock = 1000; await render({ time: 3000 });
+  expect(state(video()).writes).toEqual([2]);
+  clock = 10000; await render({ time: 12000 });
+  await event('seeked', { seeking: false });
+  expect(state(video()).writes).toEqual([2]);
+  clock = 12999; await render({ time: 15000 });
+  expect(state(video()).writes).toEqual([2]);
+  clock = 13000; await render({ time: 15100 });
+  expect(state(video()).writes).toEqual([2, 14.1]);
+  await event('seeked', { seeking: false });
+  await render({ time: 6000, seekVersion: 1 });
+  expect(state(video()).writes).toEqual([2, 14.1, 5]);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+});
+
+async function correctAt(at) {
+  clock = at;
+  state(video()).time = (at - 2000) / 1000;
+  await render({ time: at + 1000 });
+  await event('seeked', { seeking: false, ready: 4 });
+}
+
+test('four automatic screen corrections within 30 seconds show a dismissible warning once per source', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 4 });
+  for (const at of [4000, 8000, 12000]) await correctAt(at);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  await correctAt(16000);
+  expect(container.querySelector('[role="status"]').textContent).toContain('Audio playback continues');
+  expect(state(video()).paused).toBe(false);
+  await act(async () => Simulate.click(container.querySelector('button')));
+  await correctAt(20000);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  await render({ clip: { ...clip, url: '/raw/deskshare/two.webm' } });
+  expect(container.querySelector('[role="status"]')).toBeNull();
+});
+
+test('manual seeks and paused positioning never count as automatic corrections', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 4 });
+  for (let i = 1; i <= 10; i++) {
+    clock = i * 4000;
+    await render({ time: i * 2000, seekVersion: i, playing: i % 2 === 0 });
+    await event('seeked', { seeking: false });
+  }
+  expect(state(video()).writes.length).toBeGreaterThan(4);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+});
+
+test('old corrections expire and a user seek starts a fresh observation window', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 4, duration: 100 });
+  for (const at of [4000, 8000, 12000]) await correctAt(at);
+  await correctAt(48000);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  await render({ time: 1000, seekVersion: 1 }); await event('seeked', { seeking: false });
+  for (const at of [52000, 56000, 60000]) await correctAt(at);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+});
+
+test('camera corrections use the same limits without showing a screen-sharing warning', async () => {
+  await render({ clip: { ...clip, kind: 'video' }, playing: true });
+  await event('loadedmetadata', { ready: 4 });
+  for (const at of [4000, 8000, 12000, 16000]) await correctAt(at);
+  expect(state(video()).writes).toHaveLength(4);
+  expect(container.querySelector('[role="status"]')).toBeNull();
 });

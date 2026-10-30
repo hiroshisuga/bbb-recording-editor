@@ -2,6 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { useEditorI18n } from './i18n';
 
+const SEEK_DRIFT_SECONDS = 1;
+const SEEK_COOLDOWN_MS = 3000;
+const SEEK_SETTLE_MS = 750;
+const CORRECTION_WINDOW_MS = 30000;
+const CORRECTION_WARNING_COUNT = 4;
+
 export default function VideoPreview({ clip, time, playing, rate, seekVersion = 0 }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
@@ -9,6 +15,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
   const synchronize = useRef(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [syncWarning, setSyncWarning] = useState(false);
 
   useEffect(() => {
     desired.current = { clip, time, playing, rate, seekVersion };
@@ -22,7 +29,14 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     let failed = false;
     let pendingPlay = null;
     let appliedSeekVersion = desired.current.seekVersion;
+    let positioned = false;
+    let waiting = false;
+    let correctionAfter = 0;
+    let autoSeekInFlight = false;
+    let corrections = [];
+    let warned = false;
     setError('');
+    setSyncWarning(false);
     // Muted playback must also be set on the media element, not just its markup.
     video.muted = true;
     const fail = cause => {
@@ -31,11 +45,11 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       const name = cause?.name || (cause?.code ? `MediaError ${cause.code}` : 'MediaError');
       setError([name, cause?.message].filter(Boolean).join(': '));
     };
-    const sync = () => {
+    const sync = event => {
       const current = desired.current;
       if (!alive || !current.clip || video.readyState < 1 || failed) return;
       if (!current.playing) video.pause();
-      video.playbackRate = current.rate;
+      let playbackRate = current.rate;
       // Raw WebM can keep a nonzero container timeline. Seeking to elapsed
       // seconds alone repeatedly seeks before its first frame and freezes it.
       const origin = Math.max(0, Number(current.clip.start_pts) || 0);
@@ -47,19 +61,51 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       // cancel an obsolete seek AND its pending raw-media network request.
       const requestedSeek = current.seekVersion !== appliedSeekVersion;
       appliedSeekVersion = current.seekVersion;
-      const tolerance = requestedSeek || !current.playing ? 0.01 : 0.2;
-      const difference = Math.abs(video.currentTime - position);
-      if (requestedSeek && video.seeking && difference > tolerance) {
-        // Changing currentTime alone can still wait for the old HTTP range to
-        // finish. load() cancels that fetch; metadata events apply the newest
-        // requested position before playback resumes. No reload on audio ticks.
+      const now = performance.now();
+      const drift = position - video.currentTime;
+      const precise = !positioned || requestedSeek || !current.playing;
+      if (requestedSeek || !current.playing) corrections = [];
+      if (requestedSeek && video.seeking && Math.abs(drift) > 0.01) {
+        // Only an explicit user seek may cancel an obsolete HTTP range.
         pendingPlay = null;
+        positioned = false;
+        autoSeekInFlight = false;
         try { video.load(); } catch (cause) { fail(cause); }
         return;
       }
-      if (!video.seeking && difference > tolerance) {
-        try { video.currentTime = position; } catch (cause) { fail(cause); return; }
+      if (event?.type === 'seeked') {
+        // The audio clock may have advanced while fetching the target. Give
+        // decoding/playback time to recover instead of immediately seeking again.
+        correctionAfter = Math.max(correctionAfter, now + (autoSeekInFlight ? SEEK_COOLDOWN_MS : SEEK_SETTLE_MS));
+        autoSeekInFlight = false;
       }
+      if (!video.seeking) {
+        if (precise) {
+          positioned = true;
+          correctionAfter = now + SEEK_SETTLE_MS;
+          if (Math.abs(drift) > 0.01) {
+            try { video.currentTime = position; } catch (cause) { fail(cause); return; }
+          }
+        } else if (!waiting && video.readyState >= 3 && now >= correctionAfter) {
+          if (Math.abs(drift) > SEEK_DRIFT_SECONDS) {
+            // Never chase the moving audio target while seeking/buffering.
+            // The cooldown starts again on completion if this fetch is slow.
+            correctionAfter = now + SEEK_COOLDOWN_MS;
+            autoSeekInFlight = true;
+            try { video.currentTime = position; } catch (cause) { fail(cause); return; }
+            corrections = corrections.filter(at => now - at <= CORRECTION_WINDOW_MS);
+            corrections.push(now);
+            if (!warned && current.clip.kind === 'deskshare' && corrections.length >= CORRECTION_WARNING_COUNT) {
+              warned = true;
+              setSyncWarning(true);
+            }
+          } else if (Math.abs(drift) > 0.15) {
+            // Only the muted video changes speed; the master audio is untouched.
+            playbackRate = current.rate * (drift > 0 ? 1.05 : 0.95);
+          }
+        }
+      }
+      if (video.playbackRate !== playbackRate) video.playbackRate = playbackRate;
       if (current.playing && video.paused && !pendingPlay) {
         const token = {};
         pendingPlay = token;
@@ -72,9 +118,14 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       }
     };
     const mediaError = () => { if (video.error) fail(video.error); };
-    const events = ['loadedmetadata', 'loadeddata', 'canplay', 'seeked'];
+    const bufferWaiting = () => { waiting = true; video.playbackRate = desired.current.rate; };
+    const bufferReady = event => { waiting = false; sync(event); };
+    const events = ['loadedmetadata', 'loadeddata', 'seeked'];
     events.forEach(name => video.addEventListener(name, sync));
     video.addEventListener('error', mediaError);
+    video.addEventListener('waiting', bufferWaiting);
+    video.addEventListener('canplay', bufferReady);
+    video.addEventListener('playing', bufferReady);
     synchronize.current = sync;
     sync();
     return () => {
@@ -82,6 +133,9 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       if (synchronize.current === sync) synchronize.current = null;
       events.forEach(name => video.removeEventListener(name, sync));
       video.removeEventListener('error', mediaError);
+      video.removeEventListener('waiting', bufferWaiting);
+      video.removeEventListener('canplay', bufferReady);
+      video.removeEventListener('playing', bufferReady);
       video.pause();
     };
   }, [clip?.url, attempt]);
@@ -90,6 +144,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
   return <div className="re-video">
     <video ref={ref} key={`${clip.url}:${attempt}`} src={clip.url} muted playsInline preload="auto" />
     <span>{clip.kind === 'deskshare' ? t('screen') : clip.user || t('camera')}</span>
+    {syncWarning && !error && <p className="re-render-warning" role="status">{t('videoSyncWarning')} <button onClick={() => setSyncWarning(false)}>{t('videoSyncDismiss')}</button></p>}
     {error && <p className="re-render-warning" role="alert">{t('videoError', { file: clip.relative })} {error} <button onClick={() => setAttempt(value => value + 1)}>{t('videoRetry')}</button></p>}
   </div>;
 }
