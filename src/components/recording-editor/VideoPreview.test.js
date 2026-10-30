@@ -33,6 +33,9 @@ beforeEach(() => {
     if (!media.ready) throw new DOMException('Metadata not loaded', 'InvalidStateError');
     media.time = value; media.seeking = true; media.writes.push(value);
   });
+  jest.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(function load() {
+    Object.assign(state(this), { ready: 0, time: 0, seeking: false, paused: true });
+  });
   jest.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function pause() { state(this).paused = true; });
   jest.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function play() { state(this).paused = false; return Promise.resolve(); });
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
@@ -138,4 +141,70 @@ test('paused fine seeks update at sub-200ms steps and clamp to media duration; n
   await event('seeked', { seeking: false });
   await render({ time: 40000 });
   expect(state(video()).writes[1]).toBeCloseTo(29.999);
+});
+
+test('a new user destination cancels the old raw-media load, coalesces updates, and resumes at the latest target', async () => {
+  await render({ time: 3000, playing: true, seekVersion: 0 });
+  await event('loadedmetadata', { ready: 1 });
+  expect(state(video()).writes).toEqual([2]);
+  await render({ time: 21000, seekVersion: 1 });
+  expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(1);
+  expect(state(video()).ready).toBe(0);
+  await render({ time: 21100 }); await render({ time: 21500 });
+  await render({ time: 9000, seekVersion: 2 });
+  expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(1);
+  await event('loadedmetadata', { ready: 1 });
+  expect(state(video()).writes).toEqual([2, 8]);
+  await render({ time: 9100 });
+  expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(1);
+  expect(state(video()).writes).toEqual([2, 8]);
+  await event('seeked', { ready: 4, seeking: false });
+  expect(state(video()).writes).toEqual([2, 8]);
+  expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+});
+
+test.each([false, true])('explicit fine seeks use the requested position even below playback drift tolerance (playing=%s)', async playing => {
+  await render({ time: 2000, playing, seekVersion: 0 });
+  await event('loadedmetadata', { ready: 4 });
+  await event('seeked', { seeking: false });
+  await render({ time: 2050, seekVersion: 1 });
+  expect(state(video()).writes).toEqual([1, 1.05]);
+  // Repeated requests for the same pending destination do not restart decoding.
+  await render({ seekVersion: 2 });
+  expect(state(video()).writes).toEqual([1, 1.05]);
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+});
+
+test('seeks requested while metadata is loading are coalesced to the latest destination and retain the raw clock offset', async () => {
+  await render({ clip: { ...clip, start_pts: 600 }, time: 3000, seekVersion: 0 });
+  await render({ time: 21000, seekVersion: 1 }); await render({ time: 9000, seekVersion: 2 });
+  expect(state(video()).writes).toEqual([]);
+  await event('loadedmetadata', { ready: 4, duration: 630, time: 600 });
+  expect(state(video()).writes).toEqual([608]);
+});
+
+test('initial native seeking is allowed to finish without reloading the video on mount', async () => {
+  await render({ clip: { ...clip, start_pts: 600 }, time: 3500, seekVersion: 7 });
+  await event('loadedmetadata', { ready: 1, duration: 630, time: 600, seeking: true });
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+  await event('seeked', { seeking: false, ready: 4 });
+  expect(state(video()).writes).toEqual([602.5]);
+});
+
+test('rejections from a cancelled raw-media load cannot override a new play request', async () => {
+  let rejectOld, resolveNew;
+  HTMLMediaElement.prototype.play
+    .mockImplementationOnce(() => new Promise((resolve, reject) => { rejectOld = reject; }))
+    .mockImplementationOnce(() => new Promise(resolve => { resolveNew = resolve; }));
+  await render({ time: 3000, playing: true, seekVersion: 0 });
+  await event('loadedmetadata', { ready: 1 });
+  await render({ time: 21000, seekVersion: 1 });
+  expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(1);
+  await event('loadedmetadata', { ready: 1 });
+  expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+  await act(async () => rejectOld(new DOMException('Obsolete load failed', 'NotSupportedError')));
+  await event('canplay', { ready: 4 });
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+  await act(async () => resolveNew());
 });

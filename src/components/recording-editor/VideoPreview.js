@@ -2,18 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { useEditorI18n } from './i18n';
 
-export default function VideoPreview({ clip, time, playing, rate }) {
+export default function VideoPreview({ clip, time, playing, rate, seekVersion = 0 }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
-  const desired = useRef({ clip, time, playing, rate });
+  const desired = useRef({ clip, time, playing, rate, seekVersion });
   const synchronize = useRef(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    desired.current = { clip, time, playing, rate };
+    desired.current = { clip, time, playing, rate, seekVersion };
     synchronize.current?.();
-  }, [clip, time, playing, rate]);
+  }, [clip, time, playing, rate, seekVersion]);
 
   useEffect(() => {
     const video = ref.current;
@@ -21,6 +21,7 @@ export default function VideoPreview({ clip, time, playing, rate }) {
     let alive = true;
     let failed = false;
     let pendingPlay = null;
+    let appliedSeekVersion = desired.current.seekVersion;
     setError('');
     // Muted playback must also be set on the media element, not just its markup.
     video.muted = true;
@@ -42,9 +43,21 @@ export default function VideoPreview({ clip, time, playing, rate }) {
       if (Number.isFinite(video.duration) && video.duration >= origin) {
         position = Math.min(position, Math.max(origin, video.duration - 0.001));
       }
-      // Let the current seek finish, then apply the latest requested position.
-      // Replacing it on every 100ms audio tick can starve slow raw-video seeks.
-      if (!video.seeking && Math.abs(video.currentTime - position) > (current.playing ? 0.2 : 0.01)) {
+      // Audio ticks keep the same version. Only a new user destination may
+      // cancel an obsolete seek AND its pending raw-media network request.
+      const requestedSeek = current.seekVersion !== appliedSeekVersion;
+      appliedSeekVersion = current.seekVersion;
+      const tolerance = requestedSeek || !current.playing ? 0.01 : 0.2;
+      const difference = Math.abs(video.currentTime - position);
+      if (requestedSeek && video.seeking && difference > tolerance) {
+        // Changing currentTime alone can still wait for the old HTTP range to
+        // finish. load() cancels that fetch; metadata events apply the newest
+        // requested position before playback resumes. No reload on audio ticks.
+        pendingPlay = null;
+        try { video.load(); } catch (cause) { fail(cause); }
+        return;
+      }
+      if (!video.seeking && difference > tolerance) {
         try { video.currentTime = position; } catch (cause) { fail(cause); return; }
       }
       if (current.playing && video.paused && !pendingPlay) {
@@ -53,12 +66,12 @@ export default function VideoPreview({ clip, time, playing, rate }) {
         try {
           Promise.resolve(video.play()).catch(cause => {
             // Pausing, replacing the source, and unmounting can abort play.
-            if (cause?.name !== 'AbortError' && desired.current.playing) fail(cause);
+            if (pendingPlay === token && cause?.name !== 'AbortError' && desired.current.playing) fail(cause);
           }).finally(() => { if (pendingPlay === token) pendingPlay = null; });
         } catch (cause) { pendingPlay = null; fail(cause); }
       }
     };
-    const mediaError = () => fail(video.error);
+    const mediaError = () => { if (video.error) fail(video.error); };
     const events = ['loadedmetadata', 'loadeddata', 'canplay', 'seeked'];
     events.forEach(name => video.addEventListener(name, sync));
     video.addEventListener('error', mediaError);
