@@ -152,5 +152,6 @@
   "detailHint": "クリックで移動・ドラッグで選択・Shiftクリックで現在位置から選択",
   "detailLoading": "この範囲の波形を読み込み中…",
   "detailError": "詳細波形を読み込めませんでした。",
-  "detailRetry": "再試行"
+  "detailRetry": "再試行",
+  "videoRetry": "映像を再読み込み"
 }

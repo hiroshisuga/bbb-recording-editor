@@ -152,5 +152,6 @@
   "detailHint": "Click to seek · Drag to select · Shift-click to select from the playhead",
   "detailLoading": "Loading this section…",
   "detailError": "Could not load the detailed waveform.",
-  "detailRetry": "Retry"
+  "detailRetry": "Retry",
+  "videoRetry": "Reload video"
 }
