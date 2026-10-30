@@ -4,10 +4,11 @@ import { act, Simulate } from 'react-dom/test-utils';
 import RecordingEditor from './index';
 import { LANGUAGE_KEY } from './i18n';
 import useAudioPreview from './useAudioPreview';
+import VideoPreview from './VideoPreview';
 import { PREFERENCES_KEY, readPreferences } from './preferences';
 
 jest.mock('./SlidePreview', () => () => <div>slide preview</div>);
-jest.mock('./VideoPreview', () => () => <div>video preview</div>);
+jest.mock('./VideoPreview', () => jest.fn(() => <div>video preview</div>));
 jest.mock('./useAudioPreview', () => jest.fn());
 jest.mock('components/external-video-player', () => () => <div>external preview</div>);
 
@@ -821,4 +822,31 @@ test('changing timeline zoom centers the paused playhead and preserves playback 
   }
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(calls).toHaveLength(before);
+});
+
+test('editor navigation identifies new seeks for both screen sharing and webcams, but audio ticks do not', async () => {
+  const previous = global.fetch.getMockImplementation();
+  const assets = ['deskshare', 'video'].map(kind => ({ id: kind, kind, has_video: true, start_ms: 0, end_ms: 60000, url: `/${kind}.webm` }));
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, assets }) } : previous(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const latest = kind => VideoPreview.mock.calls.filter(([props]) => props.clip.kind === kind).slice(-1)[0][0];
+  const first = latest('deskshare').seekVersion;
+  expect(latest('video').seekVersion).toBe(first);
+  await time('再生位置', '00:00:20.000');
+  for (const kind of ['deskshare', 'video']) {
+    expect(latest(kind)).toEqual(expect.objectContaining({ time: 20000, seekVersion: first + 1 }));
+  }
+  const audio = container.querySelector('audio');
+  audio.currentTime = 20.1;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  for (const kind of ['deskshare', 'video']) {
+    expect(latest(kind)).toEqual(expect.objectContaining({ time: 20100, seekVersion: first + 1 }));
+  }
+  await time('再生位置', '00:00:05.000');
+  for (const kind of ['deskshare', 'video']) {
+    expect(latest(kind)).toEqual(expect.objectContaining({ time: 5000, seekVersion: first + 2 }));
+  }
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
