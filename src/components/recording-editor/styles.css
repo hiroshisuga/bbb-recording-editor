@@ -127,3 +127,5 @@
 .re-detail-selection { position:absolute; inset-block:0; border-inline:2px solid #68bbff; background:#68bbff30; pointer-events:none; }
 .re-detail-playhead { position:absolute; inset-block:0; border-left:1px solid #ffdf8c; pointer-events:none; }
 .re-detail-status { position:absolute; left:8px; top:7px; padding:3px 6px; background:#18222eee; font-size:12px; }
+
+.re-detail-view-state { display:flex; gap:12px; flex-wrap:wrap; padding:0 9px 8px; color:var(--re-muted); font-size:12px; }

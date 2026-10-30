@@ -121,20 +121,46 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   const width = Math.min(span, duration || span);
   const [start, setStart] = useState(() => windowStart(time, duration, width));
   const [dragging, setDragging] = useState(false);
+  const [following, setFollowing] = useState(true);
   const [retry, setRetry] = useState(0);
   const pointer = useRef(null);
+  const plotRef = useRef(null);
   const previousSpan = useRef(width);
   useEffect(() => {
+    const plot = plotRef.current;
+    const wheel = event => {
+      // Leave browser zoom and controls alone; ordinary wheel gestures belong
+      // to the waveform only while the pointer is over its plotting area.
+      if (event.ctrlKey || event.metaKey || event.target.closest?.('button, input, select, textarea')) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (!Number.isFinite(delta) || delta === 0) return;
+      event.preventDefault(); event.stopPropagation();
+      if (pointer.current) return; // Keep drag coordinates stable.
+      // About 10% of the visible time per typical notch (100px or 3 lines).
+      // Pixel deltas stay proportional for smooth trackpad navigation.
+      const pixels = delta * (event.deltaMode === 1 ? 100 / 3 : event.deltaMode === 2 ? 1000 : 1);
+      setFollowing(false);
+      setStart(current => clamp(Math.round(current + pixels * width / 1000), Math.max(0, duration - width)));
+    };
+    // React delegates wheel listeners passively. A local non-passive listener
+    // is required to prevent the editor page from scrolling at the same time.
+    plot.addEventListener('wheel', wheel, { passive: false });
+    return () => plot.removeEventListener('wheel', wheel);
+  }, [width, duration]);
+  useEffect(() => {
     if (dragging) return;
-    if (previousSpan.current !== width || time < start || time > start + width) {
+    const oldWidth = previousSpan.current;
+    previousSpan.current = width;
+    if (oldWidth !== width) {
+      setStart(current => windowStart(following ? time : current + oldWidth / 2, duration, width));
+    } else if (following && (time < start || time > start + width)) {
       setStart(windowStart(time, duration, width));
-    } else if (playing && time >= start + width * 0.9) {
+    } else if (following && playing && time >= start + width * 0.9) {
       setStart(clamp(Math.round(time - width * 0.1), Math.max(0, duration - width)));
     }
-    previousSpan.current = width;
-  }, [time, playing, width, duration, start, dragging]);
+  }, [time, playing, width, duration, start, dragging, following]);
   const { tiles, loading, error } = useWaveformTiles(audioUrl, start, width, duration,
-    playing && !dragging && time >= start + width * 0.65, retry);
+    following && playing && !dragging && time >= start + width * 0.65, retry);
   const ticks = useMemo(() => [0, 0.5, 1].map(p => formatTime(start + width * p)), [start, width]);
   const pct = value => `${clamp((value - start) / width * 100, 100)}%`;
   const position = e => {
@@ -169,9 +195,13 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   return <section className="re-detail-wave" aria-label={t('detailWave')}>
     <div className="re-detail-tools"><strong>{t('detailWave')}</strong><label>{t('detailSpan')} <select aria-label={t('detailSpan')} value={span} onChange={e => setSpan(Number(e.target.value))}>
       {[5000, 10000, 30000].map(ms => <option key={ms} value={ms}>{t('detailSeconds', { seconds: ms / 1000 })}</option>)}
-    </select></label><span className="re-muted">{t('detailHint')}</span></div>
+    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-muted">{t('detailHint')}</span></div>
+    {(!following || time < start || time > start + width) && <div className="re-detail-view-state" role="status">
+      {!following && <span>{t('detailFollowPaused')}</span>}
+      {time < start ? <span>{t('detailPlayheadBefore')}</span> : time > start + width ? <span>{t('detailPlayheadAfter')}</span> : null}
+    </div>}
     <div className="re-detail-ruler">{ticks.map((tick, i) => <span key={i}>{tick}</span>)}</div>
-    <div className="re-detail-plot" onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={cancel} onLostPointerCapture={cancel}>
+    <div className="re-detail-plot" ref={plotRef} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={cancel} onLostPointerCapture={cancel}>
       <WaveCanvas tiles={tiles} start={start} span={width} label={t('detailWave')} />
       {selection.end_ms > selection.start_ms && selection.end_ms > start && selection.start_ms < start + width
         && <div className="re-detail-selection" style={{ left: pct(selection.start_ms), right: `${100 - clamp((selection.end_ms - start) / width * 100, 100)}%` }} />}

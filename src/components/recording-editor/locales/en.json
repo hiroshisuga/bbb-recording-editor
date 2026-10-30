@@ -149,9 +149,13 @@
   "hideDetailWave": "Hide detailed waveform",
   "detailSpan": "Visible duration",
   "detailSeconds": "{seconds} seconds",
-  "detailHint": "Click to seek · Drag to select · Shift-click to select from the playhead",
+  "detailHint": "Wheel to browse · Click to seek · Drag to select · Shift-click to select from the playhead",
   "detailLoading": "Loading this section…",
   "detailError": "Could not load the detailed waveform.",
   "detailRetry": "Retry",
-  "videoRetry": "Reload video"
+  "videoRetry": "Reload video",
+  "detailReturn": "Return to playhead",
+  "detailFollowPaused": "Auto-follow paused",
+  "detailPlayheadBefore": "◀ Playback position is before this view",
+  "detailPlayheadAfter": "Playback position is after this view ▶"
 }
