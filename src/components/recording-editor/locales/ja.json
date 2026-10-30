@@ -149,9 +149,13 @@
   "hideDetailWave": "詳細波形を閉じる",
   "detailSpan": "表示幅",
   "detailSeconds": "{seconds}秒",
-  "detailHint": "クリックで移動・ドラッグで選択・Shiftクリックで現在位置から選択",
+  "detailHint": "ホイールで前後へ・クリックで移動・ドラッグで選択・Shiftクリックで現在位置から選択",
   "detailLoading": "この範囲の波形を読み込み中…",
   "detailError": "詳細波形を読み込めませんでした。",
   "detailRetry": "再試行",
-  "videoRetry": "映像を再読み込み"
+  "videoRetry": "映像を再読み込み",
+  "detailReturn": "再生位置へ戻る",
+  "detailFollowPaused": "自動追随を停止中",
+  "detailPlayheadBefore": "◀ 再生位置は表示範囲より前です",
+  "detailPlayheadAfter": "再生位置は表示範囲より後です ▶"
 }

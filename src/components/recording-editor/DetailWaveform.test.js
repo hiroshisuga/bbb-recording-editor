@@ -20,6 +20,14 @@ const pointer = async (type, x, shiftKey = false) => {
   element.setPointerCapture = jest.fn();
   await act(async () => Simulate[type](element, { button: 0, clientX: x, shiftKey, pointerId: 1, currentTarget: element }));
 };
+async function wheel(deltaY, options = {}, target = container.querySelector('.re-detail-plot')) {
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY, ...options });
+  await act(async () => target.dispatchEvent(event));
+  return event;
+}
+const viewStart = () => container.querySelector('.re-detail-ruler span').textContent;
+const returnToPlayhead = () => container.querySelector('.re-detail-tools button');
+
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true; jest.useFakeTimers();
   localStorage.setItem(LANGUAGE_KEY, 'en');
@@ -112,4 +120,103 @@ test('closing aborts the active request and never continues its tile queue', asy
   expect(signal.aborted).toBe(true);
   await act(async () => resolve({ ok: true, json: async () => tile(6) }));
   await advance(1000); expect(requests()).toHaveLength(1);
+});
+
+
+test('wheel browsing moves only the detailed view and consumes page scrolling', async () => {
+  await render({ selection: { start_ms: 66000, end_ms: 67000 } }); await advance();
+  const parentWheel = jest.fn();
+  window.addEventListener('wheel', parentWheel);
+  try {
+    const event = await wheel(100);
+    expect(event.defaultPrevented).toBe(true);
+    expect(parentWheel).not.toHaveBeenCalled();
+    expect(viewStart()).toBe('00:01:04.000');
+    expect(container.querySelector('.re-detail-playhead').style.left).toBe('40%');
+    expect(container.querySelector('.re-detail-selection').style.left).toBe('20%');
+    expect(container.textContent).toContain('Auto-follow paused');
+    await wheel(-100);
+    expect(viewStart()).toBe('00:01:03.000');
+    expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+  } finally { window.removeEventListener('wheel', parentWheel); }
+});
+
+test.each([
+  [100, {}, '00:01:04.000'], [3, { deltaMode: 1 }, '00:01:04.000'],
+  [1, { deltaMode: 2 }, '00:01:13.000'], [0, { deltaX: 100 }, '00:01:04.000'],
+  [10, {}, '00:01:03.100'], [100, { shiftKey: true }, '00:01:04.000'],
+])('wheel units and horizontal/trackpad movement remain proportional (%s, %j)', async (delta, options, expected) => {
+  await render(); await wheel(delta, options);
+  expect(viewStart()).toBe(expected);
+});
+
+test('browsing clamps at both meeting boundaries without changing playback', async () => {
+  await render({ duration: 20000, time: 10000 });
+  await wheel(1000000); expect(viewStart()).toBe('00:00:10.000');
+  await wheel(-1000000); expect(viewStart()).toBe('00:00:00.000');
+  expect((await wheel(-100)).defaultPrevented).toBe(true);
+  expect(viewStart()).toBe('00:00:00.000');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+});
+
+test('offscreen playhead direction is shown without moving the view or selection', async () => {
+  await render();
+  await wheel(1000);
+  expect(container.querySelector('.re-detail-playhead')).toBeNull();
+  expect(container.querySelector('.re-detail-view-state').textContent).toContain('before this view');
+  await wheel(-2000);
+  expect(container.querySelector('.re-detail-view-state').textContent).toContain('after this view');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+});
+
+test('manual browsing suspends paging and prefetch across playback changes; returning recenters and resumes follow', async () => {
+  await render({ playing: true }); await advance();
+  await wheel(1000); await advance();
+  expect(viewStart()).toBe('00:01:13.000');
+  expect(requests().map(p => p.split('/').pop())).toEqual(['6', '7', '8']);
+  const count = requests().length;
+  await render({ time: 90000 }); await advance();
+  await render({ playing: false }); await render({ playing: true }); await advance();
+  expect(viewStart()).toBe('00:01:13.000');
+  expect(requests()).toHaveLength(count); // No playback-driven neighbor while browsing.
+  await act(async () => Simulate.click(returnToPlayhead())); await advance();
+  expect(viewStart()).toBe('00:01:25.000');
+  expect(container.querySelector('.re-detail-view-state')).toBeNull();
+  expect(container.querySelector('.re-detail-playhead').style.left).toBe('50%');
+  await render({ time: 94100 });
+  expect(viewStart()).toBe('00:01:33.100');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+});
+
+test('changing visible duration while browsing preserves the inspected center rather than jumping to the playhead', async () => {
+  await render(); await wheel(1000);
+  await render({ span: 5000 });
+  expect(viewStart()).toBe('00:01:15.500');
+  expect(container.textContent).toContain('Auto-follow paused');
+  await act(async () => Simulate.click(returnToPlayhead()));
+  expect(viewStart()).toBe('00:01:05.500');
+  expect(container.querySelector('.re-detail-playhead').style.left).toBe('50%');
+});
+
+test('browser zoom, toolbars, and interval dragging keep their wheel behavior', async () => {
+  await render();
+  expect((await wheel(100, { ctrlKey: true })).defaultPrevented).toBe(false);
+  expect((await wheel(100, { metaKey: true })).defaultPrevented).toBe(false);
+  expect((await wheel(100, {}, container.querySelector('.re-detail-tools'))).defaultPrevented).toBe(false);
+  expect(viewStart()).toBe('00:01:03.000');
+  await pointer('pointerDown', 200);
+  expect((await wheel(100)).defaultPrevented).toBe(true);
+  expect(viewStart()).toBe('00:01:03.000');
+  await pointer('pointerMove', 250); await pointer('pointerUp', 250);
+  expect(props.setSelection).toHaveBeenLastCalledWith({ start_ms: 65000, end_ms: 66000 });
+});
+
+test('rapid wheel navigation coalesces waveform requests to the final visible tiles', async () => {
+  await render(); await advance();
+  for (let i = 0; i < 15; i += 1) await wheel(100);
+  expect(viewStart()).toBe('00:01:18.000');
+  expect(requests()).toHaveLength(2);
+  await advance();
+  expect(requests().map(p => p.split('/').pop())).toEqual(['6', '7', '8']);
+  expect(props.seek).not.toHaveBeenCalled();
 });
