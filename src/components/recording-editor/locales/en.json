@@ -153,6 +153,8 @@
   "detailLoading": "Loading this section…",
   "detailError": "Could not load the detailed waveform.",
   "detailRetry": "Retry",
+  "videoSyncWarning": "Screen sharing needs repeated sync corrections. The video may freeze or skip. Audio playback continues.",
+  "videoSyncDismiss": "Dismiss",
   "videoRetry": "Reload video",
   "detailReturn": "Return to playhead",
   "detailFollowPaused": "Auto-follow paused",

@@ -153,6 +153,8 @@
   "detailLoading": "この範囲の波形を読み込み中…",
   "detailError": "詳細波形を読み込めませんでした。",
   "detailRetry": "再試行",
+  "videoSyncWarning": "画面共有の同期補正が繰り返されています。映像が停止したり飛ぶことがあります。音声の再生は継続します。",
+  "videoSyncDismiss": "\u9589\u3058\u308b",
   "videoRetry": "映像を再読み込み",
   "detailReturn": "再生位置へ戻る",
   "detailFollowPaused": "自動追随を停止中",
