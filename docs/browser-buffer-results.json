@@ -1,0 +1,559 @@
+{
+  "date": "2026-10-31",
+  "scope": "Synthetic local HTTP/Blob sources; independent native browser research; original meeting media not tested",
+  "browser": "131.0.6778.204",
+  "notes": [
+    "buffered is not a byte-accurate measurement of downloaded media time",
+    "Offline playback demonstrates actual cache availability, rather than merely past reception",
+    "Portable VBR benchmark rerun includes packet-position mapping from ffprobe"
+  ],
+  "initialCases": [
+    {
+      "file": "long.webm",
+      "mode": "http",
+      "fileBytes": 12081796,
+      "paused": {
+        "wall": 4073.899999999441,
+        "duration": 240,
+        "time": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            62.488
+          ],
+          [
+            119.769,
+            183.56
+          ]
+        ],
+        "decodedBytes": 52002,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 8076.899999999441,
+        "duration": 240,
+        "time": 124.002618,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            62.488
+          ],
+          [
+            119.769,
+            183.56
+          ]
+        ],
+        "decodedBytes": 254429,
+        "decodedFrames": 48
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 3145728,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 0-12081795/12081796",
+          "fromDiskCache": false,
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "range": "bytes=12058624-",
+          "bytes": 23172,
+          "finished": true,
+          "status": 206,
+          "responseRange": "bytes 12058624-12081795/12081796",
+          "fromDiskCache": false
+        },
+        {
+          "range": "bytes=6029312-",
+          "bytes": 3211264,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 6029312-12081795/12081796",
+          "fromDiskCache": false
+        }
+      ]
+    },
+    {
+      "file": "long-live.webm",
+      "mode": "http",
+      "fileBytes": 12084898,
+      "paused": {
+        "wall": 4073.4000000003725,
+        "duration": "Infinity",
+        "time": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            2.5
+          ],
+          [
+            120,
+            122.5
+          ]
+        ],
+        "decodedBytes": 52002,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 8076.5,
+        "duration": "Infinity",
+        "time": 124.002573,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            2.5
+          ],
+          [
+            120,
+            126.5
+          ]
+        ],
+        "decodedBytes": 254429,
+        "decodedFrames": 48
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 9437184,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 0-12084897/12084898",
+          "fromDiskCache": false
+        }
+      ]
+    },
+    {
+      "file": "vbr-buffer.webm",
+      "mode": "http",
+      "fileBytes": 8167998,
+      "paused": {
+        "wall": 4067.2999999998137,
+        "duration": 240,
+        "time": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            98.207
+          ],
+          [
+            120,
+            122.5
+          ]
+        ],
+        "decodedBytes": 1258,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 8070.0999999996275,
+        "duration": 240,
+        "time": 124.002421,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            98.207
+          ],
+          [
+            120,
+            126.5
+          ]
+        ],
+        "decodedBytes": 3058,
+        "decodedFrames": 48
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 3342336,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 0-8167997/8167998",
+          "fromDiskCache": false,
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "range": "bytes=8159232-",
+          "bytes": 8766,
+          "finished": true,
+          "status": 206,
+          "responseRange": "bytes 8159232-8167997/8167998",
+          "fromDiskCache": false
+        }
+      ]
+    },
+    {
+      "file": "vbr-buffer.webm",
+      "mode": "blob",
+      "fileBytes": 8167998,
+      "paused": {
+        "wall": 4085.899999999441,
+        "duration": 240,
+        "time": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            240
+          ]
+        ],
+        "decodedBytes": 1258,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 8089.5999999996275,
+        "duration": 240,
+        "time": 124.003336,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            240
+          ]
+        ],
+        "decodedBytes": 3058,
+        "decodedFrames": 48
+      },
+      "requests": [
+        {
+          "range": null,
+          "bytes": 0,
+          "finished": true,
+          "status": 200,
+          "responseRange": null,
+          "fromDiskCache": false
+        }
+      ]
+    },
+    {
+      "file": "vbr-buffer.webm",
+      "mode": "offline",
+      "fileBytes": 8167998,
+      "paused": {
+        "wall": 4079,
+        "duration": 240,
+        "time": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            92.43
+          ],
+          [
+            120,
+            122.5
+          ]
+        ],
+        "decodedBytes": 1258,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 16111.100000000559,
+        "duration": 240,
+        "time": 168.025352,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            92.43
+          ],
+          [
+            120,
+            170.6
+          ]
+        ],
+        "decodedBytes": 23307,
+        "decodedFrames": 489
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 3145728,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 0-8167997/8167998",
+          "fromDiskCache": false,
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "range": "bytes=8159232-",
+          "bytes": 8766,
+          "finished": true,
+          "status": 206,
+          "responseRange": "bytes 8159232-8167997/8167998",
+          "fromDiskCache": false
+        }
+      ],
+      "offlineMediaAdvance": 48.025352,
+      "reportedAheadAtDisconnect": 2.5
+    },
+    {
+      "file": "long-live.webm",
+      "mode": "offline",
+      "fileBytes": 12084898,
+      "paused": {
+        "wall": 4074.9000000003725,
+        "duration": "Infinity",
+        "time": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            2.5
+          ],
+          [
+            120,
+            122.5
+          ]
+        ],
+        "decodedBytes": 52002,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 16166.800000000745,
+        "duration": "Infinity",
+        "time": 168.2639,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            2.5
+          ],
+          [
+            120,
+            170.8
+          ]
+        ],
+        "decodedBytes": 2469999,
+        "decodedFrames": 491
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 12084898,
+          "finished": true,
+          "status": 206,
+          "responseRange": "bytes 0-12084897/12084898",
+          "fromDiskCache": false
+        }
+      ],
+      "offlineMediaAdvance": 48.26390000000001,
+      "reportedAheadAtDisconnect": 2.5
+    }
+  ],
+  "portableCases": [
+    {
+      "key": "vbr",
+      "file": "vbr-buffer.webm",
+      "mode": "http",
+      "fileBytes": 8167998,
+      "paused": {
+        "wall": 4072.199999999255,
+        "duration": 240,
+        "time": 120,
+        "ahead": 2.5,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            92.43
+          ],
+          [
+            120,
+            122.5
+          ]
+        ],
+        "decodedBytes": 1258,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 8075.199999999255,
+        "duration": 240,
+        "time": 124.002627,
+        "ahead": 2.497372999999996,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            92.43
+          ],
+          [
+            120,
+            126.5
+          ]
+        ],
+        "decodedBytes": 3058,
+        "decodedFrames": 48
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 3145728,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 0-8167997/8167998",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "range": "bytes=8159232-",
+          "bytes": 8766,
+          "finished": true,
+          "status": 206,
+          "responseRange": "bytes 8159232-8167997/8167998"
+        }
+      ],
+      "receivedPrefixMediaEnd": 202.6
+    },
+    {
+      "key": "vbr",
+      "file": "vbr-buffer.webm",
+      "mode": "blob",
+      "fileBytes": 8167998,
+      "paused": {
+        "wall": 4100.299999999814,
+        "duration": 240,
+        "time": 120,
+        "ahead": 120,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            240
+          ]
+        ],
+        "decodedBytes": 1258,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 8104.0999999996275,
+        "duration": 240,
+        "time": 124.003504,
+        "ahead": 115.996496,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            240
+          ]
+        ],
+        "decodedBytes": 3058,
+        "decodedFrames": 48
+      },
+      "requests": [
+        {
+          "range": null,
+          "bytes": 0,
+          "finished": true,
+          "status": 200,
+          "responseRange": null
+        }
+      ],
+      "receivedPrefixMediaEnd": null
+    },
+    {
+      "key": "vbr",
+      "file": "vbr-buffer.webm",
+      "mode": "offline",
+      "fileBytes": 8167998,
+      "paused": {
+        "wall": 4090,
+        "duration": 240,
+        "time": 120,
+        "ahead": 2.5,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            100.133
+          ],
+          [
+            120,
+            122.5
+          ]
+        ],
+        "decodedBytes": 1258,
+        "decodedFrames": 8
+      },
+      "final": {
+        "wall": 16122.299999999814,
+        "duration": 240,
+        "time": 168.026652,
+        "ahead": 2.5733479999999815,
+        "ready": 4,
+        "network": 1,
+        "seeking": false,
+        "buffered": [
+          [
+            0,
+            100.133
+          ],
+          [
+            120,
+            170.6
+          ]
+        ],
+        "decodedBytes": 23307,
+        "decodedFrames": 489
+      },
+      "requests": [
+        {
+          "range": "bytes=0-",
+          "bytes": 3407872,
+          "finished": false,
+          "status": 206,
+          "responseRange": "bytes 0-8167997/8167998",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "range": "bytes=8159232-",
+          "bytes": 8766,
+          "finished": true,
+          "status": 206,
+          "responseRange": "bytes 8159232-8167997/8167998"
+        }
+      ],
+      "receivedPrefixMediaEnd": 204.6,
+      "offlineMediaAdvance": 48.02665200000001,
+      "reportedAheadAtDisconnect": 2.5
+    }
+  ]
+}

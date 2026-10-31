@@ -40,7 +40,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     warningDismissed.current = false;
     let catchUp;
     const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight: false,
-      syncPolicy: 'measured-playback-rate', ...catchUp?.snapshot(performance.now()) }));
+      syncPolicy: 'progress-based-playback-rate', ...catchUp?.snapshot(performance.now()) }));
     if (desired.current.clip.kind === 'deskshare') catchUp = createVideoCatchUp(video, (event, values) => trace.log(event, values));
     setError('');
     setSyncWarning(false);

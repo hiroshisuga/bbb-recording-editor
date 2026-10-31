@@ -1,0 +1,344 @@
+{
+  "browser": "Headless Chromium 131.0.6778.204, Linux",
+  "date": "2026-10-31",
+  "baselineCommit": "a159532fd6d85598088d5d6bbb0b288103410845",
+  "sourceSha256": {
+    "src/components/recording-editor/videoCatchUp.js": "32abd5074a3ecada8c0ada6416d60e836f218b174cbb787eb3cf83369f68f673",
+    "src/components/recording-editor/videoSync.js": "2a3a2d7508c13c24ebcec72b7f96ca0870c044d00b7d4d1c1ece9ab01977c751"
+  },
+  "method": "Actual React VideoPreview component; native HTTP video, separately buffered native WAV audio master; audio-time props updated every 100 ms. Recovery requires clock drift <=0.15 s and presented-frame drift <=0.3 s at the audio rate, sustained for >=750 ms. No video Blob URLs. Synthetic VP8 fixtures only; not the original meeting or macOS Brave.",
+  "fixtures": {
+    "vbr-buffer": "240 s, 640x360, 10 fps; static first 180 s, moving final 60 s",
+    "long-live": "240 s, 640x360, 10 fps; WebM without finite duration metadata",
+    "sparse-1080": "120 s, 1920x1080, 30 fps; one keyframe at the start",
+    "long": "240 s, 640x360, 10 fps; roughly uniform bitrate"
+  },
+  "cases": [
+    {
+      "mode": "before",
+      "fixture": "vbr-buffer",
+      "audioRate": 1,
+      "initialLagS": 60,
+      "network": "offline after preparation",
+      "seconds": 20.026699999999256,
+      "recoveredS": null,
+      "maximumRate": 1.25,
+      "finalDrift": 55.61399700000001,
+      "frameDrift": 55.62476799999999,
+      "frameCount": 243,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 0.9949101948898591,
+      "waitingEvents": 0,
+      "correctionSeeks": 0,
+      "steps": [],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "fixture": "vbr-buffer",
+      "audioRate": 1,
+      "initialLagS": 60,
+      "network": "offline after preparation",
+      "seconds": 21.527200000000185,
+      "recoveredS": 20.704400000000373,
+      "maximumRate": 12,
+      "finalDrift": 0.13929300000000922,
+      "frameDrift": 0.20594100000002413,
+      "frameCount": 635,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 0.994367172693143,
+      "waitingEvents": 0,
+      "correctionSeeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 2245,
+          "rate": 1.25,
+          "reason": "baseline",
+          "bufferAheadS": 2.5
+        },
+        {
+          "elapsedMs": 4247,
+          "rate": 1.5,
+          "reason": "probe",
+          "bufferAheadS": 2.479
+        },
+        {
+          "elapsedMs": 6246.9,
+          "rate": 2,
+          "reason": "probe",
+          "bufferAheadS": 2.479
+        },
+        {
+          "elapsedMs": 8246.9,
+          "rate": 3,
+          "reason": "probe",
+          "bufferAheadS": 2.479
+        },
+        {
+          "elapsedMs": 10346.7,
+          "rate": 4,
+          "reason": "probe",
+          "bufferAheadS": 2.58
+        },
+        {
+          "elapsedMs": 12346.9,
+          "rate": 6,
+          "reason": "probe",
+          "bufferAheadS": 2.58
+        },
+        {
+          "elapsedMs": 14346.9,
+          "rate": 8,
+          "reason": "probe",
+          "bufferAheadS": 2.581
+        },
+        {
+          "elapsedMs": 16447,
+          "rate": 12,
+          "reason": "probe",
+          "bufferAheadS": 2.781
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "fixture": "long-live",
+      "audioRate": 1,
+      "initialLagS": 60,
+      "network": "local HTTP Range",
+      "seconds": 21.523900000000374,
+      "recoveredS": 20.704599999999626,
+      "maximumRate": 12,
+      "finalDrift": 0.1353759999999795,
+      "frameDrift": 0.2041590000000042,
+      "frameCount": 641,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 0.9944368353318692,
+      "waitingEvents": 0,
+      "correctionSeeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 2248,
+          "rate": 1.25,
+          "reason": "baseline",
+          "bufferAheadS": 2.5
+        },
+        {
+          "elapsedMs": 4249.7,
+          "rate": 1.5,
+          "reason": "probe",
+          "bufferAheadS": 2.469
+        },
+        {
+          "elapsedMs": 6249.7,
+          "rate": 2,
+          "reason": "probe",
+          "bufferAheadS": 2.469
+        },
+        {
+          "elapsedMs": 8349.5,
+          "rate": 3,
+          "reason": "probe",
+          "bufferAheadS": 2.47
+        },
+        {
+          "elapsedMs": 10349.4,
+          "rate": 4,
+          "reason": "probe",
+          "bufferAheadS": 2.57
+        },
+        {
+          "elapsedMs": 12349.6,
+          "rate": 6,
+          "reason": "probe",
+          "bufferAheadS": 2.569
+        },
+        {
+          "elapsedMs": 14449.6,
+          "rate": 8,
+          "reason": "probe",
+          "bufferAheadS": 2.67
+        },
+        {
+          "elapsedMs": 16549.7,
+          "rate": 12,
+          "reason": "probe",
+          "bufferAheadS": 2.871
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "fixture": "vbr-buffer",
+      "audioRate": 2,
+      "initialLagS": 30,
+      "network": "local HTTP Range",
+      "seconds": 13.447899999999441,
+      "recoveredS": 12.604699999999255,
+      "maximumRate": 8,
+      "finalDrift": 0.140720999999985,
+      "frameDrift": 0.1374969999999962,
+      "frameCount": 456,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 1.9807923170161217,
+      "waitingEvents": 0,
+      "correctionSeeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 2244.8,
+          "rate": 2,
+          "reason": "baseline",
+          "bufferAheadS": 2.5
+        },
+        {
+          "elapsedMs": 4246.8,
+          "rate": 3,
+          "reason": "probe",
+          "bufferAheadS": 2.498
+        },
+        {
+          "elapsedMs": 6346.6,
+          "rate": 4,
+          "reason": "probe",
+          "bufferAheadS": 2.499
+        },
+        {
+          "elapsedMs": 8346.8,
+          "rate": 6,
+          "reason": "probe",
+          "bufferAheadS": 2.598
+        },
+        {
+          "elapsedMs": 10446.4,
+          "rate": 8,
+          "reason": "probe",
+          "bufferAheadS": 2.602
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "fixture": "vbr-buffer",
+      "audioRate": 1,
+      "initialLagS": 7.5,
+      "network": "local HTTP Range",
+      "seconds": 10.939,
+      "recoveredS": 10.103799999999813,
+      "maximumRate": 3,
+      "finalDrift": 0.1426840000000027,
+      "frameDrift": 0.21873899999999935,
+      "frameCount": 180,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 0.9890062162903367,
+      "waitingEvents": 0,
+      "correctionSeeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 2251.6,
+          "rate": 1.25,
+          "reason": "baseline",
+          "bufferAheadS": 2.5
+        },
+        {
+          "elapsedMs": 4253.1,
+          "rate": 1.5,
+          "reason": "probe",
+          "bufferAheadS": 2.479
+        },
+        {
+          "elapsedMs": 6253,
+          "rate": 2,
+          "reason": "probe",
+          "bufferAheadS": 2.479
+        },
+        {
+          "elapsedMs": 8353,
+          "rate": 3,
+          "reason": "probe",
+          "bufferAheadS": 2.479
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "fixture": "sparse-1080",
+      "audioRate": 1,
+      "initialLagS": 20,
+      "network": "local HTTP Range",
+      "seconds": 9.835299999999814,
+      "recoveredS": 9.003700000000187,
+      "maximumRate": 6,
+      "finalDrift": 0.13999099999999487,
+      "frameDrift": 0.16369499999999704,
+      "frameCount": 475,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 0.9893643305237442,
+      "waitingEvents": 1,
+      "correctionSeeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 3961.2,
+          "rate": 3,
+          "reason": "baseline",
+          "bufferAheadS": 100
+        },
+        {
+          "elapsedMs": 5963.1,
+          "rate": 4,
+          "reason": "probe",
+          "bufferAheadS": 93.997
+        },
+        {
+          "elapsedMs": 8062.6,
+          "rate": 6,
+          "reason": "probe",
+          "bufferAheadS": 85.601
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "throttled",
+      "fixture": "long",
+      "audioRate": 1,
+      "initialLagS": 10,
+      "network": "32 KiB/s with 30 ms latency",
+      "seconds": 20.026900000000374,
+      "recoveredS": null,
+      "maximumRate": 1.1,
+      "finalDrift": 15.978400999999998,
+      "frameDrift": 15.907027,
+      "frameCount": 140,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioAdvancePerWallS": 0.9940144006311324,
+      "waitingEvents": 8,
+      "correctionSeeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 5082.6,
+          "rate": 1.1,
+          "reason": "baseline",
+          "bufferAheadS": 2.281
+        }
+      ],
+      "backoffs": [
+        {
+          "elapsedMs": 7084,
+          "reason": "slow-progress",
+          "ceiling": 1
+        }
+      ]
+    }
+  ]
+}

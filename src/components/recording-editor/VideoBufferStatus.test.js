@@ -44,36 +44,36 @@ afterEach(async () => {
   container.remove(); localStorage.clear(); jest.restoreAllMocks(); jest.useRealTimers();
 });
 
-test('reports continuous playable seconds ahead, not the sum or last end of disjoint ranges', async () => {
+test('reports continuous browser seconds ahead, not the sum or last end of disjoint ranges', async () => {
   await render();
-  expect(status().textContent).toContain('Buffered ahead: 4.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 4.0 s');
   await event('progress', { ranges: [[0, 9], [20, 30]] });
-  expect(status().textContent).toContain('Buffered ahead: 4.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 4.0 s');
   await event('progress', { time: 15 });
-  expect(status().textContent).toContain('Buffered ahead: 0.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 0.0 s');
   await event('progress', { time: 22 });
-  expect(status().textContent).toContain('Buffered ahead: 8.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 8.0 s');
   await event('progress', { time: 30 });
-  expect(status().textContent).toContain('Buffered ahead: 0.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 0.0 s');
 });
 
 test('distinguishes metadata loading from an empty buffer and updates on progress while paused', async () => {
   await render({ playing: false });
   await event('emptied', { ready: 0, ranges: [] });
-  expect(status().textContent).toContain('Buffered ahead: — s');
+  expect(status().textContent).toContain('Buffered (browser): — s');
   expect(status().textContent).toContain('Audio offset: —');
   expect(status().dataset.state).toBe('loading');
   await event('loadedmetadata', { ready: 1 });
-  expect(status().textContent).toContain('Buffered ahead: 0.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 0.0 s');
   expect(status().dataset.state).toBe('paused');
   await event('progress', { ranges: [[0, 11]] });
-  expect(status().textContent).toContain('Buffered ahead: 6.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 6.0 s');
 });
 
 test('uses the raw container clock and shows audio delay, lead, and approximate alignment', async () => {
   media.time = 605; media.duration = 630; media.ranges = [[600, 609]];
   await render({ clip: { ...clip, start_pts: 600 }, time: 8000 });
-  expect(status().textContent).toContain('Buffered ahead: 4.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 4.0 s');
   expect(status().textContent).toContain('2.0 s behind audio');
   await render({ time: 4000 }); await act(async () => jest.advanceTimersByTime(500));
   expect(status().textContent).toContain('2.0 s ahead of audio');
@@ -105,9 +105,9 @@ test('supports unknown duration, checks readiness without a waiting event, and r
   await render();
   media.time = 6; media.ready = 2;
   await act(async () => jest.advanceTimersByTime(499));
-  expect(status().textContent).toContain('Buffered ahead: 4.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 4.0 s');
   await act(async () => jest.advanceTimersByTime(1));
-  expect(status().textContent).toContain('Buffered ahead: 3.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 3.0 s');
   expect(status().dataset.state).toBe('waiting');
 });
 
@@ -119,7 +119,7 @@ test('changing the source or retrying discards stale waiting status and cleans u
   media.ready = 4; media.ranges = [[0, 15]];
   await render({ clip: { ...clip, url: '/other.webm' } });
   expect(status().dataset.state).toBe('playing');
-  expect(status().textContent).toContain('Buffered ahead: 10.0 s');
+  expect(status().textContent).toContain('Buffered (browser): 10.0 s');
   expect(removed).toHaveBeenCalledWith('progress', expect.any(Function));
   expect(jest.getTimerCount()).toBe(1);
   await event('waiting'); await render({ attempt: 1 });

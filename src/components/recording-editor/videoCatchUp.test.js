@@ -70,16 +70,13 @@ test('an advancing internal clock cannot approve a probe whose displayed frames 
   s.controller.close();
 });
 
-test('loss of buffer reduces speed immediately and does not restart probing on the next tick', () => {
+test('short reported ranges alone do not cancel healthy measured progress', () => {
   const s = simulation({ lag: 500 }); s.advance(6000);
   expect(s.rate()).toBe(8);
-  expect(s.update({ ahead: 2 })).toBe(1);
-  expect(s.hasCallback()).toBe(false);
-  expect(s.update({ ahead: 1000 })).toBe(3);
-  s.advance(4900);
-  expect(s.rate()).toBe(3);
-  s.advance(2200);
-  expect(s.rate()).toBe(4);
+  expect(s.update({ ahead: 2 })).toBe(8);
+  expect(s.hasCallback()).toBe(true);
+  s.advance(2000);
+  expect(s.rate()).toBe(12);
   s.controller.close();
 });
 
@@ -90,8 +87,10 @@ test('waiting returns to master speed immediately and sustained waiting backs of
   s.advance(1000, { blocked: true });
   expect(s.events.filter(event => event.event === 'catch-up-backoff' && event.reason === 'waiting')).toHaveLength(1);
   s.controller.ready(s.now());
-  expect(s.update({ blocked: false })).toBe(6);
+  expect(s.update({ blocked: false })).toBe(3);
   expect(s.controller.snapshot(s.now()).catchUpRetryMs).toBeGreaterThan(29000);
+  s.advance(2000); expect(s.rate()).toBe(4);
+  s.advance(2000); expect(s.rate()).toBe(6);
   s.controller.close();
 });
 
@@ -115,14 +114,57 @@ test('reset cancels frame observation and old callbacks cannot revive the previo
   s.controller.close();
 });
 
-test('hidden tabs and insufficient entry coverage retain normal correction', () => {
+test('hidden tabs retain normal correction, while visible tabs can observe short reported buffers', () => {
   const s = simulation();
   expect(s.update({ visible: false })).toBe(3);
   expect(s.hasCallback()).toBe(false);
   s.advance(5000);
   expect(s.hasCallback()).toBe(false);
   expect(s.update({ visible: true, ahead: 18 })).toBe(3);
-  expect(s.hasCallback()).toBe(false);
+  expect(s.hasCallback()).toBe(true);
+  s.controller.close();
+});
+
+test.each([1, 2])('small buffered-time reports allow conservative measured steps and convergence at %sx', base => {
+  const s = simulation({ base, lag: 60 });
+  s.controller.reset(); s.update({ ahead: 2.5 });
+  let maximum = base;
+  while (s.now() < 35000 && s.drift() > 0.15) {
+    s.advance(100); maximum = Math.max(maximum, s.rate());
+    expect(s.drift()).toBeGreaterThan(-0.15);
+  }
+  expect(s.drift()).toBeLessThanOrEqual(0.15);
+  expect(maximum).toBeGreaterThan(4);
+  expect(s.now()).toBeLessThan(35000);
+  const steps = s.events.filter(event => event.event === 'catch-up-step').map(event => event.rate);
+  if (base === 1) expect(steps.slice(1, 5)).toEqual([1.25, 1.5, 2, 3]);
+  else expect(steps.slice(1, 3)).toEqual([2, 3]);
+  s.controller.close();
+});
+
+test('a zero reported range cannot permanently prevent probing when base-rate frames are actually progressing', () => {
+  const s = simulation({ lag: 500 });
+  s.controller.reset(); s.update({ ahead: 0 }); s.advance(8000);
+  expect(s.rate()).toBe(3);
+  s.controller.close();
+});
+
+test('actual limited throughput fails a small probe and retains the last effective speed', () => {
+  const s = simulation({ lag: 500, clockSpeed: rate => rate > 1.5 ? 1 : rate });
+  s.controller.reset(); s.update({ ahead: 2.5 }); s.advance(6500);
+  expect(s.rate()).toBe(1.5);
+  expect(s.events).toContainEqual(expect.objectContaining({ event: 'catch-up-backoff', ceiling: 1.5 }));
+  s.advance(10000);
+  expect(s.rate()).toBe(1.5);
+  s.controller.close();
+});
+
+test('an unhealthy baseline also limits ordinary correction during the cooldown', () => {
+  const s = simulation({ lag: 500, clockSpeed: rate => rate > 1.2 ? 1.1 : rate });
+  s.advance(12000);
+  expect(s.rate()).toBe(1);
+  expect(s.events.filter(event => event.event === 'catch-up-step')).toHaveLength(1);
+  expect(s.controller.snapshot(s.now()).catchUpRetryMs).toBeGreaterThan(19000);
   s.controller.close();
 });
 

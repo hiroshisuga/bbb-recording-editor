@@ -11,7 +11,7 @@ beforeEach(() => {
   video = document.createElement('video');
   Object.defineProperties(video, {
     currentTime: { get: () => media.time, set: () => { throw new Error('Trace cannot seek'); } },
-    duration: { value: 630 }, readyState: { get: () => media.ready }, seeking: { get: () => media.seeking },
+    duration: { get: () => media.duration ?? 630 }, readyState: { get: () => media.ready }, seeking: { get: () => media.seeking },
     buffered: { get: () => ({ length: media.ranges.length, start: i => media.ranges[i][0], end: i => media.ranges[i][1] }) },
   });
   video.play = jest.fn(); video.pause = jest.fn(); video.load = jest.fn();
@@ -93,4 +93,15 @@ test('camera previews create no trace timer or logs', () => {
   trace.log('seek-request'); video.dispatchEvent(new Event('waiting'));
   jest.advanceTimersByTime(1000);
   expect(jest.getTimerCount()).toBe(0); expect(console.info).not.toHaveBeenCalled();
+});
+
+test('records finite and unknown duration distinctly and observes browser download suspension without controlling playback', () => {
+  media.duration = Infinity;
+  window.bbbEditorVideoDebug = true; trace = createVideoTrace(video, () => current);
+  expect(records()[0].durationS).toBe('Infinity');
+  media.duration = 630; video.dispatchEvent(new Event('durationchange'));
+  expect(records().at(-1)).toEqual(expect.objectContaining({ event: 'media:durationchange', durationS: 630 }));
+  video.dispatchEvent(new Event('suspend'));
+  expect(records().at(-1).event).toBe('media:suspend');
+  expect(video.pause).not.toHaveBeenCalled(); expect(video.load).not.toHaveBeenCalled();
 });

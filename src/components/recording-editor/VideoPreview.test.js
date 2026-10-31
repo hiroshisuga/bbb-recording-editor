@@ -334,7 +334,7 @@ test('trace identifies rate-based sync and logs explicit seeks without any autom
     await event('loadedmetadata', { ready: 4 });
     clock = 1000; await render({ time: 3000 });
     expect(window.bbbEditorVideoLogs.some(r => r.event === 'seek-request')).toBe(false);
-    expect(window.bbbEditorVideoLogs.some(r => r.syncPolicy === 'measured-playback-rate')).toBe(true);
+    expect(window.bbbEditorVideoLogs.some(r => r.syncPolicy === 'progress-based-playback-rate')).toBe(true);
     await render({ time: 5000, seekVersion: 1 });
     const request = window.bbbEditorVideoLogs.find(r => r.event === 'seek-request');
     const assigned = window.bbbEditorVideoLogs.find(r => r.event === 'seek-assigned');
@@ -450,13 +450,15 @@ test.each([3, 4])('a browser rejecting rates above %sx keeps playing and does no
   await withFrameCallbacks(async ({ frame }) => {
     let rate = 1;
     const writes = [];
-    jest.spyOn(HTMLMediaElement.prototype, 'playbackRate', 'get').mockImplementation(() => rate);
-    jest.spyOn(HTMLMediaElement.prototype, 'playbackRate', 'set').mockImplementation(value => {
-      writes.push(value);
-      if (value > ceiling) throw new DOMException('Unsupported speed', 'NotSupportedError');
-      rate = value;
-    });
     await render({ playing: true });
+    Object.defineProperty(video(), 'playbackRate', {
+      configurable: true, get: () => rate,
+      set(value) {
+        writes.push(value);
+        if (value > ceiling) throw new DOMException('Unsupported speed', 'NotSupportedError');
+        rate = value;
+      },
+    });
     await event('loadedmetadata', { ready: 4, duration: 1000, ranges: [[0, 1000]] });
     let master = 200;
     for (let i = 1; i <= 180; i++) {
@@ -468,5 +470,25 @@ test.each([3, 4])('a browser rejecting rates above %sx keeps playing and does no
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(state(video()).paused).toBe(false);
     expect(state(video()).writes).toEqual([]);
+  });
+});
+
+test('screen recovery can progress when the browser continually reports only a 2.5-second queue', async () => {
+  await withFrameCallbacks(async ({ frame }) => {
+    await render({ playing: true, time: 21000 });
+    await event('loadedmetadata', { ready: 4, duration: 1000, ranges: [[20, 22.5]], time: 20 });
+    let master = 80, maximum = 1;
+    for (let i = 1; i <= 300; i++) {
+      clock = i * 100; master += 0.1;
+      state(video()).time += video().playbackRate * 0.1;
+      state(video()).ranges = [[20, state(video()).time + 2.5]];
+      frame(); await render({ time: 1000 + master * 1000 });
+      maximum = Math.max(maximum, video().playbackRate);
+    }
+    expect(maximum).toBeGreaterThan(4);
+    expect(Math.abs(master - state(video()).time)).toBeLessThanOrEqual(0.15);
+    expect(video().playbackRate).toBe(1);
+    expect(state(video()).writes).toEqual([]);
+    expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
   });
 });

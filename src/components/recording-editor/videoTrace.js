@@ -1,7 +1,7 @@
 // Opt-in, read-only diagnostics. Keep console entries as serialized snapshots:
 // DevTools can otherwise show an object's later values when it is expanded.
 let nextTraceId = 0;
-const EVENTS = ['loadedmetadata', 'loadeddata', 'progress', 'waiting', 'playing', 'canplay', 'seeking', 'seeked', 'stalled', 'emptied', 'pause', 'play', 'ratechange', 'ended', 'error'];
+const EVENTS = ['loadedmetadata', 'loadeddata', 'durationchange', 'progress', 'suspend', 'waiting', 'playing', 'canplay', 'seeking', 'seeked', 'stalled', 'emptied', 'pause', 'play', 'ratechange', 'ended', 'error'];
 const round = value => Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null;
 
 export function createVideoTrace(video, getCurrent) {
@@ -51,6 +51,8 @@ export function createVideoTrace(video, getCurrent) {
         traceId, event, seekNumber, seekReason, sinceSeekRequestMs: seekAt === null ? null : round(now - seekAt), at: new Date().toISOString(), elapsedMs: round(now - startedAt),
         file: current.clip.relative, audioTimeMs: round(current.time), originS: origin,
         targetTimeS: round(target), videoTimeS: round(video.currentTime),
+        durationS: video.duration === Infinity ? 'Infinity' : round(video.duration),
+        videoWidth: video.videoWidth, videoHeight: video.videoHeight,
         driftS: round(target - video.currentTime), bufferAheadS: round(ahead(video.currentTime)),
         targetBufferAheadS: round(ahead(target)), buffered: ranges.map(range => range.map(round)),
         lastFrameTimeS: round(frameTime), frameDriftS: frameTime === null ? null : round(target - frameTime),
@@ -62,6 +64,7 @@ export function createVideoTrace(video, getCurrent) {
         autoSeekInFlight: current.autoSeekInFlight, syncPolicy: current.syncPolicy ?? null,
         catchUpPhase: current.catchUpPhase ?? null, catchUpReason: current.catchUpReason ?? null,
         catchUpRate: current.catchUpRate ?? null, catchUpRetryMs: round(current.catchUpRetryMs),
+        measuredRateCeiling: round(current.measuredRateCeiling),
         observedVideoRate: round(current.observedVideoRate), observedFrameRate: round(current.observedFrameRate),
         lagRecoveryRate: round(current.lagRecoveryRate), waitingFraction: round(current.waitingFraction),
         totalFrames: quality?.totalVideoFrames ?? null, droppedFrames: quality?.droppedVideoFrames ?? null,
