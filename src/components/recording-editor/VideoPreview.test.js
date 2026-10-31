@@ -530,3 +530,55 @@ test('a brief media wait rechecks progress and recovers the tail without extra s
     expect(state(video()).paused).toBe(false);
   });
 });
+
+test.each(['deskshare', 'video'])('pausing %s with a 141 ms clock offset does not start a seek', async kind => {
+  await render({ clip: { ...clip, kind }, time: 21000, playing: true });
+  await event('loadedmetadata', { ready: 4, time: 20, duration: 1000 });
+  state(video()).time = 19.859;
+  await render({ playing: false });
+  await event('canplay'); await event('progress');
+  expect(state(video()).paused).toBe(true);
+  expect(state(video()).seeking).toBe(false);
+  expect(state(video()).writes).toEqual([]);
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+  // Editing the paused destination is still exact, even without a version bump.
+  await render({ time: 21050 });
+  expect(state(video()).writes).toEqual([20.05]);
+});
+
+test('initial positioning is precise even inside the pause tolerance, and large pause offsets still align', async () => {
+  await render({ time: 1100 });
+  await event('loadedmetadata', { ready: 4 });
+  expect(state(video()).writes).toEqual([0.1]);
+  await event('seeked', { seeking: false });
+  await render({ playing: true });
+  state(video()).time = 0.5;
+  await render({ time: 6100, playing: false });
+  expect(state(video()).writes).toEqual([0.1, 5.1]);
+});
+
+test('a half-second startup wait permits cautious recovery before thirty seconds without another seek', async () => {
+  await withFrameCallbacks(async ({ frame }) => {
+    await render({ playing: true, time: 21000 });
+    await event('loadedmetadata', { ready: 4, duration: 1000, ranges: [[0, 1000]], time: 20 });
+    let master = 89;
+    const tick = async () => {
+      clock += 100; master += 0.1;
+      state(video()).time += video().playbackRate * 0.1;
+      frame(); await render({ time: 1000 + master * 1000 });
+    };
+    clock = 1000; await render({ time: 1000 + master * 1000 });
+    expect(video().playbackRate).toBe(3);
+    await event('waiting', { ready: 2 });
+    for (let i = 0; i < 6; i++) { clock += 100; master += 0.1; await render({ time: 1000 + master * 1000 }); }
+    expect(video().playbackRate).toBe(1);
+    await event('canplay', { ready: 4 });
+    for (let i = 0; i < 19; i++) { await tick(); expect(video().playbackRate).toBe(1); }
+    await tick(); expect(video().playbackRate).toBe(1.25);
+    for (let i = 0; i < 60; i++) { await tick(); expect(video().playbackRate).toBeLessThanOrEqual(2); }
+    expect(video().playbackRate).toBe(2);
+    expect(master - state(video()).time).toBeLessThan(69);
+    expect(state(video()).writes).toEqual([]);
+    expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+  });
+});

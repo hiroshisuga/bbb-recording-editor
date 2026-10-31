@@ -89,10 +89,10 @@ test('waiting returns to master speed immediately and sustained waiting backs of
   s.advance(1000, { blocked: true });
   expect(s.events.filter(event => event.event === 'catch-up-backoff' && event.reason === 'waiting')).toHaveLength(1);
   s.controller.ready(s.now());
-  expect(s.update({ blocked: false })).toBe(3);
+  expect(s.update({ blocked: false })).toBe(1);
   expect(s.controller.snapshot(s.now()).catchUpRetryMs).toBeGreaterThan(29000);
-  s.advance(2000); expect(s.rate()).toBe(4);
-  s.advance(2000); expect(s.rate()).toBe(6);
+  s.advance(2000); expect(s.rate()).toBe(1.25);
+  s.advance(2000); expect(s.rate()).toBe(1.5);
   s.controller.close();
 });
 
@@ -149,7 +149,7 @@ test('a long wait invalidates history even when no synchronization tick occurs d
   s.controller.ready(s.now());
   s.update({ ahead: 2.5 }); s.advance(2500);
   expect(s.events.some(event => event.event === 'catch-up-revalidated')).toBe(false);
-  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBeNull();
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBe(1);
   expect(s.events).toContainEqual(expect.objectContaining({ event: 'catch-up-backoff', reason: 'waiting' }));
   s.controller.close();
 });
@@ -262,7 +262,7 @@ test('an unhealthy baseline also limits ordinary correction during the cooldown'
   const s = simulation({ lag: 500, clockSpeed: rate => rate > 1.2 ? 1.1 : rate });
   s.advance(12000);
   expect(s.rate()).toBe(1);
-  expect(s.events.filter(event => event.event === 'catch-up-step')).toHaveLength(1);
+  expect(s.events.filter(event => event.event === 'catch-up-step').map(event => event.rate)).toEqual([3, 1, 1.25]);
   expect(s.controller.snapshot(s.now()).catchUpRetryMs).toBeGreaterThan(19000);
   s.controller.close();
 });
@@ -281,5 +281,61 @@ test('unsupported high rates are remembered across a reset and never retried for
   s.controller.reset(); s.update(); s.advance(10000);
   expect(s.rate()).toBe(4);
   expect(s.events.filter(event => event.event === 'catch-up-step' && event.rate === 6)).toHaveLength(1);
+  s.controller.close();
+});
+
+test.each([1, 2])('after a failed startup stage, smaller probes can recover before the cooldown expires at %sx', base => {
+  const s = simulation({ base, lag: 500 });
+  const failed = s.rate();
+  s.advance(100);
+  s.controller.waiting(s.now()); s.update({ blocked: true });
+  s.advance(540, { blocked: true });
+  s.controller.ready(s.now());
+  expect(s.update({ blocked: false })).toBe(base);
+  expect(s.controller.snapshot(s.now()).catchUpReason).toBe('recovery-baseline');
+  s.advance(1900); expect(s.rate()).toBe(base);
+  s.advance(100); expect(s.rate()).toBe(base === 1 ? 1.25 : 3);
+  s.advance(24000);
+  expect(s.rate()).toBe(base === 1 ? 2 : 3);
+  expect(s.controller.snapshot(s.now()).catchUpRetryMs).toBeGreaterThan(3000);
+  expect(s.events.filter(event => event.event === 'catch-up-step' && event.rate >= failed)).toHaveLength(1);
+  s.advance(6000);
+  expect(s.events.filter(event => event.event === 'catch-up-step' && event.rate === failed)).toHaveLength(2);
+  s.controller.close();
+});
+
+test('recovery below three seconds still observes base progress before trying a smaller increase', () => {
+  const s = simulation(); s.advance(100); s.setLag(2.4);
+  s.controller.waiting(s.now()); s.update({ blocked: true }); s.advance(540, { blocked: true });
+  s.controller.ready(s.now()); s.update({ blocked: false });
+  expect(s.rate()).toBe(1);
+  s.advance(2000);
+  expect(s.rate()).toBe(1.25);
+  s.advance(2000);
+  expect(s.drift()).toBeLessThan(2);
+  s.controller.close();
+});
+
+test.each(['stalled', 'no-frames'])('base-rate %s prevents early retry even with a large reported buffer', failure => {
+  let stalled = false;
+  const s = simulation({ clockSpeed: rate => stalled ? 0 : rate });
+  s.advance(100); s.controller.waiting(s.now()); s.update({ blocked: true });
+  s.advance(540, { blocked: true });
+  if (failure === 'stalled') stalled = true;
+  else s.setFrames(false);
+  s.controller.ready(s.now()); s.update({ blocked: false }); s.advance(6000);
+  expect(s.rate()).toBe(1);
+  expect(s.events.filter(event => event.event === 'catch-up-step' && event.rate > 1)).toHaveLength(1);
+  s.controller.close();
+});
+
+test('hidden tabs cannot bypass the base-rate recovery observation', () => {
+  const s = simulation({ lag: 500 });
+  s.advance(100); s.controller.waiting(s.now()); s.update({ blocked: true }); s.advance(540, { blocked: true });
+  s.controller.ready(s.now()); s.update({ blocked: false, visible: false }); s.advance(3000);
+  expect(s.rate()).toBe(1);
+  expect(s.hasCallback()).toBe(false);
+  s.update({ visible: true }); s.advance(2000);
+  expect(s.rate()).toBe(1.25);
   s.controller.close();
 });
