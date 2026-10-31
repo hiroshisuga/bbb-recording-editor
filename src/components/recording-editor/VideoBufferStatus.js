@@ -1,16 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { useEditorI18n } from './i18n';
-
-// Only the continuous range containing the current position can feed playback.
-// A distant range cached by an earlier seek must not inflate the number.
-function bufferedAhead(video, position) {
-  const ranges = video.buffered;
-  for (let i = 0; i < ranges.length; i++) {
-    if (ranges.start(i) <= position && position <= ranges.end(i)) return Math.max(0, ranges.end(i) - position);
-  }
-  return 0;
-}
+import { bufferedAhead } from './videoSync';
 
 export default function VideoBufferStatus({ videoRef, clip, time, playing, attempt }) {
   const { t } = useEditorI18n();

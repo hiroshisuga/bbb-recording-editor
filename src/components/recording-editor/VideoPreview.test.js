@@ -7,7 +7,7 @@ import { EditorLanguageProvider, LANGUAGE_KEY } from './i18n';
 let container, root, props, clock;
 const states = new WeakMap();
 const state = video => {
-  if (!states.has(video)) states.set(video, { time: 0, ready: 0, seeking: false, paused: true, duration: 30, writes: [] });
+  if (!states.has(video)) states.set(video, { time: 0, ready: 0, seeking: false, paused: true, duration: 30, writes: [], ranges: [[0, 100]] });
   return states.get(video);
 };
 const clip = { id: 'screen-one', kind: 'deskshare', start_ms: 1000, end_ms: 31000,
@@ -30,6 +30,10 @@ beforeEach(() => {
   for (const [name, key] of Object.entries({ currentTime: 'time', readyState: 'ready', seeking: 'seeking', paused: 'paused', duration: 'duration' })) {
     jest.spyOn(HTMLMediaElement.prototype, name, 'get').mockImplementation(function get() { return state(this)[key]; });
   }
+  jest.spyOn(HTMLMediaElement.prototype, 'buffered', 'get').mockImplementation(function get() {
+    const ranges = state(this).ranges;
+    return { length: ranges.length, start: i => ranges[i][0], end: i => ranges[i][1] };
+  });
   jest.spyOn(HTMLMediaElement.prototype, 'currentTime', 'set').mockImplementation(function set(value) {
     const media = state(this);
     if (!media.ready) throw new DOMException('Metadata not loaded', 'InvalidStateError');
@@ -79,9 +83,10 @@ test('a slow seek can finish and render before following the moving audio clock'
   expect(state(video()).writes).toEqual([2]);
   clock = 1000;
   await render({ time: 6100 });
-  expect(state(video()).writes).toEqual([2, 5.1]);
+  expect(state(video()).writes).toEqual([2]);
+  expect(video().playbackRate).toBeGreaterThan(1);
   await event('seeked', { seeking: false });
-  expect(state(video()).writes).toEqual([2, 5.1]);
+  expect(state(video()).writes).toEqual([2]);
 });
 
 test('normal playback advances without repeated play calls or seeks, and rate changes do not restart playback', async () => {
@@ -229,7 +234,8 @@ test('buffer starvation never starts automatic seeks, even as the audio clock ke
   await render({ time: 12100 });
   expect(state(video()).writes).toEqual([]);
   await event('canplay');
-  expect(state(video()).writes).toEqual([11.1]);
+  expect(state(video()).writes).toEqual([]);
+  expect(video().playbackRate).toBe(2);
   expect(state(video()).paused).toBe(false);
 });
 
@@ -237,52 +243,54 @@ test('small drift adjusts only the video rate, returns to the requested rate, an
   await render({ playing: true, rate: 2 }); await event('loadedmetadata', { ready: 4 });
   clock = 1000;
   await render({ time: 1400 });
-  expect(video().playbackRate).toBeCloseTo(2.1);
+  expect(video().playbackRate).toBeCloseTo(2.2);
   await event('waiting');
   expect(video().playbackRate).toBe(2);
   state(video()).time = 0.8; await event('canplay');
-  expect(video().playbackRate).toBeCloseTo(1.9);
+  expect(video().playbackRate).toBeCloseTo(1.8);
   state(video()).time = 0.4; await render({ time: 1450 });
   expect(video().playbackRate).toBe(2);
   expect(state(video()).writes).toEqual([]);
 });
 
-test('automatic seeks wait three seconds after a slow seek completes; explicit seeks bypass the cooldown', async () => {
-  await render({ playing: true }); await event('loadedmetadata', { ready: 4 });
-  clock = 1000; await render({ time: 3000 });
-  expect(state(video()).writes).toEqual([2]);
-  clock = 10000; await render({ time: 12000 });
-  await event('seeked', { seeking: false });
-  expect(state(video()).writes).toEqual([2]);
-  clock = 12999; await render({ time: 15000 });
-  expect(state(video()).writes).toEqual([2]);
-  clock = 13000; await render({ time: 15100 });
-  expect(state(video()).writes).toEqual([2, 14.1]);
-  await event('seeked', { seeking: false });
+test('large drift never causes automatic seeks or reloads, and an explicit seek remains immediate', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 4, duration: 200 });
+  for (const at of [1000, 10000, 13000, 60000]) {
+    clock = at; await render({ time: at + 3000 });
+    expect(state(video()).writes).toEqual([]);
+    expect(video().playbackRate).toBeGreaterThan(1);
+    expect(video().playbackRate).toBeLessThanOrEqual(2);
+  }
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
   await render({ time: 6000, seekVersion: 1 });
-  expect(state(video()).writes).toEqual([2, 14.1, 5]);
-  expect(container.querySelector('[role="status"]')).toBeNull();
+  expect(state(video()).writes).toEqual([5]);
+  expect(video().playbackRate).toBe(1);
 });
 
-async function correctAt(at) {
+async function lagAt(at, lag = 2) {
   clock = at;
-  state(video()).time = (at - 2000) / 1000;
+  state(video()).time = at / 1000 - lag;
   await render({ time: at + 1000 });
-  await event('seeked', { seeking: false, ready: 4 });
 }
 
-test('four automatic screen corrections within 30 seconds show a dismissible warning once per source', async () => {
-  await render({ playing: true }); await event('loadedmetadata', { ready: 4 });
-  for (const at of [4000, 8000, 12000]) await correctAt(at);
+test('persistent screen drift warns after ten seconds, clears on recovery, and can be dismissed for the source', async () => {
+  await render({ playing: true }); await event('loadedmetadata', { ready: 4, duration: 100 });
+  for (const at of [4000, 8000, 12000]) await lagAt(at);
   expect(container.querySelector('[role="status"]')).toBeNull();
-  await correctAt(16000);
+  await lagAt(16000);
   expect(container.querySelector('[role="status"]').textContent).toContain('Audio playback continues');
-  expect(state(video()).paused).toBe(false);
+  await lagAt(18000, 0.1);
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  await lagAt(20000); await lagAt(30000);
+  expect(container.querySelector('[role="status"]')).not.toBeNull();
   await act(async () => Simulate.click(container.querySelector('button')));
-  await correctAt(20000);
+  await lagAt(32000, 0.1); await lagAt(34000); await lagAt(46000);
   expect(container.querySelector('[role="status"]')).toBeNull();
+  expect(state(video()).writes).toEqual([]);
   await render({ clip: { ...clip, url: '/raw/deskshare/two.webm' } });
-  expect(container.querySelector('[role="status"]')).toBeNull();
+  await event('loadedmetadata', { ready: 4, duration: 100, time: 46 });
+  await lagAt(50000); await lagAt(60000);
+  expect(container.querySelector('[role="status"]')).not.toBeNull();
 });
 
 test('manual seeks and paused positioning never count as automatic corrections', async () => {
@@ -296,26 +304,28 @@ test('manual seeks and paused positioning never count as automatic corrections',
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
-test('old corrections expire and a user seek starts a fresh observation window', async () => {
+test('brief drifts and pauses reset the persistent-drift observation period', async () => {
   await render({ playing: true }); await event('loadedmetadata', { ready: 4, duration: 100 });
-  for (const at of [4000, 8000, 12000]) await correctAt(at);
-  await correctAt(48000);
+  await lagAt(4000); await lagAt(12000); await lagAt(13000, 0.1);
+  await lagAt(16000); await lagAt(24000);
   expect(container.querySelector('[role="status"]')).toBeNull();
-  await render({ time: 1000, seekVersion: 1 }); await event('seeked', { seeking: false });
-  for (const at of [52000, 56000, 60000]) await correctAt(at);
+  await render({ playing: false }); await event('seeked', { seeking: false });
+  await render({ playing: true });
+  await lagAt(28000); await lagAt(36000);
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
-test('camera corrections use the same limits without showing a screen-sharing warning', async () => {
+test('cameras use rate correction without a screen-sharing warning or diagnostic overlay', async () => {
   await render({ clip: { ...clip, kind: 'video' }, playing: true });
   await event('loadedmetadata', { ready: 4 });
-  for (const at of [4000, 8000, 12000, 16000]) await correctAt(at);
-  expect(state(video()).writes).toHaveLength(4);
+  for (const at of [4000, 8000, 12000, 16000]) await lagAt(at);
+  expect(state(video()).writes).toEqual([]);
+  expect(video().playbackRate).toBeGreaterThan(1);
   expect(container.querySelector('.re-video-buffer')).toBeNull();
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
-test('trace distinguishes automatic correction from explicit seeks and records buffer loss before and after assignment', async () => {
+test('trace identifies rate-based sync and logs explicit seeks without any automatic seek request', async () => {
   window.bbbEditorVideoDebug = true;
   jest.spyOn(console, 'info').mockImplementation(() => {});
   try {
@@ -323,14 +333,63 @@ test('trace distinguishes automatic correction from explicit seeks and records b
     Object.defineProperty(video(), 'buffered', { configurable: true, get: () => ({ length: 1, start: () => 0, end: () => 1.5 }) });
     await event('loadedmetadata', { ready: 4 });
     clock = 1000; await render({ time: 3000 });
+    expect(window.bbbEditorVideoLogs.some(r => r.event === 'seek-request')).toBe(false);
+    expect(window.bbbEditorVideoLogs.some(r => r.syncPolicy === 'playback-rate')).toBe(true);
+    await render({ time: 5000, seekVersion: 1 });
     const request = window.bbbEditorVideoLogs.find(r => r.event === 'seek-request');
     const assigned = window.bbbEditorVideoLogs.find(r => r.event === 'seek-assigned');
-    expect(request).toEqual(expect.objectContaining({ reason: 'automatic-drift', videoTimeS: 0, targetTimeS: 2, bufferAheadS: 1.5, targetBufferAheadS: 0 }));
-    expect(assigned).toEqual(expect.objectContaining({ reason: 'automatic-drift', videoTimeS: 2, bufferAheadS: 0, seeking: true }));
-    await event('seeked', { seeking: false });
-    await render({ time: 5000, seekVersion: 1 });
-    expect(window.bbbEditorVideoLogs.filter(r => r.event === 'seek-request').map(r => r.reason)).toEqual(['automatic-drift', 'user-seek']);
+    expect(request).toEqual(expect.objectContaining({ reason: 'user-seek', videoTimeS: 0, targetTimeS: 4, bufferAheadS: 1.5, targetBufferAheadS: 0 }));
+    expect(assigned).toEqual(expect.objectContaining({ reason: 'user-seek', videoTimeS: 4, bufferAheadS: 0, seeking: true }));
+    expect(window.bbbEditorVideoLogs.filter(r => r.event === 'seek-request').map(r => r.reason)).toEqual(['user-seek']);
   } finally {
     delete window.bbbEditorVideoDebug; delete window.bbbEditorVideoLogs;
   }
+});
+
+
+test.each([1, 2])('a slow-seek backlog converges by rate with an uninterrupted master clock at %sx', async rate => {
+  await render({ playing: true, rate });
+  await event('loadedmetadata', { ready: 4, duration: 300 });
+  let master = 20;
+  state(video()).ranges = [[0, 300]];
+  for (let i = 0; i < 400; i++) {
+    clock += 100;
+    master += rate * 0.1;
+    state(video()).time += video().playbackRate * 0.1;
+    await render({ time: 1000 + master * 1000 });
+  }
+  expect(Math.abs(master - state(video()).time)).toBeLessThan(0.2);
+  expect(video().playbackRate).toBe(rate);
+  expect(state(video()).writes).toEqual([]);
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+  expect(master).toBeCloseTo(20 + 40 * rate);
+});
+
+test('catch-up respects available buffering and returns to the user rate on pause and readiness loss', async () => {
+  await render({ playing: true, rate: 2 }); await event('loadedmetadata', { ready: 4 });
+  state(video()).ranges = [[0, 5]]; clock = 1000;
+  await render({ time: 11000 });
+  expect(video().playbackRate).toBe(2.5);
+  state(video()).ranges = [[0, 2]]; clock = 2000;
+  await render({ time: 12000 });
+  expect(video().playbackRate).toBe(2);
+  state(video()).ranges = [[0, 100]];
+  await event('progress'); await render({ time: 13000 });
+  expect(video().playbackRate).toBe(4);
+  await event('waiting', { ready: 2 });
+  expect(video().playbackRate).toBe(2);
+  await event('canplay', { ready: 4 });
+  expect(video().playbackRate).toBe(4);
+  await render({ playing: false });
+  expect(video().playbackRate).toBe(2);
+});
+
+
+test.each([1, 2])('a video far ahead slows down without seeking backward (master %sx)', async rate => {
+  await render({ playing: true, rate }); await event('loadedmetadata', { ready: 4, duration: 200 });
+  state(video()).time = 80; clock = 1000;
+  await render({ time: 21000 });
+  expect(video().playbackRate).toBe(rate * 0.5);
+  expect(state(video()).writes).toEqual([]);
+  expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
 });
