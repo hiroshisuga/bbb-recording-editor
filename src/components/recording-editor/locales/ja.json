@@ -202,5 +202,14 @@
   "meetingPeriod": "期間",
   "meetingPeriodLabel": "会議の期間",
   "meetingPeriodAll": "すべての期間",
-  "meetingPeriodDays": "過去{days}日"
+  "meetingPeriodDays": "過去{days}日",
+  "cutChime": "編集した省略箇所に合図音を入れる",
+  "cutChimeSample": "合図音A：柔らかい二音の試聴",
+  "cutChimeOff": "OFF",
+  "cutChimeCount": "{count}か所",
+  "cutChimeConfirmTitle": "除外区間の一部を録画に含めます",
+  "cutChimeWarning": "合図音のため、対象の除外区間の一部（1か所につき最大0.25秒）を録画に含めます。この間の元のマイク音声・画面共有内の音声は合図音に置き換えますが、映像・スライド・チャットなどは録画に含まれることがあります。外部共有動画の音声は加工しません。",
+  "cutChimeAccept": "確認して有効にする",
+  "cutChimeCancel": "キャンセル",
+  "cutChimeHint": "音Aを使用。上のプレイヤーで試聴できます。rawへ保存後、録画を再構築して反映します。会議全体の編集用プレビューでは合図音を再生しません。"
 }
