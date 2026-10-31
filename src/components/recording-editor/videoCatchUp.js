@@ -3,6 +3,7 @@ import { synchronizationRate } from './videoSync';
 const STEPS = [0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 12];
 const WINDOW_MS = 2000;
 const RETRY_MS = 30000;
+const BRIEF_WAIT_MS = 200;
 
 // Only the muted video is controlled. No audio element, seek, or media fetch is
 // needed: keep two frame timestamps per observation window, not decoded images.
@@ -14,6 +15,7 @@ export function createVideoCatchUp(video, report = () => {}) {
   let last = null, reason = 'idle', waitingAt = null, waitMs = 0;
   let retryAfter = 0, retryCeiling = Infinity, supportedCeiling = 12;
   let measuredCeiling = null, finishing = false;
+  let resumeCeiling = null;
   const emit = (event, values) => report(event, values);
   const stopFrames = () => {
     generation++;
@@ -39,6 +41,7 @@ export function createVideoCatchUp(video, report = () => {}) {
     if (active) emit('catch-up-stop', { reason: why });
     active = false; window = null; good = []; pending = null; last = null;
     waitingAt = null; waitMs = 0; reason = why;
+    resumeCeiling = null;
     if (why === 'tail') finishing = true;
     stopFrames();
   };
@@ -46,12 +49,27 @@ export function createVideoCatchUp(video, report = () => {}) {
     stop('reset'); retryAfter = 0; retryCeiling = Infinity; measuredCeiling = null; finishing = false;
   };
   const waiting = now => {
+    if (waitingAt === null) {
+      // Quarantine the last verified speed; never use it while data is waiting.
+      resumeCeiling = measuredCeiling;
+      waitingAt = now;
+    }
     measuredCeiling = null;
     finishing = false;
-    if (active && waitingAt === null) waitingAt = now;
   };
   const ready = now => {
-    if (waitingAt !== null) { waitMs += Math.max(0, now - waitingAt); waitingAt = null; }
+    if (waitingAt === null) return;
+    waitMs += Math.max(0, now - waitingAt);
+    waitingAt = null;
+    if (waitMs <= BRIEF_WAIT_MS && resumeCeiling !== null) {
+      const retained = resumeCeiling;
+      stop('brief-wait');
+      resumeCeiling = retained;
+    } else if (waitMs > BRIEF_WAIT_MS) {
+      if (active) { backoff(now, 'waiting'); stop('waiting'); }
+      measuredCeiling = null;
+      resumeCeiling = null;
+    }
   };
   const begin = (now, drift, rate) => {
     window = { at: now, time: video.currentTime, drift, rate, first: null, last: null };
@@ -59,6 +77,7 @@ export function createVideoCatchUp(video, report = () => {}) {
     if (waitingAt !== null) waitingAt = now;
   };
   const backoff = (now, why) => {
+    resumeCeiling = null;
     // A failed probe was never added to good. A failing held speed steps down.
     if (!pending && good.length > 1) good.pop();
     pending = null;
@@ -78,21 +97,22 @@ export function createVideoCatchUp(video, report = () => {}) {
     if (!alive || !supported) return blocked ? rate : fallback;
     if (!visible || drift <= 0.5) {
       if (active) stop(!visible ? 'hidden' : 'tail');
-      if (!visible) measuredCeiling = null;
+      resumeCeiling = null;
+      if (!visible) { measuredCeiling = null; waitingAt = null; }
       return blocked ? rate : !visible ? Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead)) : fallback;
     }
     if (blocked) {
       waiting(now);
-      if (active && window && waitMs + now - waitingAt > 200) {
+      if (active && window && waitMs + now - waitingAt > BRIEF_WAIT_MS) {
         backoff(now, 'waiting'); stop('waiting'); measuredCeiling = null;
       }
       return rate;
     }
     ready(now);
     if (!active) {
-      if (drift < 3 || (finishing && drift < 8) ||
+      if ((resumeCeiling === null && (drift < 3 || (finishing && drift < 8))) ||
         (now < retryAfter && retryCeiling <= fallback) || supportedCeiling <= fallback) return fallback;
-      active = true; good = []; pending = null; reason = 'baseline';
+      active = true; good = []; pending = null; reason = resumeCeiling === null ? 'baseline' : 'revalidate';
       begin(now, drift, fallback); observe();
       if (!active) return fallback;
       emit('catch-up-step', { reason, rate: fallback });
@@ -136,6 +156,16 @@ export function createVideoCatchUp(video, report = () => {}) {
           }
           if (!good.length) { stop('slow-progress'); return Math.min(fallback, rate); }
         } else {
+          if (resumeCeiling !== null) {
+            // Fresh frame/clock evidence at ordinary correction speed is needed
+            // before a brief interruption's previous ceiling can be reused.
+            const ceiling = Math.min(resumeCeiling, fallbackCeiling);
+            const observation = last;
+            stop('revalidated');
+            measuredCeiling = ceiling;
+            emit('catch-up-revalidated', { measuredRateCeiling: ceiling, ...observation });
+            return Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead, ceiling));
+          }
           const measured = { rate: window.rate, effective, recovery: last.lagRecoveryRate };
           if (pending !== null || !good.length) good.push(measured);
           else good[good.length - 1] = measured;

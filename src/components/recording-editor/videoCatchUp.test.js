@@ -2,6 +2,7 @@ import { createVideoCatchUp } from './videoCatchUp';
 
 function simulation({ base = 1, lag = 60, clockSpeed = rate => rate, frameSpeed = clockSpeed, frames = true } = {}) {
   let now = 0, master = 20 + lag, frameTime = 20, selected = base, callback = null, nextId = 0;
+  let framesEnabled = frames;
   const video = { currentTime: 20,
     requestVideoFrameCallback: jest.fn(fn => { callback = fn; return ++nextId; }),
     cancelVideoFrameCallback: jest.fn(() => { callback = null; }),
@@ -22,12 +23,13 @@ function simulation({ base = 1, lag = 60, clockSpeed = rate => rate, frameSpeed 
       master += base * seconds;
       video.currentTime += clockSpeed(selected) * seconds;
       frameTime += frameSpeed(selected) * seconds;
-      if (callback && frames) { const fn = callback; callback = null; fn(now, { mediaTime: frameTime }); }
+      if (callback && framesEnabled) { const fn = callback; callback = null; fn(now, { mediaTime: frameTime }); }
       update(changes);
     }
   };
   update();
   return { video, controller, events, advance, update, now: () => now, rate: () => selected,
+    setLag: lag => { master = video.currentTime + lag; }, setFrames: enabled => { framesEnabled = enabled; },
     drift: () => master - video.currentTime, hasCallback: () => callback !== null, callback: () => callback };
 }
 
@@ -91,6 +93,103 @@ test('waiting returns to master speed immediately and sustained waiting backs of
   expect(s.controller.snapshot(s.now()).catchUpRetryMs).toBeGreaterThan(29000);
   s.advance(2000); expect(s.rate()).toBe(4);
   s.advance(2000); expect(s.rate()).toBe(6);
+  s.controller.close();
+});
+
+function briefWait(s, ms = 11, base = 1) {
+  s.controller.waiting(s.now());
+  expect(s.update({ blocked: true })).toBe(base);
+  s.advance(ms, { blocked: true });
+  s.controller.ready(s.now());
+  s.update({ blocked: false, ahead: 2.5 });
+}
+
+test('a brief wait revalidates at ordinary speed before restoring history even below three seconds of lag', () => {
+  const s = simulation(); s.advance(2000);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBe(3);
+  s.setLag(2.4);
+  briefWait(s);
+  expect(s.rate()).toBe(1.25);
+  expect(s.controller.snapshot(s.now())).toEqual(expect.objectContaining({ catchUpReason: 'revalidate', measuredRateCeiling: null }));
+  s.advance(1900);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBeNull();
+  s.advance(100);
+  expect(s.events).toContainEqual(expect.objectContaining({ event: 'catch-up-revalidated', measuredRateCeiling: 3 }));
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBe(3);
+  expect(s.rate()).toBeGreaterThan(1.25);
+  const start = s.now();
+  while (s.drift() > 0.15 && s.now() - start < 5000) { s.advance(100); expect(s.drift()).toBeGreaterThan(-0.15); }
+  expect(s.drift()).toBeLessThanOrEqual(0.15);
+  expect(s.rate()).toBe(1);
+  s.controller.close();
+});
+
+test('brief waiting during fine correction also rechecks the retained speed', () => {
+  const s = simulation(); s.advance(2000); s.setLag(2);
+  s.update();
+  expect(s.controller.snapshot(s.now()).catchUpPhase).toBe('idle');
+  briefWait(s); s.advance(2000);
+  expect(s.events).toContainEqual(expect.objectContaining({ event: 'catch-up-revalidated', measuredRateCeiling: 3 }));
+  s.controller.close();
+});
+
+test('revalidation can restore history at 2x audio even if ordinary video correction cannot yet close the gap', () => {
+  const s = simulation({ base: 2 }); s.advance(2000); s.setLag(4.8);
+  briefWait(s, 11, 2);
+  expect(s.rate()).toBe(2);
+  s.advance(2000);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBe(4);
+  expect(s.rate()).toBe(4);
+  s.controller.close();
+});
+
+test('a long wait invalidates history even when no synchronization tick occurs during the wait', () => {
+  const s = simulation(); s.advance(2000); s.setLag(2.4);
+  s.controller.waiting(s.now() - 300);
+  s.controller.ready(s.now());
+  s.update({ ahead: 2.5 }); s.advance(2500);
+  expect(s.events.some(event => event.event === 'catch-up-revalidated')).toBe(false);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBeNull();
+  expect(s.events).toContainEqual(expect.objectContaining({ event: 'catch-up-backoff', reason: 'waiting' }));
+  s.controller.close();
+});
+
+test('slow frames after a brief wait cannot restore an earlier successful speed', () => {
+  let slow = false;
+  const s = simulation({ frameSpeed: rate => slow ? 0.2 : rate });
+  s.advance(2000); s.setLag(2.4); slow = true;
+  briefWait(s); s.advance(2200);
+  expect(s.events.some(event => event.event === 'catch-up-revalidated')).toBe(false);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBeNull();
+  expect(s.rate()).toBe(1);
+  s.controller.close();
+});
+
+test('missing frames cannot restore a retained speed', () => {
+  const s = simulation(); s.advance(2000); s.setLag(2.4); s.setFrames(false);
+  briefWait(s); s.advance(3600);
+  expect(s.events.some(event => event.event === 'catch-up-revalidated')).toBe(false);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).toBeNull();
+  expect(s.hasCallback()).toBe(false);
+  s.controller.close();
+});
+
+test('another wait during revalidation discards the unconfirmed history', () => {
+  const s = simulation(); s.advance(2000); s.setLag(2.4);
+  briefWait(s); s.advance(300); briefWait(s); s.advance(2500);
+  expect(s.events.some(event => event.event === 'catch-up-revalidated')).toBe(false);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).not.toBe(3);
+  s.controller.close();
+});
+
+test.each(['reset', 'hidden', 'rate'])('%s prevents reusing the brief-wait history', action => {
+  const s = simulation(); s.advance(2000); s.setLag(2.4); briefWait(s);
+  if (action === 'reset') s.controller.reset();
+  else if (action === 'hidden') s.update({ visible: false });
+  else s.update({ rate: 2 });
+  s.advance(2500);
+  expect(s.events.some(event => event.event === 'catch-up-revalidated')).toBe(false);
+  expect(s.controller.snapshot(s.now()).measuredRateCeiling).not.toBe(3);
   s.controller.close();
 });
 
