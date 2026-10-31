@@ -21,7 +21,7 @@ beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.useFakeTimers();
   localStorage.setItem(LANGUAGE_KEY, 'en');
-  media = { time: 5, ready: 4, seeking: false, ended: false, duration: 30, error: null, ranges: [[0, 9]] };
+  media = { time: 5, ready: 4, seeking: false, ended: false, duration: 30, error: null, rate: 1, ranges: [[0, 9]] };
   for (const [name, key] of Object.entries({ currentTime: 'time', readyState: 'ready', seeking: 'seeking', ended: 'ended', duration: 'duration' })) {
     jest.spyOn(HTMLMediaElement.prototype, name, 'get').mockImplementation(() => media[key]);
   }
@@ -30,6 +30,7 @@ beforeEach(() => {
     return { length: ranges.length, start: i => ranges[i][0], end: i => ranges[i][1] };
   });
   jest.spyOn(HTMLMediaElement.prototype, 'currentTime', 'set').mockImplementation(() => { throw new Error('Diagnostics must not seek'); });
+  jest.spyOn(HTMLMediaElement.prototype, 'playbackRate', 'get').mockImplementation(() => media.rate);
   jest.spyOn(HTMLMediaElement.prototype, 'playbackRate', 'set').mockImplementation(() => { throw new Error('Diagnostics must not change rate'); });
   for (const method of ['play', 'pause', 'load']) jest.spyOn(HTMLMediaElement.prototype, method).mockImplementation(() => { throw new Error(`Diagnostics must not ${method}`); });
   video = document.createElement('video');
@@ -134,4 +135,35 @@ test('samples only media state without mutating playback or making live announce
   await act(async () => jest.advanceTimersByTime(2000));
   for (const method of ['play', 'pause', 'load']) expect(HTMLMediaElement.prototype[method]).not.toHaveBeenCalled();
   expect(container.querySelector('[aria-live], [role="status"]')).toBeNull();
+});
+
+
+test('shows catch-up speed, resumes ordinary playing after alignment, and prioritizes buffering/seeking', async () => {
+  await render({ time: 9000 });
+  expect(status().dataset.state).toBe('syncing');
+  expect(status().textContent).toContain('Synchronizing with audio (video 1×)');
+  await event('ratechange', { rate: 2.5 });
+  expect(status().dataset.state).toBe('catchingUp');
+  expect(status().textContent).toContain('Catching up to audio (video 2.5×)');
+  await event('waiting', { ready: 2 });
+  expect(status().dataset.state).toBe('waiting');
+  await event('seeking', { seeking: true });
+  expect(status().dataset.state).toBe('seeking');
+  await event('canplay', { ready: 4, seeking: false });
+  expect(status().dataset.state).toBe('catchingUp');
+  await render({ time: 6000 }); await event('ratechange', { rate: 1 });
+  expect(status().dataset.state).toBe('playing');
+  expect(status().textContent).toContain('Playing');
+});
+
+test('compares catch-up to the requested audio speed, not a fixed 1x', async () => {
+  await render({ time: 9000, rate: 2 });
+  await event('ratechange', { rate: 2 });
+  expect(status().dataset.state).toBe('syncing');
+  await event('ratechange', { rate: 3 });
+  expect(status().dataset.state).toBe('catchingUp');
+  await render({ time: 4000 }); await event('ratechange', { rate: 1.5 });
+  expect(status().dataset.state).toBe('syncing');
+  await render({ playing: false }); await event('pause');
+  expect(status().dataset.state).toBe('paused');
 });

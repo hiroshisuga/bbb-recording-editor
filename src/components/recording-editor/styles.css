@@ -62,6 +62,7 @@
 .re-video>span,.re-slide-label { position:absolute; bottom:8px; left:10px; padding:1px 7px; border-radius:3px; background:#172334dd; color:#cad8e6; font-size:11px; z-index:2; }
 .re-video-buffer { position:absolute; bottom:34px; left:8px; right:8px; z-index:2; display:flex; flex-wrap:wrap; gap:2px 12px; width:fit-content; max-width:calc(100% - 16px); padding:3px 7px; border-radius:3px; background:#101c2be6; color:#d6e5f5; font-size:11px; font-variant-numeric:tabular-nums; pointer-events:auto; }
 .re-video-buffer[data-state=waiting],.re-video-buffer[data-state=seeking] { color:#ffe0a3; }
+.re-video-buffer[data-state=catchingUp],.re-video-buffer[data-state=syncing] { color:#a9e9ff; }
 .re-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#8395a9; font-size:13px; }
 .re-slide { position:relative; width:100%; height:100%; background:#000; }
 /* Tldraw image containers explicitly enable pointer events; let page scrolling pass through. */

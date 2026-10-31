@@ -3,11 +3,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { bufferedAhead } from './videoSync';
 
-export default function VideoBufferStatus({ videoRef, clip, time, playing, attempt }) {
+export default function VideoBufferStatus({ videoRef, clip, time, playing, rate = 1, attempt }) {
   const { t } = useEditorI18n();
-  const latest = useRef({ clip, time, playing });
+  const latest = useRef({ clip, time, playing, rate });
   const [sample, setSample] = useState(null);
-  useEffect(() => { latest.current = { clip, time, playing }; }, [clip, time, playing]);
+  useEffect(() => { latest.current = { clip, time, playing, rate }; }, [clip, time, playing, rate]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -24,18 +24,22 @@ export default function VideoBufferStatus({ videoRef, clip, time, playing, attem
       if (Number.isFinite(video.duration) && video.duration >= origin) {
         target = Math.min(target, Math.max(origin, video.duration - 0.001));
       }
+      const drift = ready ? target - position : null;
+      const videoRate = Number(video.playbackRate.toFixed(2));
       const state = video.error ? 'error' : !ready ? 'loading' : video.seeking ? 'seeking'
         : video.ended ? 'ended' : !current.playing ? 'paused'
-          : waiting || video.readyState < 3 ? 'waiting' : 'playing';
+          : waiting || video.readyState < 3 ? 'waiting'
+            : drift > 0.15 && videoRate > current.rate + 0.01 ? 'catchingUp'
+              : drift > 0.15 || (drift < -0.15 && videoRate < current.rate - 0.01) ? 'syncing' : 'playing';
       const next = {
         ahead: ready ? bufferedAhead(video, position).toFixed(1) : null,
         // This is the media clock, not the last frame painted by the browser.
-        drift: ready ? Math.round((target - position) * 10) / 10 : null,
-        state,
+        drift: ready ? Math.round(drift * 10) / 10 : null,
+        videoRate, state,
       };
-      setSample(previous => previous && previous.ahead === next.ahead && previous.drift === next.drift && previous.state === next.state ? previous : next);
+      setSample(previous => previous && previous.ahead === next.ahead && previous.drift === next.drift && previous.state === next.state && previous.videoRate === next.videoRate ? previous : next);
     };
-    const events = ['progress', 'waiting', 'canplay', 'playing', 'seeking', 'seeked', 'loadedmetadata', 'loadeddata', 'emptied', 'pause', 'play', 'ended', 'error'];
+    const events = ['progress', 'waiting', 'canplay', 'playing', 'seeking', 'seeked', 'loadedmetadata', 'loadeddata', 'emptied', 'pause', 'play', 'ratechange', 'ended', 'error'];
     events.forEach(name => video.addEventListener(name, update));
     const timer = setInterval(update, 500);
     update();
@@ -51,6 +55,6 @@ export default function VideoBufferStatus({ videoRef, clip, time, playing, attem
   return <div className="re-video-buffer" role="group" aria-label={t('videoBufferDiagnostics')} title={t('videoBufferHint')} data-state={sample?.state || 'loading'}>
     <span>{t('videoBufferAhead', { seconds: sample?.ahead ?? '—' })}</span>
     <span>{difference}</span>
-    <span>{t(`videoState_${sample?.state || 'loading'}`)}</span>
+    <span>{t(`videoState_${sample?.state || 'loading'}`, { rate: sample?.videoRate ?? rate })}</span>
   </div>;
 }

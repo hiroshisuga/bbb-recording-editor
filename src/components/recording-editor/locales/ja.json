@@ -164,6 +164,8 @@
   "videoState_waiting": "映像データ待ち",
   "videoState_seeking": "シーク中",
   "videoState_paused": "一時停止",
+  "videoState_catchingUp": "音声に追いつくため増速中（映像{rate}倍速）",
+  "videoState_syncing": "音声への同期を調整中（映像{rate}倍速）",
   "videoState_playing": "再生中",
   "videoState_ended": "映像終了",
   "videoState_error": "映像エラー",

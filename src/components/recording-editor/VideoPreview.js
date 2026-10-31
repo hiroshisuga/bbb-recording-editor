@@ -37,7 +37,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     let driftSince = null;
     let warned = false;
     warningDismissed.current = false;
-    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight: false, syncPolicy: 'playback-rate' }));
+    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight: false, syncPolicy: 'adaptive-playback-rate' }));
     setError('');
     setSyncWarning(false);
     // Muted playback must also be set on the media element, not just its markup.
@@ -155,7 +155,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
   return <div className="re-video">
     <video ref={ref} key={`${clip.url}:${attempt}`} src={clip.url} muted playsInline preload="auto" />
     <span>{clip.kind === 'deskshare' ? t('screen') : clip.user || t('camera')}</span>
-    {clip.kind === 'deskshare' && !error && <VideoBufferStatus videoRef={ref} clip={clip} time={time} playing={playing} attempt={attempt} />}
+    {clip.kind === 'deskshare' && !error && <VideoBufferStatus videoRef={ref} clip={clip} time={time} playing={playing} rate={rate} attempt={attempt} />}
     {syncWarning && !error && <p className="re-render-warning" role="status">{t('videoSyncWarning')} <button onClick={() => { warningDismissed.current = true; setSyncWarning(false); }}>{t('videoSyncDismiss')}</button></p>}
     {error && <p className="re-render-warning" role="alert">{t('videoError', { file: clip.relative })} {error} <button onClick={() => setAttempt(value => value + 1)}>{t('videoRetry')}</button></p>}
   </div>;
