@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { EditorLanguageProvider, languages, useEditorI18n } from './i18n';
 import ExternalVideoPlayer from 'components/external-video-player';
 import SlidePreview from './SlidePreview';
 import DetailWaveform from './DetailWaveform';
+import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection } from './SelectionMarkers';
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import useAudioPreview from './useAudioPreview';
@@ -39,18 +40,19 @@ function externalEventDescription(event, t) {
   return details.join(' · ');
 }
 
-function TimeField({ value, onChange, label, max, onFocus }) {
+function TimeField({ value, onChange, label, max, onFocus, optional = false }) {
   const { t } = useEditorI18n();
-  const [text, setText] = useState(formatTime(value));
+  const [text, setText] = useState(value == null ? '' : formatTime(value));
   const [invalid, setInvalid] = useState(false);
-  useEffect(() => { setText(formatTime(value)); setInvalid(false); }, [value]);
+  useEffect(() => { setText(value == null ? '' : formatTime(value)); setInvalid(false); }, [value]);
   const commit = () => {
+    if (optional && !text.trim()) { onChange(null); setText(''); setInvalid(false); return; }
     const parsed = parseTime(text);
     if (parsed === null || parsed > max || onChange(parsed) === false) { setInvalid(true); return; }
     setText(formatTime(parsed)); setInvalid(false);
   };
   return <input className={invalid ? 're-time invalid' : 're-time'} aria-label={label} title={invalid ? t('invalidTime') : t('timeFormat')}
-    value={text} onFocus={onFocus} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
+    placeholder={optional ? t('endpointUnset') : undefined} aria-invalid={invalid} value={text} onFocus={onFocus} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
 function RangeRows({ label, ranges, onChange, duration, seek }) {
@@ -78,6 +80,20 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const ref = useRef(null);
   const scrollRef = useRef(null);
   const shiftSelection = useRef(false);
+  const [view, setView] = useState({ start: 0, end: recording.duration_ms });
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current, timeline = ref.current;
+    const measure = () => {
+      const width = timeline.offsetWidth;
+      const start = width ? scroll.scrollLeft / width * recording.duration_ms : 0;
+      const end = width ? Math.min(recording.duration_ms, (scroll.scrollLeft + scroll.clientWidth) / width * recording.duration_ms) : recording.duration_ms;
+      setView(previous => previous.start === start && previous.end === end ? previous : { start, end });
+    };
+    measure(); scroll.addEventListener('scroll', measure);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(scroll); observer?.observe(timeline);
+    return () => { scroll.removeEventListener('scroll', measure); observer?.disconnect(); };
+  }, [recording.id, recording.duration_ms, zoom]);
   const duration = recording.duration_ms || 1;
   const presentations = useMemo(() => presentationRanges(recording.events, duration), [recording.events, duration]);
   const follow = useTimelineFollow(scrollRef, ref, { time, duration, playing, zoom, recordingId: recording.id });
@@ -142,7 +158,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       <button className="re-handle right" aria-label={t('dragEnd', { label, number: i + 1 })} onPointerDown={e => handle(e, kind, i, 'end_ms')} />
     </div>)}
   </div>;
-  return <><div className="re-timeline-scroll" ref={scrollRef} {...follow}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDownCapture={selectFromPlayhead} onClickCapture={suppressShiftClick} onPointerCancelCapture={() => { shiftSelection.current = false; }} onPointerDown={select}>
+  return <><div className="re-timeline-scroll" ref={scrollRef} onPointerDownCapture={follow.onPointerDownCapture} onWheelCapture={follow.onWheelCapture} onKeyDownCapture={follow.onKeyDownCapture} onScroll={follow.onScroll}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDownCapture={selectFromPlayhead} onClickCapture={suppressShiftClick} onPointerCancelCapture={() => { shiftSelection.current = false; }} onPointerDown={select}>
     <div className="re-ruler">{Array.from({ length: 11 }, (_, i) => <span key={i} style={{ left: `${i * 10}%` }}>{formatTime(duration * i / 10).slice(0, 8)}</span>)}</div>
     <div className="re-wave"><span className="re-track-label">{t('meetingAudio')}</span><svg viewBox="0 0 2048 64" preserveAspectRatio="none" aria-label={t('waveform')}>
       {(peaks || []).map((p, i) => <line key={i} x1={i} x2={i} y1={32 - Math.min(1, p) * 30} y2={32 + Math.min(1, p) * 30} />)}
@@ -181,9 +197,10 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
         </React.Fragment>;
       })}
     </div>
-    {selection.end_ms > selection.start_ms && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
+    {isValidSelection(selection) && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
+    <SelectionMarkers selection={selection} start={0} end={duration} />
     <div className="re-playhead" style={{ left: pct(time) }} />
-  </div></div><TimelineTooltip key={recording.id} targetRef={scrollRef} /></>;
+  </div></div><SelectionOffscreen selection={selection} start={view.start} end={view.end} onShow={follow.showTime} /><TimelineTooltip key={recording.id} targetRef={scrollRef} /></>;
 }
 
 export default function RecordingEditor() {
@@ -196,7 +213,7 @@ function Editor() {
   const [recording, setRecording] = useState(null);
   const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [] });
   const [history, setHistory] = useState({ past: [], future: [] });
-  const [selection, setSelection] = useState({ start_ms: 0, end_ms: 0 });
+  const [selection, setSelection] = useState({ start_ms: null, end_ms: null });
   const [time, setTime] = useState(0);
   const [seekVersion, setSeekVersion] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -315,7 +332,7 @@ function Editor() {
       const data = await request(`/recordings/${id}`);
       setRecording(data);
       setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
-      setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: 0 });
+      setHistory({ past: [], future: [] }); setSelection({ start_ms: null, end_ms: null });
       const generated = await runJob(`/recordings/${id}/preview`, {});
       setPreview(generated);
     } catch (e) { setError(e.message); } finally { setBusy(''); }
@@ -356,7 +373,7 @@ function Editor() {
       setPreview(null); setTime(0); setPlaying(false);
       const data = await request(`/recordings/${id}`);
       setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
-      setHistory({ past: [], future: [] }); setSelection({ start_ms: 0, end_ms: 0 });
+      setHistory({ past: [], future: [] }); setSelection({ start_ms: null, end_ms: null });
       setReview(false); setRebuildReview(false); setResetReview(false);
       setPreview(await runJob(`/recordings/${id}/preview`, {}));
       setMessage({ id: data.record_ranges_persisted === false ? 'resetUnmarkedCompleted' : 'resetCompleted' }); await refreshList();
@@ -365,7 +382,10 @@ function Editor() {
   const activeAssets = recording?.assets.filter(a => a.has_video && !a.error && a.start_ms <= time && time < a.end_ms) || [];
   const screen = activeAssets.find(a => a.kind === 'deskshare');
   const external = videos.find(v => v.timestamp * 1000 <= time && time < v.clear * 1000);
-  const validSelection = selection.end_ms > selection.start_ms;
+  const validSelection = isValidSelection(selection);
+  const selectionMessage = selection.start_ms == null ? selection.end_ms == null ? 'selectionNeither' : 'selectionNeedStart'
+    : selection.end_ms == null ? 'selectionNeedEnd' : selection.start_ms === selection.end_ms ? 'selectionEqual'
+      : selection.start_ms > selection.end_ms ? 'selectionReversed' : 'selectionReady';
 
   return <div className="recording-editor">
     <header className="re-header"><div><span className="re-brand">BigBlueButton</span><strong>{t('title')}</strong></div>
@@ -412,10 +432,17 @@ function Editor() {
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button><span className="re-muted">{t('dragHint')}</span></div>
         <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
         {detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} />}
-        <div className="re-selection"><strong>{t('selection')}</strong><TimeField label={t('selectionStart')} value={selection.start_ms} max={duration} onChange={v => { if (v > selection.end_ms && validSelection) return false; setSelection({ ...selection, start_ms: v, end_ms: Math.max(v, selection.end_ms) }); return true; }} /><span>–</span><TimeField label={t('selectionEnd')} value={selection.end_ms} max={duration} onChange={v => { if (v < selection.start_ms) return false; setSelection({ ...selection, end_ms: v }); return true; }} />
-          <button onClick={() => setSelection({ start_ms: Math.round(time), end_ms: Math.max(Math.round(time), selection.end_ms) })}>{t('startHere')}</button><button onClick={() => setSelection({ start_ms: Math.min(selection.start_ms, Math.round(time)), end_ms: Math.round(time) })}>{t('endHere')}</button>
+        <div className="re-selection"><strong>{t('selection')}</strong>
+          {['start_ms', 'end_ms'].map((edge, i) => <div className="re-selection-field" key={edge}>
+            <span>{t(i ? 'endpointEnd' : 'endpointStart')}</span>
+            <TimeField optional label={t(i ? 'selectionEnd' : 'selectionStart')} value={selection[edge]} max={duration} onChange={value => { setSelection(current => ({ ...current, [edge]: value })); return true; }} />
+            <span className="re-muted">{t(selection[edge] == null ? 'endpointUnset' : 'endpointSet')}</span>
+            <button disabled={selection[edge] == null} aria-label={t(i ? 'clearSelectionEnd' : 'clearSelectionStart')} onClick={() => setSelection(current => ({ ...current, [edge]: null }))}>{t('clearEndpoint')}</button>
+          </div>)}
+          <button onClick={() => setSelection(current => ({ ...current, start_ms: Math.round(time) }))}>{t('startHere')}</button><button onClick={() => setSelection(current => ({ ...current, end_ms: Math.round(time) }))}>{t('endHere')}</button>
           <button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', [...edit.record_ranges, selection])}>{t('keep')}</button><button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', removeRange(edit.record_ranges, selection, duration))}>{t('exclude')}</button><button className="re-beep-button" disabled={!validSelection || !!busy} onClick={() => change('beep_ranges', [...edit.beep_ranges, selection])}>{t('addBeep')}</button>
         </div>
+        <p className={`re-selection-status ${selectionMessage === 'selectionEqual' || selectionMessage === 'selectionReversed' ? 're-selection-invalid' : ''}`} role="status" aria-live="polite">{t(selectionMessage, { time: validSelection ? formatTime(selection.end_ms - selection.start_ms) : '' })}</p>
         <div className="re-bottom"><section className="re-edits"><RangeRows label={t('keepRanges')} ranges={edit.record_ranges} duration={duration} seek={seek} onChange={r => change('record_ranges', r)} /><RangeRows label={t('beepRanges')} ranges={edit.beep_ranges} duration={duration} seek={seek} onChange={r => change('beep_ranges', r)} /></section>
           <section className="re-events"><h3>{t('events')}</h3><div>{recording.events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div></section></div>
       </>}

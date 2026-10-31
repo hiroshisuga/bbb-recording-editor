@@ -95,6 +95,13 @@ export default function useTimelineFollow(scrollRef, timelineRef, { time, durati
   }, [time, duration, playing, zoom, recordingId, scrollRef, timelineRef]);
 
   return {
+    showTime: value => {
+      suspend();
+      const element = scrollRef.current, timeline = timelineRef.current;
+      if (!element || !timeline || duration <= 0) return;
+      element.scrollLeft = Math.max(0, Math.min(element.scrollWidth - element.clientWidth,
+        value / duration * timeline.offsetWidth - element.clientWidth / 2));
+    },
     onPointerDownCapture: event => {
       if (event.button !== 0) return;
       pointerDown.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragged: false };

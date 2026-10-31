@@ -1,3 +1,4 @@
+import SelectionMarkers, { SelectionOffscreen, validSelection } from './SelectionMarkers';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { formatTime } from './model';
@@ -216,12 +217,14 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
         {!visibleRanges.length && <span className="re-detail-record-empty">{t('detailNoRecordingInView')}</span>}
       </div>
       <WaveCanvas tiles={tiles} start={start} span={width} label={t('detailWave')} />
-      {selection.end_ms > selection.start_ms && selection.end_ms > start && selection.start_ms < start + width
+      {validSelection(selection) && selection.end_ms > start && selection.start_ms < start + width
         && <div className="re-detail-selection" style={{ left: pct(selection.start_ms), right: `${100 - clamp((selection.end_ms - start) / width * 100, 100)}%` }} />}
+      <SelectionMarkers selection={selection} start={start} end={start + width} />
       {time >= start && time <= start + width && <div className="re-detail-playhead" style={{ left: pct(time) }} />}
       {loading && <span className="re-detail-status" role="status">{t('detailLoading')}</span>}
       {error && <span className="re-detail-status" role="status">{t('detailError')} <button onClick={() => setRetry(n => n + 1)} onPointerDown={e => e.stopPropagation()}>{t('detailRetry')}</button></span>}
     </div>
+    <SelectionOffscreen selection={selection} start={start} end={start + width} onShow={value => { setFollowing(false); setStart(windowStart(value, duration, width)); }} />
     <TimelineTooltip key={`${start}:${width}`} targetRef={plotRef} />
   </section>;
 }
