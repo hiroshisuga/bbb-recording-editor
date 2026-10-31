@@ -100,13 +100,13 @@ test('published recording link is shown only when the manifest has a public play
 
 test('opening and reopening begin unselected and allow entering the start time first', async () => {
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
-  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:00.000');
-  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('');
   expect(button('ピー音を追加').disabled).toBe(true);
   expect(button('録画に残す').disabled).toBe(true);
   expect(button('録画から除外').disabled).toBe(true);
   await time('選択開始', '00:00:06.500');
-  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:06.500');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('');
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
   expect(button('ピー音を追加').disabled).toBe(true);
   await time('選択終了', '00:00:09.500');
@@ -114,7 +114,7 @@ test('opening and reopening begin unselected and allow entering the start time f
   expect(button('ピー音を追加').disabled).toBe(false);
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
-  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('');
   expect(button('ピー音を追加').disabled).toBe(true);
   expect(button('rawデータへ保存…').disabled).toBe(true);
 });
@@ -134,6 +134,37 @@ test('shift-click selects from the playhead to the beginning before excluding th
   await click('録画から除外');
   expect(container.querySelector('[aria-label="録画に残す区間1 開始"]').value).toBe('00:00:15.000');
   expect(button('↶ 元に戻す').disabled).toBe(false);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('independent endpoints remain visible for end-only, equal and reversed selections and can be cleared', async () => {
+  const start = () => container.querySelector('.re-selection-start_ms');
+  const end = () => container.querySelector('.re-selection-end_ms');
+  expect(start()).toBeNull(); expect(end()).toBeNull();
+  await time('選択終了', '00:00:10.000');
+  expect(start()).toBeNull(); expect(end()).not.toBeNull();
+  expect(container.querySelector('.re-selection-status').textContent).toContain('開始点を設定');
+  expect(button('録画に残す').disabled).toBe(true);
+  const audio = container.querySelector('audio');
+  audio.currentTime = 20;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  await click('開始を現在位置に');
+  expect(start().getAttribute('aria-label')).toContain('00:00:20.000');
+  expect(end().getAttribute('aria-label')).toContain('00:00:10.000');
+  expect(container.querySelector('.re-selection-status').textContent).toContain('開始が終了より後');
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(button('ピー音を追加').disabled).toBe(true);
+  await click('終了を現在位置に');
+  expect(start()).not.toBeNull(); expect(end()).not.toBeNull();
+  expect(container.querySelector('.re-selection-status').textContent).toContain('同じ時刻');
+  await time('選択開始', '00:00:00.000');
+  expect(start().style.left).toBe('0%');
+  expect(button('録画に残す').disabled).toBe(false);
+  await act(async () => Simulate.click(container.querySelector('[aria-label="選択開始を解除"]')));
+  expect(start()).toBeNull(); expect(end()).not.toBeNull();
+  expect(button('録画に残す').disabled).toBe(true);
+  await time('選択終了', '');
+  expect(start()).toBeNull(); expect(end()).toBeNull();
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
@@ -547,8 +578,8 @@ test('reset requires confirmation and clears edits, draft and undo without rebui
   expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]')).toBeNull();
   expect(button('↶ 元に戻す').disabled).toBe(true);
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
-  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:00.000');
-  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:00.000');
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('');
   expect(button('ピー音を追加').disabled).toBe(true);
   expect(container.textContent).toContain('初期状態をrawデータに復元しました');
   expect(button('rawデータへ保存…').disabled).toBe(true);

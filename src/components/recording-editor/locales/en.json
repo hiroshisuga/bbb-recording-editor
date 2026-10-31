@@ -183,5 +183,19 @@
   "videoClockAheadCompact": "Ahead: {seconds} s",
   "videoState_catchingUpCompact": "Catching up ({rate}×)",
   "videoState_syncingCompact": "Syncing ({rate}×)",
-  "detailNoRecordingInView": "No recording intervals in this view"
+  "detailNoRecordingInView": "No recording intervals in this view",
+  "endpointStart": "Start",
+  "endpointEnd": "End",
+  "endpointUnset": "Not set",
+  "endpointSet": "Set",
+  "clearEndpoint": "Clear",
+  "clearSelectionStart": "Clear selection start",
+  "clearSelectionEnd": "Clear selection end",
+  "selectionNeither": "Set a start or end point.",
+  "selectionNeedStart": "End point set. Set the start point.",
+  "selectionNeedEnd": "Start point set. Set the end point.",
+  "selectionEqual": "Start and end are at the same time. Adjust either point.",
+  "selectionReversed": "Start is after end. Adjust either point.",
+  "selectionReady": "Selected duration: {time}",
+  "showSelectionPoint": "{direction} Show {point}: {time}"
 }

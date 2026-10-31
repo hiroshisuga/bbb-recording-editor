@@ -63,6 +63,32 @@ test('opening only requests visible tiles; playback ticks neither fetch nor redr
   expect(container.querySelector('.re-detail-playhead').style.left).toBe('52%');
 });
 
+test('partial, equal and reversed endpoints show independently without a selection band', async () => {
+  for (const selection of [
+    { start_ms: 68000, end_ms: null }, { start_ms: null, end_ms: 68000 },
+    { start_ms: 68000, end_ms: 68000 }, { start_ms: 69000, end_ms: 68000 },
+  ]) {
+    await render({ selection });
+    expect(!!container.querySelector('.re-selection-start_ms')).toBe(selection.start_ms !== null);
+    expect(!!container.querySelector('.re-selection-end_ms')).toBe(selection.end_ms !== null);
+    expect(container.querySelector('.re-detail-selection')).toBeNull();
+  }
+});
+
+test('offscreen endpoint navigation moves only the view and leaves audio and selection unchanged', async () => {
+  await render({ selection: { start_ms: 0, end_ms: 10800000 } });
+  const buttons = container.querySelectorAll('.re-selection-offscreen button');
+  expect(buttons).toHaveLength(2);
+  expect(buttons[0].textContent).toContain('←'); expect(buttons[1].textContent).toContain('→');
+  await act(async () => Simulate.click(buttons[0]));
+  expect(viewStart()).toBe('00:00:00.000');
+  expect(container.querySelector('.re-selection-start_ms').style.left).toBe('0%');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+  await act(async () => Simulate.click(container.querySelector('.re-selection-offscreen button')));
+  expect(container.querySelector('.re-selection-end_ms').style.left).toBe('100%');
+  expect(props.seek).not.toHaveBeenCalled();
+});
+
 test('playback prefetches only the next tile, pages at 90%, and returns to cached views without more fetches', async () => {
   await render(); await advance();
   await render({ time: 69600, playing: true }); await advance();

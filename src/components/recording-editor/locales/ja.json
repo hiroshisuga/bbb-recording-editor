@@ -183,5 +183,19 @@
   "videoClockAheadCompact": "先行: {seconds}秒",
   "videoState_catchingUpCompact": "追随中（{rate}倍速）",
   "videoState_syncingCompact": "同期調整（{rate}倍速）",
-  "detailNoRecordingInView": "この表示範囲に録画区間はありません"
+  "detailNoRecordingInView": "この表示範囲に録画区間はありません",
+  "endpointStart": "開始",
+  "endpointEnd": "終了",
+  "endpointUnset": "未設定",
+  "endpointSet": "設定済み",
+  "clearEndpoint": "解除",
+  "clearSelectionStart": "選択開始を解除",
+  "clearSelectionEnd": "選択終了を解除",
+  "selectionNeither": "開始点または終了点を設定してください。",
+  "selectionNeedStart": "終了点は設定済みです。開始点を設定してください。",
+  "selectionNeedEnd": "開始点は設定済みです。終了点を設定してください。",
+  "selectionEqual": "開始と終了が同じ時刻です。どちらかを設定し直してください。",
+  "selectionReversed": "開始が終了より後です。どちらかを設定し直してください。",
+  "selectionReady": "選択範囲の長さ：{time}",
+  "showSelectionPoint": "{direction} {point} {time} を表示"
 }
