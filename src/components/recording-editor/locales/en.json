@@ -153,7 +153,7 @@
   "detailLoading": "Loading this section…",
   "detailError": "Could not load the detailed waveform.",
   "detailRetry": "Retry",
-  "videoBufferDiagnostics": "Screen-sharing buffer and sync status",
+  "videoBufferDiagnostics": "Video buffer and sync status",
   "videoBufferAhead": "Buffered (browser): {seconds} s",
   "videoBufferHint": "Browser-reported buffered time ahead. It may not reflect received data or guarantee remaining playable time. The audio offset compares media clocks; during seeking it may not match the delay of the displayed image.",
   "videoClockUnknown": "Audio offset: —",
@@ -175,5 +175,12 @@
   "detailReturn": "Return to playhead",
   "detailFollowPaused": "Auto-follow paused",
   "detailPlayheadBefore": "◀ Playback position is before this view",
-  "detailPlayheadAfter": "Playback position is after this view ▶"
+  "detailPlayheadAfter": "Playback position is after this view ▶",
+  "videoBufferAheadCompact": "Buffer: {seconds} s",
+  "videoClockUnknownCompact": "Offset: —",
+  "videoClockAlignedCompact": "Offset: about 0 s",
+  "videoClockBehindCompact": "Behind: {seconds} s",
+  "videoClockAheadCompact": "Ahead: {seconds} s",
+  "videoState_catchingUpCompact": "Catching up ({rate}×)",
+  "videoState_syncingCompact": "Syncing ({rate}×)"
 }

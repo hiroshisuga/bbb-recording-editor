@@ -153,7 +153,7 @@
   "detailLoading": "この範囲の波形を読み込み中…",
   "detailError": "詳細波形を読み込めませんでした。",
   "detailRetry": "再試行",
-  "videoBufferDiagnostics": "画面共有のバッファと同期状態",
+  "videoBufferDiagnostics": "映像のバッファーと同期状態",
   "videoBufferAhead": "バッファー（ブラウザ報告）: {seconds}秒",
   "videoBufferHint": "ブラウザが報告する現在位置からのバッファー時間です。実際の受信済みデータ量や、確実に再生できる残り時間とは一致しない場合があります。音声との時刻差は動画の内部時刻との比較で、シーク中などは表示画像の遅れとは一致しないことがあります。",
   "videoClockUnknown": "音声との時刻差: —",
@@ -175,5 +175,12 @@
   "detailReturn": "再生位置へ戻る",
   "detailFollowPaused": "自動追随を停止中",
   "detailPlayheadBefore": "◀ 再生位置は表示範囲より前です",
-  "detailPlayheadAfter": "再生位置は表示範囲より後です ▶"
+  "detailPlayheadAfter": "再生位置は表示範囲より後です ▶",
+  "videoBufferAheadCompact": "バッファー: {seconds}秒",
+  "videoClockUnknownCompact": "時刻差: —",
+  "videoClockAlignedCompact": "時刻差: 約0秒",
+  "videoClockBehindCompact": "遅れ: {seconds}秒",
+  "videoClockAheadCompact": "先行: {seconds}秒",
+  "videoState_catchingUpCompact": "追随中（{rate}倍速）",
+  "videoState_syncingCompact": "同期調整（{rate}倍速）"
 }

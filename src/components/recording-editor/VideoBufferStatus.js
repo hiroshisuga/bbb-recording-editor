@@ -50,11 +50,15 @@ export default function VideoBufferStatus({ videoRef, clip, time, playing, rate 
   }, [videoRef, clip.url, attempt]);
 
   const drift = sample?.drift;
-  const difference = drift == null ? t('videoClockUnknown') : Math.abs(drift) < 0.1 ? t('videoClockAligned')
-    : t(drift > 0 ? 'videoClockBehind' : 'videoClockAhead', { seconds: Math.abs(drift).toFixed(1) });
-  return <div className="re-video-buffer" role="group" aria-label={t('videoBufferDiagnostics')} title={t('videoBufferHint')} data-state={sample?.state || 'loading'}>
-    <span>{t('videoBufferAhead', { seconds: sample?.ahead ?? '—' })}</span>
+  const compact = clip.kind === 'video';
+  const suffix = compact ? 'Compact' : '';
+  const difference = drift == null ? t(`videoClockUnknown${suffix}`) : Math.abs(drift) < 0.1 ? t(`videoClockAligned${suffix}`)
+    : t(`${drift > 0 ? 'videoClockBehind' : 'videoClockAhead'}${suffix}`, { seconds: Math.abs(drift).toFixed(1) });
+  const state = sample?.state || 'loading';
+  const stateSuffix = compact && ['catchingUp', 'syncing'].includes(state) ? 'Compact' : '';
+  return <div className={`re-video-buffer${compact ? ' re-video-buffer--compact' : ''}`} role="group" aria-label={t('videoBufferDiagnostics')} title={t('videoBufferHint')} data-state={state}>
+    <span>{t(`videoBufferAhead${suffix}`, { seconds: sample?.ahead ?? '—' })}</span>
     <span>{difference}</span>
-    <span>{t(`videoState_${sample?.state || 'loading'}`, { rate: sample?.videoRate ?? rate })}</span>
+    <span>{t(`videoState_${state}${stateSuffix}`, { rate: sample?.videoRate ?? rate })}</span>
   </div>;
 }

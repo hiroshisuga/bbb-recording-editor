@@ -186,9 +186,11 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
 
   if (!clip) return <div className="re-placeholder">{t('noVideo')}</div>;
   return <div className="re-video">
-    <video ref={ref} key={`${clip.url}:${attempt}`} src={clip.url} muted playsInline preload="auto" />
-    <span>{clip.kind === 'deskshare' ? t('screen') : clip.user || t('camera')}</span>
-    {clip.kind === 'deskshare' && !error && <VideoBufferStatus videoRef={ref} clip={clip} time={time} playing={playing} rate={rate} attempt={attempt} />}
+    <div className="re-video-image">
+      <video ref={ref} key={`${clip.url}:${attempt}`} src={clip.url} muted playsInline preload="auto" />
+      <span>{clip.kind === 'deskshare' ? t('screen') : clip.user || t('camera')}</span>
+    </div>
+    {!error && <VideoBufferStatus videoRef={ref} clip={clip} time={time} playing={playing} rate={rate} attempt={attempt} />}
     {syncWarning && !error && <p className="re-render-warning" role="status">{t('videoSyncWarning')} <button onClick={() => { warningDismissed.current = true; setSyncWarning(false); }}>{t('videoSyncDismiss')}</button></p>}
     {error && <p className="re-render-warning" role="alert">{t('videoError', { file: clip.relative })} {error} <button onClick={() => setAttempt(value => value + 1)}>{t('videoRetry')}</button></p>}
   </div>;
