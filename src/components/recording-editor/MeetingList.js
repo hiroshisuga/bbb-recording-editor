@@ -17,6 +17,8 @@ const matches = (meeting, filter) => {
   if (filter === 'raw_missing') return meeting.raw_available === false;
   return (meeting.publication_status || 'unknown') === filter;
 };
+const meetingTime = meeting => new Date(meeting.date || Number(meeting.id.split('-').pop())).getTime();
+const dateRanges = [14, 30, 90, 365];
 const durationText = ms => {
   if (!Number.isFinite(ms)) return '—';
   const text = formatTime(ms).slice(0, 8);
@@ -26,14 +28,26 @@ const durationText = ms => {
 export default function MeetingList({ meetings, selectedId, busy, dirty, onRefresh, onOpen }) {
   const { locale, t, diagnostic } = useEditorI18n();
   const [filter, setFilter] = useState('all');
-  const visible = meetings.filter(meeting => matches(meeting, filter));
+  const [period, setPeriod] = useState('all');
+  const now = Date.now();
+  const dated = period === 'all' ? meetings : meetings.filter(meeting => {
+    const time = meetingTime(meeting);
+    return time >= now - Number(period) * 86400000 && time <= now;
+  });
+  const visible = dated.filter(meeting => matches(meeting, filter));
   const selectedHidden = selectedId && !visible.some(meeting => meeting.id === selectedId);
   return <aside className="re-meetings">
-    <div className="re-sidebar-title"><h2>{t('recentMeetings')}</h2><button disabled={!!busy} onClick={onRefresh} title={t('refreshList')}>↻</button></div>
-    <p className="re-muted">{t('recentHint')}</p>
+    <div className="re-sidebar-title"><h2>{t('recordingList')}</h2><button disabled={!!busy} onClick={onRefresh} title={t('refreshList')}>↻</button></div>
+    <p className="re-muted">{t('recordingListHint')}</p>
     <label className="re-meeting-filter">{t('show')}
       <select aria-label={t('filter')} value={filter} disabled={!!busy} onChange={event => setFilter(event.target.value)}>
-        {filters.map(([value, label]) => <option key={value} value={value}>{t(label)} ({meetings.filter(meeting => matches(meeting, value)).length})</option>)}
+        {filters.map(([value, label]) => <option key={value} value={value}>{t(label)} ({dated.filter(meeting => matches(meeting, value)).length})</option>)}
+      </select>
+    </label>
+    <label className="re-meeting-filter re-meeting-period">{t('meetingPeriod')}
+      <select aria-label={t('meetingPeriodLabel')} value={period} disabled={!!busy} onChange={event => setPeriod(event.target.value)}>
+        <option value="all">{t('meetingPeriodAll')}</option>
+        {dateRanges.map(days => <option key={days} value={days}>{t('meetingPeriodDays', { days })}</option>)}
       </select>
     </label>
     {visible.map(meeting => {
@@ -43,7 +57,7 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
       return <button className={`re-meeting ${selectedId === meeting.id ? 'active' : ''}`} key={meeting.id} disabled={!!busy} onClick={() => onOpen(meeting.id)}>
         <strong>{meeting.name || meeting.id.slice(0, 8)}</strong>
         {roomName && roomName !== meeting.name?.trim() && <small className="re-meeting-room">{t('roomName')}: {roomName}</small>}
-        <span>{new Date(meeting.date || Number(meeting.id.split('-')[1])).toLocaleString(locale)}</span>
+        <span>{new Date(meetingTime(meeting)).toLocaleString(locale)}</span>
         <span>{t('durations', { meeting: durationText(meeting.duration_ms), recorded: durationText(meeting.recorded_duration_ms) })}</span>
         <span className="re-meeting-status">
           <span className={`re-status re-status-${recording}`}>{t(recordingLabels[recording])}</span>

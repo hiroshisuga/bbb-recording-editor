@@ -82,10 +82,10 @@
   "draftSaved": "Draft saved. Raw data has not been changed.",
   "savingRaw": "Saving raw data…",
   "rawSaved": "Saved. XML backup: {backup}. Use Rebuild recording to apply the changes to playback.",
-  "recentMeetings": "Recent meetings",
+  "recordingList": "Recordings",
   "roomName": "Room",
   "refreshList": "Refresh list",
-  "recentHint": "Past 14 days · missing raw data is flagged",
+  "recordingListHint": "Retained raw recordings have no age limit. Missing raw data is flagged.",
   "show": "Show",
   "filter": "Filter meetings",
   "all": "All",
@@ -198,5 +198,9 @@
   "selectionReversed": "Start is after end. Adjust either point.",
   "selectionReady": "Selected duration: {time}",
   "showSelectionPoint": "{direction} Show {point}: {time}",
-  "previewReused": "Reused the saved preview audio and waveforms."
+  "previewReused": "Reused the saved preview audio and waveforms.",
+  "meetingPeriod": "Period",
+  "meetingPeriodLabel": "Meeting date range",
+  "meetingPeriodAll": "All dates",
+  "meetingPeriodDays": "Past {days} days"
 }

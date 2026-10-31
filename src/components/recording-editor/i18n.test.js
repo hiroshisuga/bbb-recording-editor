@@ -36,7 +36,7 @@ test('English and Japanese catalogs cover the same UI messages', () => {
     const intl = createIntl({ locale, messages, onError });
     for (const id of Object.keys(messages)) {
       intl.formatMessage({ id }, { count: 2, record: 1, beep: 0, label: 'Test', number: 1,
-        direction: '←', point: 'Start', seconds: 10, rate: 2.5, time: '00:01', meeting: '14:11', recorded: '03:49', backup: '/tmp/events.xml', file: 'test.webm', page: 3, code: '123' });
+        direction: '←', point: 'Start', days: 14, seconds: 10, rate: 2.5, time: '00:01', meeting: '14:11', recorded: '03:49', backup: '/tmp/events.xml', file: 'test.webm', page: 3, code: '123' });
     }
     expect(onError).not.toHaveBeenCalled();
   }

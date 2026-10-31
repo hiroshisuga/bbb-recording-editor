@@ -237,9 +237,9 @@ module RecordingEditor
       end
       ids.uniq.filter_map do |id|
         next unless id.match?(/\A[a-z0-9]{40}-[0-9]{13}\z/)
-        # This is a list filter only; no expiry locks or retention changes.
+        # Availability follows the files retained by BBB, not a fixed age limit.
         time = Time.at(id.split('-').last.to_i / 1000.0)
-        next if time < now - 14 * 86_400 || time > now
+        next if time > now
         publication = publication_info(id)
         rebuild = rebuild_info(id)
         publication[:publication_status] = 'processing' if %w[requesting requested].include?(rebuild['status'])
