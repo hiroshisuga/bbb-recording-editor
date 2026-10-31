@@ -4,6 +4,7 @@ import { useEditorI18n } from './i18n';
 import VideoBufferStatus from './VideoBufferStatus';
 import { createVideoTrace } from './videoTrace';
 import { bufferedAhead, synchronizationRate } from './videoSync';
+import { createVideoCatchUp } from './videoCatchUp';
 
 const SEEK_SETTLE_MS = 750;
 const DRIFT_WARNING_SECONDS = 1;
@@ -37,7 +38,10 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     let driftSince = null;
     let warned = false;
     warningDismissed.current = false;
-    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight: false, syncPolicy: 'adaptive-playback-rate' }));
+    let catchUp;
+    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight: false,
+      syncPolicy: 'measured-playback-rate', ...catchUp?.snapshot(performance.now()) }));
+    if (desired.current.clip.kind === 'deskshare') catchUp = createVideoCatchUp(video, (event, values) => trace.log(event, values));
     setError('');
     setSyncWarning(false);
     // Muted playback must also be set on the media element, not just its markup.
@@ -45,6 +49,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     const fail = cause => {
       if (!alive) return;
       failed = true;
+      catchUp?.reset();
       const name = cause?.name || (cause?.code ? `MediaError ${cause.code}` : 'MediaError');
       trace.log('playback-error', { name, message: cause?.message });
       setError([name, cause?.message].filter(Boolean).join(': '));
@@ -71,6 +76,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       const preciseReason = requestedSeek ? 'user-seek' : !positioned ? 'initial-position' : 'paused-position';
       if (requestedSeek) trace.log('user-seek');
       if (requestedSeek || !current.playing) {
+        catchUp?.reset();
         driftSince = null;
         if (warned) { warned = false; setSyncWarning(false); }
       }
@@ -83,12 +89,15 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
         return;
       }
       if (event?.type === 'seeked') {
+        catchUp?.reset();
         // The audio clock may have advanced while fetching the target. Give
         // decoding/playback time to recover instead of immediately seeking again.
         correctionAfter = now + SEEK_SETTLE_MS;
       }
+      if (video.seeking) catchUp?.reset();
       if (!video.seeking) {
         if (precise) {
+          catchUp?.reset();
           positioned = true;
           correctionAfter = now + SEEK_SETTLE_MS;
           if (Math.abs(drift) > 0.01) {
@@ -100,8 +109,11 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
           // A long-GOP raw video can take seconds to seek even within a fully
           // buffered range. Follow the audio by rate only, regardless of drift,
           // so completing an expensive seek cannot trigger another one.
-          if (!waiting && video.readyState >= 3 && now >= correctionAfter) {
-            playbackRate = synchronizationRate(current.rate, drift, bufferedAhead(video));
+          if (now >= correctionAfter) {
+            const ahead = bufferedAhead(video);
+            if (catchUp) playbackRate = catchUp.update({ now, rate: current.rate, drift, ahead,
+              blocked: waiting || video.readyState < 3, visible: document.visibilityState !== 'hidden' });
+            else if (!waiting && video.readyState >= 3) playbackRate = synchronizationRate(current.rate, drift, ahead);
           }
           if (Math.abs(drift) > DRIFT_WARNING_SECONDS) {
             if (driftSince === null) driftSince = now;
@@ -115,7 +127,18 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
           }
         }
       }
-      if (video.playbackRate !== playbackRate) video.playbackRate = playbackRate;
+      if (video.playbackRate !== playbackRate) {
+        const accepted = video.playbackRate;
+        try { video.playbackRate = playbackRate; }
+        catch (cause) {
+          // Some browsers reject high rates. Keep the native player usable and
+          // remember its accepted ceiling for this source, rather than retrying.
+          if (catchUp && playbackRate > current.rate) {
+            const safe = catchUp.rejectRate(playbackRate, accepted, now);
+            try { video.playbackRate = safe; } catch { video.playbackRate = current.rate; }
+          } else { fail(cause); return; }
+        }
+      }
       if (current.playing && video.paused && !pendingPlay) {
         const token = {};
         pendingPlay = token;
@@ -128,17 +151,19 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       }
     };
     const mediaError = () => { if (video.error) fail(video.error); };
-    const bufferWaiting = () => { waiting = true; video.playbackRate = desired.current.rate; };
-    const bufferReady = event => { waiting = false; sync(event); };
+    const bufferWaiting = () => { waiting = true; catchUp?.waiting(performance.now()); video.playbackRate = desired.current.rate; };
+    const bufferReady = event => { waiting = false; catchUp?.ready(performance.now()); sync(event); };
     const events = ['loadedmetadata', 'loadeddata', 'seeked'];
     events.forEach(name => video.addEventListener(name, sync));
     video.addEventListener('error', mediaError);
     video.addEventListener('waiting', bufferWaiting);
     video.addEventListener('canplay', bufferReady);
     video.addEventListener('playing', bufferReady);
+    document.addEventListener('visibilitychange', sync);
     synchronize.current = sync;
     sync();
     return () => {
+      catchUp?.close();
       trace.close();
       alive = false;
       if (synchronize.current === sync) synchronize.current = null;
@@ -147,6 +172,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       video.removeEventListener('waiting', bufferWaiting);
       video.removeEventListener('canplay', bufferReady);
       video.removeEventListener('playing', bufferReady);
+      document.removeEventListener('visibilitychange', sync);
       video.pause();
     };
   }, [clip?.url, attempt]);
