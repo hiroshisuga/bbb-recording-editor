@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { useEditorI18n } from './i18n';
+import VideoBufferStatus from './VideoBufferStatus';
 
 const SEEK_DRIFT_SECONDS = 1;
 const SEEK_COOLDOWN_MS = 3000;
@@ -144,6 +145,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
   return <div className="re-video">
     <video ref={ref} key={`${clip.url}:${attempt}`} src={clip.url} muted playsInline preload="auto" />
     <span>{clip.kind === 'deskshare' ? t('screen') : clip.user || t('camera')}</span>
+    {clip.kind === 'deskshare' && !error && <VideoBufferStatus videoRef={ref} clip={clip} time={time} playing={playing} attempt={attempt} />}
     {syncWarning && !error && <p className="re-render-warning" role="status">{t('videoSyncWarning')} <button onClick={() => setSyncWarning(false)}>{t('videoSyncDismiss')}</button></p>}
     {error && <p className="re-render-warning" role="alert">{t('videoError', { file: clip.relative })} {error} <button onClick={() => setAttempt(value => value + 1)}>{t('videoRetry')}</button></p>}
   </div>;

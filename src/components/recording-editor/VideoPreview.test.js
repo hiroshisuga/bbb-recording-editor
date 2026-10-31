@@ -311,5 +311,6 @@ test('camera corrections use the same limits without showing a screen-sharing wa
   await event('loadedmetadata', { ready: 4 });
   for (const at of [4000, 8000, 12000, 16000]) await correctAt(at);
   expect(state(video()).writes).toHaveLength(4);
+  expect(container.querySelector('.re-video-buffer')).toBeNull();
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
