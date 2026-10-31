@@ -167,7 +167,7 @@
   "videoState_playing": "再生中",
   "videoState_ended": "映像終了",
   "videoState_error": "映像エラー",
-  "videoSyncWarning": "画面共有の同期補正が繰り返されています。映像が停止したり飛ぶことがあります。音声の再生は継続します。",
+  "videoSyncWarning": "画面共有と音声のずれが続いています。映像の先読みと再生状況を確認してください。音声の再生は継続します。",
   "videoSyncDismiss": "\u9589\u3058\u308b",
   "videoRetry": "映像を再読み込み",
   "detailReturn": "再生位置へ戻る",

@@ -3,12 +3,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import VideoBufferStatus from './VideoBufferStatus';
 import { createVideoTrace } from './videoTrace';
+import { bufferedAhead, synchronizationRate } from './videoSync';
 
-const SEEK_DRIFT_SECONDS = 1;
-const SEEK_COOLDOWN_MS = 3000;
 const SEEK_SETTLE_MS = 750;
-const CORRECTION_WINDOW_MS = 30000;
-const CORRECTION_WARNING_COUNT = 4;
+const DRIFT_WARNING_SECONDS = 1;
+const DRIFT_WARNING_MS = 10000;
 
 export default function VideoPreview({ clip, time, playing, rate, seekVersion = 0 }) {
   const { t } = useEditorI18n();
@@ -18,6 +17,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [syncWarning, setSyncWarning] = useState(false);
+  const warningDismissed = useRef(false);
 
   useEffect(() => {
     desired.current = { clip, time, playing, rate, seekVersion };
@@ -34,10 +34,10 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     let positioned = false;
     let waiting = false;
     let correctionAfter = 0;
-    let autoSeekInFlight = false;
-    let corrections = [];
+    let driftSince = null;
     let warned = false;
-    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight }));
+    warningDismissed.current = false;
+    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight: false, syncPolicy: 'playback-rate' }));
     setError('');
     setSyncWarning(false);
     // Muted playback must also be set on the media element, not just its markup.
@@ -70,12 +70,14 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       const precise = !positioned || requestedSeek || !current.playing;
       const preciseReason = requestedSeek ? 'user-seek' : !positioned ? 'initial-position' : 'paused-position';
       if (requestedSeek) trace.log('user-seek');
-      if (requestedSeek || !current.playing) corrections = [];
+      if (requestedSeek || !current.playing) {
+        driftSince = null;
+        if (warned) { warned = false; setSyncWarning(false); }
+      }
       if (requestedSeek && video.seeking && Math.abs(drift) > 0.01) {
         // Only an explicit user seek may cancel an obsolete HTTP range.
         pendingPlay = null;
         positioned = false;
-        autoSeekInFlight = false;
         trace.log('reload-request', { reason: 'cancel-obsolete-user-seek', toS: position });
         try { video.load(); trace.log('reload-applied'); } catch (cause) { fail(cause); }
         return;
@@ -83,8 +85,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       if (event?.type === 'seeked') {
         // The audio clock may have advanced while fetching the target. Give
         // decoding/playback time to recover instead of immediately seeking again.
-        correctionAfter = Math.max(correctionAfter, now + (autoSeekInFlight ? SEEK_COOLDOWN_MS : SEEK_SETTLE_MS));
-        autoSeekInFlight = false;
+        correctionAfter = now + SEEK_SETTLE_MS;
       }
       if (!video.seeking) {
         if (precise) {
@@ -95,24 +96,22 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
             try { video.currentTime = position; } catch (cause) { fail(cause); return; }
             trace.log('seek-assigned', { reason: preciseReason, toS: position });
           }
-        } else if (!waiting && video.readyState >= 3 && now >= correctionAfter) {
-          if (Math.abs(drift) > SEEK_DRIFT_SECONDS) {
-            // Never chase the moving audio target while seeking/buffering.
-            // The cooldown starts again on completion if this fetch is slow.
-            correctionAfter = now + SEEK_COOLDOWN_MS;
-            autoSeekInFlight = true;
-            trace.log('seek-request', { reason: 'automatic-drift', toS: position });
-            try { video.currentTime = position; } catch (cause) { fail(cause); return; }
-            trace.log('seek-assigned', { reason: 'automatic-drift', toS: position });
-            corrections = corrections.filter(at => now - at <= CORRECTION_WINDOW_MS);
-            corrections.push(now);
-            if (!warned && current.clip.kind === 'deskshare' && corrections.length >= CORRECTION_WARNING_COUNT) {
+        } else {
+          // A long-GOP raw video can take seconds to seek even within a fully
+          // buffered range. Follow the audio by rate only, regardless of drift,
+          // so completing an expensive seek cannot trigger another one.
+          if (!waiting && video.readyState >= 3 && now >= correctionAfter) {
+            playbackRate = synchronizationRate(current.rate, drift, bufferedAhead(video));
+          }
+          if (Math.abs(drift) > DRIFT_WARNING_SECONDS) {
+            if (driftSince === null) driftSince = now;
+            if (!warned && !warningDismissed.current && current.clip.kind === 'deskshare' && now - driftSince >= DRIFT_WARNING_MS) {
               warned = true;
               setSyncWarning(true);
             }
-          } else if (Math.abs(drift) > 0.15) {
-            // Only the muted video changes speed; the master audio is untouched.
-            playbackRate = current.rate * (drift > 0 ? 1.05 : 0.95);
+          } else {
+            driftSince = null;
+            if (warned) { warned = false; setSyncWarning(false); }
           }
         }
       }
@@ -157,7 +156,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     <video ref={ref} key={`${clip.url}:${attempt}`} src={clip.url} muted playsInline preload="auto" />
     <span>{clip.kind === 'deskshare' ? t('screen') : clip.user || t('camera')}</span>
     {clip.kind === 'deskshare' && !error && <VideoBufferStatus videoRef={ref} clip={clip} time={time} playing={playing} attempt={attempt} />}
-    {syncWarning && !error && <p className="re-render-warning" role="status">{t('videoSyncWarning')} <button onClick={() => setSyncWarning(false)}>{t('videoSyncDismiss')}</button></p>}
+    {syncWarning && !error && <p className="re-render-warning" role="status">{t('videoSyncWarning')} <button onClick={() => { warningDismissed.current = true; setSyncWarning(false); }}>{t('videoSyncDismiss')}</button></p>}
     {error && <p className="re-render-warning" role="alert">{t('videoError', { file: clip.relative })} {error} <button onClick={() => setAttempt(value => value + 1)}>{t('videoRetry')}</button></p>}
   </div>;
 }

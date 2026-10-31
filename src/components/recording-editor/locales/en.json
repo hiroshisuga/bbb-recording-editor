@@ -167,7 +167,7 @@
   "videoState_playing": "Playing",
   "videoState_ended": "Video ended",
   "videoState_error": "Video error",
-  "videoSyncWarning": "Screen sharing needs repeated sync corrections. The video may freeze or skip. Audio playback continues.",
+  "videoSyncWarning": "Screen sharing remains out of sync with audio. Check the video buffer and playback status. Audio playback continues.",
   "videoSyncDismiss": "Dismiss",
   "videoRetry": "Reload video",
   "detailReturn": "Return to playhead",
