@@ -2,6 +2,7 @@
 
 require 'minitest/autorun'
 require 'tmpdir'
+require 'minitest/mock'
 require_relative '../lib/recording_editor'
 
 class RecordingEditorTest < Minitest::Test
@@ -215,6 +216,118 @@ class RecordingEditorTest < Minitest::Test
     assert_in_delta 6, @repo.probe(file).dig('format', 'duration').to_f, 0.05
     assert_operator rms(samples(file, 0.2)), :>, 0.04
     assert_equal result, RecordingEditor::Media.new(rec).preview(key)
+  end
+
+  def test_preview_cache_survives_range_and_beep_saves_without_decoding_again
+    sources
+    rec = @repo.recording(@id)
+    key = rec.to_h[:preview_key]
+    original = RecordingEditor::Media.new(rec).preview(key)
+    audio = File.join(@repo.state_dir(@id), 'preview', key, 'audio.webm')
+    before = File.stat(audio).mtime
+    editor = RecordingEditor::Editor.new(@repo)
+    editor.save(@id, payload(rec))
+    # Saved beeps are applied by the browser over the baseline preview. The
+    # censored raw outputs are for BBB rebuild, not new preview inputs.
+    editor.save(@id, payload(@repo.recording(@id), [{ 'start_ms' => 1000, 'end_ms' => 2000 }]))
+    reopened = @repo.recording(@id)
+    refute_equal rec.revision, reopened.revision
+    assert_equal key, reopened.to_h[:preview_key]
+    messages = []
+    RecordingEditor.stub(:run, ->(*) { flunk 'A cached preview must not run FFmpeg' }) do
+      assert_equal original, RecordingEditor::Media.new(reopened).preview(key, progress: ->(m) { messages << m })
+    end
+    assert_equal ['保存済みのプレビュー音声と波形を再利用しました。'], messages
+    assert_equal before, File.stat(audio).mtime
+  end
+
+  def test_preview_identity_tracks_audio_timing_duration_and_speed_but_ignores_visual_edits
+    sources
+    path = File.join(@raw, 'events.xml')
+    key = -> { @repo.recording(@id).to_h[:preview_key] }
+    original = key.call
+    File.write(path, @events.sub('slides', 'other-slides').sub('編集テスト', 'Renamed'))
+    assert_equal original, key.call
+    # All of these are actual preview inputs even when audio bytes stay fixed.
+    File.write(path, @events.sub('timestamp="' + @origin.to_s + '" module="VOICE"', 'timestamp="' + (@origin + 100).to_s + '" module="VOICE"'))
+    refute_equal original, key.call
+    File.write(path, @events.sub('timestamp="' + (@origin + 5000).to_s + '" module="bbb-webrtc-sfu"', 'timestamp="' + (@origin + 4800).to_s + '" module="bbb-webrtc-sfu"'))
+    refute_equal original, key.call
+    File.write(path, @events.sub('timestamp="' + (@origin + 6000).to_s + '" module="MEETING"', 'timestamp="' + (@origin + 7000).to_s + '" module="MEETING"'))
+    refute_equal original, key.call
+    File.write(path, @events)
+    rec = @repo.recording(@id)
+    rec.audible_assets.first['file_duration_ms'] = 5900 # Activates legacy WAV tempo correction.
+    refute_equal original, RecordingEditor::Media.new(rec).preview_key
+    source = File.join(@raw, 'audio', 'microphone.wav')
+    stamp = File.mtime(source) + 2
+    File.utime(stamp, stamp, source)
+    refute_equal original, key.call
+  end
+
+  def test_preview_upgrade_reuses_matching_v3_audio_and_detail_cache_without_copying
+    sources
+    rec = @repo.recording(@id)
+    media = RecordingEditor::Media.new(rec)
+    legacy = File.join(@repo.state_dir(@id), 'preview', media.legacy_preview_key)
+    FileUtils.mkdir_p(File.join(legacy, 'waveform-v1'))
+    File.binwrite(File.join(legacy, 'audio.webm'), 'synthetic cached audio')
+    File.write(File.join(legacy, 'peaks.json'), '[0.1]')
+    File.write(File.join(legacy, 'waveform-v1', '0.json'), '{"min":[-0.1]}')
+    rec.to_h # Finish any source probing before forbidding decoder commands.
+    key = media.preview_key
+    File.stub(:link, ->(*) { raise Errno::EXDEV }) do
+      assert_nil media.cached_preview(key)
+    end
+    assert_empty Dir.glob(File.join(@repo.state_dir(@id), 'preview', '*.adopt-*'))
+    RecordingEditor.stub(:run, ->(*) { flunk 'Upgrade must reuse the matching v3 cache' }) do
+      link = File.method(:link)
+      interleaved = false
+      File.stub(:link, lambda { |*args|
+        unless interleaved
+          interleaved = true
+          assert_equal [0.1], media.cached_preview(key)[:peaks]
+        end
+        link.call(*args)
+      }) do
+        assert_equal [0.1], media.cached_preview(key)[:peaks]
+      end
+    end
+    assert_empty Dir.glob(File.join(@repo.state_dir(@id), 'preview', '*.adopt-*'))
+    current = File.join(@repo.state_dir(@id), 'preview', key)
+    assert File.identical?(File.join(legacy, 'audio.webm'), File.join(current, 'audio.webm'))
+    assert File.identical?(File.join(legacy, 'waveform-v1', '0.json'), File.join(current, 'waveform-v1', '0.json'))
+    File.write(File.join(@raw, 'events.xml'), @events.sub('slides', 'other-slides'))
+    # The new identity no longer depends on the XML revision after adoption.
+    assert_equal key, @repo.recording(@id).to_h[:preview_key]
+    FileUtils.rm_f(File.join(current, 'peaks.json'))
+    assert_nil media.cached_preview(key), 'Incomplete cache must be regenerated, never reported as reused'
+    messages = []
+    media.preview(key, progress: ->(message) { messages << message })
+    assert_equal ['会議全体の音声と波形を生成しています。'], messages
+    assert_equal 'synthetic cached audio', File.binread(File.join(legacy, 'audio.webm'))
+    refute File.identical?(File.join(legacy, 'audio.webm'), File.join(current, 'audio.webm'))
+  end
+
+  def test_preview_ignores_camera_files_but_tracks_audio_source_references
+    sources
+    original = @repo.recording(@id).to_h[:preview_key]
+    FileUtils.mkdir_p(File.join(@raw, 'video'))
+    camera = File.join(@raw, 'video', 'camera.mp4')
+    FileUtils.copy_file(File.join(@raw, 'deskshare', 'screen.mp4'), camera)
+    events = @events.sub('</recording>', <<~XML)
+      <event timestamp="#{@origin + 1000}" module="bbb-webrtc-sfu" eventname="StartWebRTCShareEvent"><filename>camera.mp4</filename></event>
+      <event timestamp="#{@origin + 4000}" module="bbb-webrtc-sfu" eventname="StopWebRTCShareEvent"><filename>camera.mp4</filename></event>
+      </recording>
+    XML
+    path = File.join(@raw, 'events.xml')
+    File.write(path, events)
+    stamp = File.mtime(camera) + 2
+    File.utime(stamp, stamp, camera)
+    assert_equal original, @repo.recording(@id).to_h[:preview_key]
+    FileUtils.copy_file(File.join(@raw, 'audio', 'microphone.wav'), File.join(@raw, 'audio', 'replacement.wav'))
+    File.write(path, events.gsub('microphone.wav', 'replacement.wav'))
+    refute_equal original, @repo.recording(@id).to_h[:preview_key]
   end
 
   def test_preview_with_late_timestamp_gap_preserves_clock

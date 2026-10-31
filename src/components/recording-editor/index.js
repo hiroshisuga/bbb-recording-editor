@@ -335,6 +335,7 @@ function Editor() {
       setHistory({ past: [], future: [] }); setSelection({ start_ms: null, end_ms: null });
       const generated = await runJob(`/recordings/${id}/preview`, {});
       setPreview(generated);
+      if (generated.cache_reused) setMessage({ id: 'previewReused' });
     } catch (e) { setError(e.message); } finally { setBusy(''); }
   };
   const draft = async () => {

@@ -157,7 +157,12 @@ module RecordingEditor
         require_method(req, 'POST')
         rec = @repo.recording(id)
         key = rec.to_h[:preview_key]
-        json(res, @jobs.add('preview') { |progress| progress.call('会議全体の音声と波形を生成しています。'); Media.new(rec).preview(key) }, 202)
+        media = Media.new(rec)
+        if (cached = media.cached_preview(key))
+          json(res, { status: 'done', result: cached.merge(cache_reused: true) })
+        else
+          json(res, @jobs.add('preview') { |progress| media.preview(key, progress: progress) }, 202)
+        end
       when '/events.xml'
         require_method(req, 'GET', 'HEAD')
         res['Content-Disposition'] = 'attachment; filename="events.xml"'

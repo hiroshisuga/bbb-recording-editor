@@ -113,6 +113,24 @@ class ServerTest < Minitest::Test
     assert_equal '416', request("recordings/#{@id}/raw/audio/test.wav", headers: { 'Range' => 'bytes=50-' }).code
   end
 
+  def test_cached_preview_is_returned_immediately_without_queuing_or_generating
+    rec = @repo.recording(@id)
+    key = rec.to_h[:preview_key]
+    dir = File.join(@repo.state_dir(@id), 'preview', key)
+    FileUtils.mkdir_p(dir)
+    File.write(File.join(dir, 'audio.webm'), 'cached audio')
+    File.write(File.join(dir, 'peaks.json'), '[0.2]')
+    @jobs.stub(:add, ->(*) { flunk 'Cache hits must bypass the media queue' }) do
+      response = request("recordings/#{@id}/preview", method: Net::HTTP::Post, headers: { 'X-BBB-Editor' => '1' }, body: '{}')
+      assert_equal '200', response.code
+      body = JSON.parse(response.body)
+      assert_equal 'done', body['status']
+      assert_equal true, body.dig('result', 'cache_reused')
+      assert_equal [0.2], body.dig('result', 'peaks')
+      refute_includes response.body, '生成しています'
+    end
+  end
+
   def test_write_requires_editor_header_and_same_origin
     path = "recordings/#{@id}/draft"
     assert_equal '403', request(path, method: Net::HTTP::Post, body: '{}').code
