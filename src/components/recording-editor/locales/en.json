@@ -197,5 +197,6 @@
   "selectionEqual": "Start and end are at the same time. Adjust either point.",
   "selectionReversed": "Start is after end. Adjust either point.",
   "selectionReady": "Selected duration: {time}",
-  "showSelectionPoint": "{direction} Show {point}: {time}"
+  "showSelectionPoint": "{direction} Show {point}: {time}",
+  "previewReused": "Reused the saved preview audio and waveforms."
 }

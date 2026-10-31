@@ -98,6 +98,17 @@ test('published recording link is shown only when the manifest has a public play
   expect(container.querySelector('.re-title a').textContent).toBe('Published recording ↗');
 });
 
+test('reused previews are explicitly identified in both languages', async () => {
+  const fetch = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith('/preview')
+    ? { ok: true, json: async () => ({ status: 'done', result: { audio_url: '/demo.webm', peaks: [], cache_reused: true } }) }
+    : fetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-success').textContent).toBe('保存済みのプレビュー音声と波形を再利用しました。');
+  await language('en');
+  expect(container.querySelector('.re-success').textContent).toBe('Reused the saved preview audio and waveforms.');
+});
+
 test('opening and reopening begin unselected and allow entering the start time first', async () => {
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
   expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');

@@ -529,7 +529,7 @@ module RecordingEditor
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
         assets: media, slides: slides, events: events, warnings: warnings.uniq,
         published_url: published ? "/playback/presentation/2.3/#{id}" : nil,
-        preview_key: Digest::SHA256.hexdigest(['preview-clock-v3', revision, *media.filter_map { |a| a['relative'] && File.stat(repo.raw_file(id, a['relative'])).then { |s| "#{a['relative']}:#{s.size}:#{s.mtime.to_f}" } }].join('|'))[0, 24] }
+        preview_key: Media.new(self).preview_key }
     end
 
     def edited_xml(record_ranges, replacements = {})
@@ -588,13 +588,79 @@ module RecordingEditor
       legacy && ratio < 0.997 && (1 - ratio).abs < 0.05 ? ratio : 1.0
     end
 
-    def preview(key)
+    # The preview mixes the baseline microphone/screenshare sources on the
+    # event clock. Keep/exclude, chat, slides and browser-applied beeps do not
+    # change these samples. Include only inputs consumed by preview below.
+    def preview_key
+      inputs = rec.audible_assets.map do |asset|
+        stat = File.stat(rec.repo.raw_file(rec.id, asset['relative']))
+        [asset['relative'], stat.size, stat.mtime.to_f,
+         asset['start_ms'], asset['end_ms'], speed(asset)]
+      end
+      Digest::SHA256.hexdigest(JSON.generate(['preview-clock-v3-inputs-v1', rec.duration, inputs]))[0, 24]
+    end
+
+    def legacy_preview_key
+      files = rec.assets.filter_map do |asset|
+        next unless asset['relative']
+        stat = File.stat(rec.repo.raw_file(rec.id, asset['relative']))
+        "#{asset['relative']}:#{stat.size}:#{stat.mtime.to_f}"
+      end
+      Digest::SHA256.hexdigest(['preview-clock-v3', rec.revision, *files].join('|'))[0, 24]
+    end
+
+    def preview_dir(key)
       raise Error, 'プレビュー識別子が不正です。' unless key.match?(/\A[a-f0-9]{24}\z/)
-      dir = File.join(rec.repo.state_dir(rec.id), 'preview', key)
-      result = File.join(dir, 'audio.webm')
-      peaks_path = File.join(dir, 'peaks.json')
-      return { audio_url: "#{rec.repo.prefix}/api/recordings/#{rec.id}/preview/#{key}/audio.webm", peaks: JSON.parse(File.read(peaks_path)) } if File.file?(result) && File.file?(peaks_path)
+      File.join(rec.repo.state_dir(rec.id), 'preview', key)
+    end
+
+    def adopt_legacy_preview(dir)
+      legacy = preview_dir(legacy_preview_key)
+      return unless File.file?(File.join(legacy, 'audio.webm')) && File.file?(File.join(legacy, 'peaks.json'))
+      staging = "#{dir}.adopt-#{SecureRandom.hex(6)}"
+      begin
+        FileUtils.mkdir_p(staging)
+        files = ['audio.webm', *Dir.glob(File.join(legacy, 'waveform-v1', '*.json')).map { |f| f.delete_prefix(legacy + '/') }, 'peaks.json']
+        files.each do |name|
+          target = File.join(staging, name)
+          FileUtils.mkdir_p(File.dirname(target))
+          File.link(File.join(legacy, name), target)
+        end
+        # Publish the whole directory together: concurrent cache readers must
+        # never mistake an unfinished adoption for a failed render to rebuild.
+        File.rename(staging, dir)
+      rescue SystemCallError
+        # Another reader may have won the rename, or hard links may be
+        # unavailable. Read the completed cache below, otherwise render anew.
+      ensure
+        FileUtils.rm_rf(staging) if staging
+      end
+    end
+
+    def cached_preview(key)
+      dir = preview_dir(key)
+      # Adopt only the v3 cache matching the CURRENT XML and file metadata.
+      # Unidentified older caches may have different audio/timing. Hard links
+      # preserve active old URLs and avoid copying long recordings on upgrade.
+      adopt_legacy_preview(dir) if !File.exist?(dir) && key == preview_key
+      result, peaks_path = %w[audio.webm peaks.json].map { |name| File.join(dir, name) }
+      return unless File.file?(result) && File.file?(peaks_path)
+      { audio_url: "#{rec.repo.prefix}/api/recordings/#{rec.id}/preview/#{key}/audio.webm", peaks: JSON.parse(File.read(peaks_path)) }
+    end
+
+    def preview(key, progress: ->(_) {})
+      if (cached = cached_preview(key))
+        progress.call('保存済みのプレビュー音声と波形を再利用しました。')
+        return cached
+      end
+      dir = preview_dir(key)
+      result, peaks_path = %w[audio.webm peaks.json].map { |name| File.join(dir, name) }
+      progress.call('会議全体の音声と波形を生成しています。')
       FileUtils.mkdir_p(dir)
+      # Break any adopted hard links before rebuilding an incomplete cache.
+      # Old preview URLs must continue to reference their original files.
+      FileUtils.rm_f(result)
+      FileUtils.rm_f(peaks_path)
       # Limit open inputs and graph size even for many LiveKit publications.
       partials = rec.audible_assets.each_slice(20).with_index.map do |batch, batch_i|
         path = File.join(dir, "mix-#{batch_i}.flac")

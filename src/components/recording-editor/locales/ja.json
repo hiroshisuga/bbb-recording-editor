@@ -197,5 +197,6 @@
   "selectionEqual": "開始と終了が同じ時刻です。どちらかを設定し直してください。",
   "selectionReversed": "開始が終了より後です。どちらかを設定し直してください。",
   "selectionReady": "選択範囲の長さ：{time}",
-  "showSelectionPoint": "{direction} {point} {time} を表示"
+  "showSelectionPoint": "{direction} {point} {time} を表示",
+  "previewReused": "保存済みのプレビュー音声と波形を再利用しました。"
 }
