@@ -54,3 +54,11 @@ test('remaining buffer controls acceleration, with base-speed fallback and bound
   expect(synchronizationRate(2, 8, 60)).toBe(4);
   expect(synchronizationRate(1, 0.1, 60)).toBe(1);
 });
+
+test('fine correction uses successfully measured rates without treating reported seconds as a byte budget', () => {
+  expect(synchronizationRate(1, 1, 2.5)).toBe(1.2);
+  expect(synchronizationRate(1, 1, 2.5, 3)).toBe(1.8);
+  expect(synchronizationRate(1, 2, 0, 1.5)).toBe(1.5);
+  expect(synchronizationRate(1, -2, 0, 3)).toBe(0.6);
+  expect(synchronizationRate(1, 0.1, 0, 3)).toBe(1);
+});

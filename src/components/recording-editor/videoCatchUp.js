@@ -1,6 +1,6 @@
 import { synchronizationRate } from './videoSync';
 
-const STEPS = [4, 6, 8, 12];
+const STEPS = [0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 12];
 const WINDOW_MS = 2000;
 const RETRY_MS = 30000;
 
@@ -13,6 +13,7 @@ export function createVideoCatchUp(video, report = () => {}) {
   let base = null, normalRate = 1, active = false, window = null, good = [], pending = null;
   let last = null, reason = 'idle', waitingAt = null, waitMs = 0;
   let retryAfter = 0, retryCeiling = Infinity, supportedCeiling = 12;
+  let measuredCeiling = null, finishing = false;
   const emit = (event, values) => report(event, values);
   const stopFrames = () => {
     generation++;
@@ -38,12 +39,17 @@ export function createVideoCatchUp(video, report = () => {}) {
     if (active) emit('catch-up-stop', { reason: why });
     active = false; window = null; good = []; pending = null; last = null;
     waitingAt = null; waitMs = 0; reason = why;
+    if (why === 'tail') finishing = true;
     stopFrames();
   };
   const reset = () => {
-    stop('reset'); retryAfter = 0; retryCeiling = Infinity;
+    stop('reset'); retryAfter = 0; retryCeiling = Infinity; measuredCeiling = null; finishing = false;
   };
-  const waiting = now => { if (active && waitingAt === null) waitingAt = now; };
+  const waiting = now => {
+    measuredCeiling = null;
+    finishing = false;
+    if (active && waitingAt === null) waitingAt = now;
+  };
   const ready = now => {
     if (waitingAt !== null) { waitMs += Math.max(0, now - waitingAt); waitingAt = null; }
   };
@@ -56,26 +62,35 @@ export function createVideoCatchUp(video, report = () => {}) {
     // A failed probe was never added to good. A failing held speed steps down.
     if (!pending && good.length > 1) good.pop();
     pending = null;
-    retryCeiling = good.at(-1)?.rate ?? normalRate;
+    retryCeiling = good.at(-1)?.rate ?? (why === 'insufficient-frames' ? normalRate : base);
     retryAfter = now + RETRY_MS;
+    measuredCeiling = good.at(-1)?.rate ?? null;
     reason = why;
     emit('catch-up-backoff', { reason: why, ceiling: retryCeiling, retryMs: RETRY_MS, ...last });
     window = null;
   };
   const update = ({ now, rate, drift, ahead, blocked = false, visible = true }) => {
-    const fallback = Math.min(supportedCeiling, synchronizationRate(rate, drift, ahead));
-    normalRate = fallback;
     if (rate !== base) { reset(); base = rate; }
+    const fallbackCeiling = Math.min(supportedCeiling, now < retryAfter ? Math.max(rate, retryCeiling) : Infinity);
+    const fallback = Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead, measuredCeiling));
+    normalRate = fallback;
+    if (Math.abs(drift) <= 0.15) finishing = false;
     if (!alive || !supported) return blocked ? rate : fallback;
-    if (!visible || drift <= 2) { if (active) stop(!visible ? 'hidden' : 'tail'); return blocked ? rate : fallback; }
+    if (!visible || drift <= 0.5) {
+      if (active) stop(!visible ? 'hidden' : 'tail');
+      if (!visible) measuredCeiling = null;
+      return blocked ? rate : !visible ? Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead)) : fallback;
+    }
     if (blocked) {
       waiting(now);
-      if (active && window && waitMs + now - waitingAt > 200) backoff(now, 'waiting');
+      if (active && window && waitMs + now - waitingAt > 200) {
+        backoff(now, 'waiting'); stop('waiting'); measuredCeiling = null;
+      }
       return rate;
     }
     ready(now);
     if (!active) {
-      if (drift < 8 || ahead < Math.max(24, rate * 18) ||
+      if (drift < 3 || (finishing && drift < 8) ||
         (now < retryAfter && retryCeiling <= fallback) || supportedCeiling <= fallback) return fallback;
       active = true; good = []; pending = null; reason = 'baseline';
       begin(now, drift, fallback); observe();
@@ -83,12 +98,8 @@ export function createVideoCatchUp(video, report = () => {}) {
       emit('catch-up-step', { reason, rate: fallback });
     }
     let selected = pending ?? good.at(-1)?.rate ?? fallback;
-    // A probe requires three seconds of coverage. Once running, two seconds is
-    // the emergency reserve, checked on every audio tick instead of every window.
-    if (ahead < selected * 2) {
-      retryCeiling = fallback; retryAfter = now + 5000;
-      stop('buffer'); return fallback;
-    }
+    // buffered is advisory: a two-second parsed queue can hide tens of seconds
+    // of received data. Readiness/waiting and actual progress govern the probe.
     // Leave the last seconds to the existing fine correction. Never cross the
     // master position by keeping a large rate until the next observation window.
     const approachLimit = rate + Math.max(0, drift - 1) / 0.5;
@@ -114,19 +125,25 @@ export function createVideoCatchUp(video, report = () => {}) {
         };
         const effective = Math.min(last.observedVideoRate, last.observedFrameRate);
         const previous = good.at(-1);
-        const healthy = effective >= window.rate * 0.7 && last.lagRecoveryRate > 0.1 && last.waitingFraction < 0.1;
+        const recovering = window.rate <= rate + 0.05 || last.lagRecoveryRate > 0.1;
+        const healthy = effective >= window.rate * 0.7 && recovering && last.waitingFraction < 0.1;
         const improves = !previous || (effective > previous.effective * 1.08 && last.lagRecoveryRate > previous.recovery + 0.15);
         if (!healthy || (pending !== null && !improves)) {
           backoff(now, !healthy ? 'slow-progress' : 'no-improvement');
-          if (!good.length) { stop('slow-progress'); return fallback; }
+          if (last.waitingFraction >= 0.1) {
+            stop('waiting'); measuredCeiling = null;
+            return Math.min(supportedCeiling, Math.max(rate, retryCeiling), synchronizationRate(rate, drift, ahead));
+          }
+          if (!good.length) { stop('slow-progress'); return Math.min(fallback, rate); }
         } else {
           const measured = { rate: window.rate, effective, recovery: last.lagRecoveryRate };
           if (pending !== null || !good.length) good.push(measured);
           else good[good.length - 1] = measured;
+          measuredCeiling = measured.rate;
           pending = null;
           const ceiling = Math.min(supportedCeiling, now < retryAfter ? retryCeiling : 12);
           const next = STEPS.find(step => step > window.rate + 0.01 && step <= ceiling);
-          if (next && ahead >= Math.max(24, next * 3) && next <= approachLimit) {
+          if (next && next <= approachLimit) {
             pending = next; reason = 'probe';
             emit('catch-up-step', { reason, rate: next, ...last });
           } else reason = 'hold';
@@ -150,7 +167,7 @@ export function createVideoCatchUp(video, report = () => {}) {
     snapshot(now) {
       return { catchUpPhase: active ? (pending !== null ? 'probe' : good.length ? 'hold' : 'baseline') : 'idle',
         catchUpReason: reason, catchUpRate: active ? (pending ?? good.at(-1)?.rate ?? window?.rate) : null,
-        catchUpRetryMs: Math.max(0, retryAfter - now), ...last };
+        catchUpRetryMs: Math.max(0, retryAfter - now), measuredRateCeiling: measuredCeiling, ...last };
     },
     close() { stop('closed'); alive = false; },
   };
