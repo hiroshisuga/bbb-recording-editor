@@ -155,3 +155,11 @@
 .re-selection-field { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:5px; border:1px solid var(--re-line); border-radius:4px; }
 .re-selection-status { margin:6px 0 12px; color:var(--re-muted); font-size:12px; }
 .re-selection-status.re-selection-invalid { color:#ffc17d; }
+
+.re-chime-settings { margin:8px 0; padding:10px; border:1px solid var(--re-line); border-radius:5px; font-size:12px; }
+.re-chime-tools { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.re-chime-tools audio { width:220px; max-width:100%; height:32px; }
+.re-chime-settings>p { margin:7px 0 0; }
+
+.re-chime-confirm { margin:auto; max-width:min(620px,calc(100vw - 32px)); color:var(--re-text); }
+.re-chime-confirm::backdrop { background:#0008; }

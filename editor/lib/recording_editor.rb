@@ -9,6 +9,7 @@ require 'securerandom'
 require 'time'
 require 'uri'
 require_relative 'detail_waveform'
+require_relative 'cut_chime'
 
 module RecordingEditor
   class Error < StandardError
@@ -21,8 +22,8 @@ module RecordingEditor
 
   # All edit positions are milliseconds from the first event, NOT Unix time
   # and NOT the (trimmed/concatenated) published playback position.
-  def self.ranges(value, duration)
-    raise Error, '区間は配列で指定してください。' unless value.is_a?(Array) && value.size <= 500
+  def self.ranges(value, duration, max_ranges: 500)
+    raise Error, '区間は配列で指定してください。' unless value.is_a?(Array) && value.size <= max_ranges
     result = value.map do |entry|
       raise Error, '区間の形式が不正です。' unless entry.is_a?(Hash)
       a, b = entry.values_at('start_ms', 'end_ms')
@@ -338,7 +339,14 @@ module RecordingEditor
       nil
     end
 
-    def record_ranges(source_doc = current_doc)
+    def record_ranges(source_doc = nil)
+      if source_doc.nil?
+        history = history_data
+        if history && history['revision'] == revision && history.key?('effective_record_ranges')
+          return RecordingEditor.ranges(history.fetch('record_ranges'), duration)
+        end
+      end
+      source_doc ||= current_doc
       start = nil
       marks = source_doc.xpath('/recording/event[@eventname="RecordStatusEvent"]').sort_by { |e| e['timestamp'].to_i }
       return [] if marks.empty?
@@ -527,12 +535,13 @@ module RecordingEditor
         playback_sync: sync, last_operation: history && history['operation'],
         rebuild: rebuild, reset: Original.new(repo, id).info,
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
+        cut_chime: !!(history && history['revision'] == revision && history['cut_chime'] == true),
         assets: media, slides: slides, events: events, warnings: warnings.uniq,
         published_url: published ? "/playback/presentation/2.3/#{id}" : nil,
         preview_key: Media.new(self).preview_key }
     end
 
-    def edited_xml(record_ranges, replacements = {})
+    def edited_xml(record_ranges, replacements = {}, cue_outputs: [])
       raise Error, '録画に残す区間を1つ以上指定してください。BBBは空区間を安全に扱えません。' if record_ranges.empty?
       updated = doc.dup
       old = updated.xpath('/recording/event[@eventname="RecordStatusEvent"]')
@@ -562,6 +571,7 @@ module RecordingEditor
           node.content = replacement if replacement
         end
       end
+      CutChime.add_events(updated, cue_outputs, origin)
       updated.to_xml
     end
   end
@@ -769,23 +779,24 @@ module RecordingEditor
       end
     end
 
-    def redact(beeps, output_dir, progress: ->(_) {})
+    def redact(beeps, output_dir, progress: ->(_) {}, mute_ranges: [])
       sources = rec.audible_assets
-      unless beeps.empty?
+      masks = RecordingEditor.ranges(beeps + mute_ranges, rec.duration, max_ranges: 1000)
+      unless masks.empty?
         unavailable = rec.assets.select do |a|
-          %w[audio deskshare].include?(a['kind']) && a['error'] && beeps.any? { |r| r['start_ms'] < a['end_ms'] && r['end_ms'] > a['start_ms'] }
+          %w[audio deskshare].include?(a['kind']) && a['error'] && masks.any? { |r| r['start_ms'] < a['end_ms'] && r['end_ms'] > a['start_ms'] }
         end
         raise Error, '指定区間に不足・破損した音声素材があります。素材の警告を確認してください。' unless unavailable.empty?
         raise Error, "時刻対応が不明な音声を安全に加工できません: #{rec.unmapped_audio.join(', ')}" unless rec.unmapped_audio.empty?
       end
       raise Error, '加工できる音声素材がありません。' if !beeps.empty? && sources.empty?
       duplicates = sources.group_by { |a| a['relative'] }.select { |_path, items| items.size > 1 }
-      raise Error, '同じ素材が複数の時刻に対応しています。安全に加工できません。' if !beeps.empty? && !duplicates.empty?
+      raise Error, '同じ素材が複数の時刻に対応しています。安全に加工できません。' if !masks.empty? && !duplicates.empty?
       carriers = carrier_ranges(beeps, sources)
       replacements = {}
       outputs = []
       sources.each_with_index do |asset, index|
-        mask = local_ranges(beeps, asset)
+        mask = local_ranges(masks, asset)
         next if mask.empty?
         raise Error, '複数音声トラックを含む素材の加工には未対応です。' if asset['audio_count'] != 1
         codec, format = encoder(asset)
@@ -804,7 +815,8 @@ module RecordingEditor
           "gte(t,#{a})*lt(t,#{b})*max(0,min(1,min((t-#{a})/0.005,(#{b}-t)/0.005)))"
         end.join('+')
         envelope = '0' if envelope.empty?
-        filter = "#{CLOCK_RESAMPLE},aeval=exprs='if(#{expression(mask)},0.12*sin(2*PI*1000*t)*(#{envelope}),val(ch))':c=same"
+        cue_mask = expression(local_ranges(mute_ranges, asset))
+        filter = "#{CLOCK_RESAMPLE},aeval=exprs='if(#{expression(mask)},if(#{cue_mask},0,0.12*sin(2*PI*1000*t)*(#{envelope})),val(ch))':c=same"
         command = [rec.repo.ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', backup, '-filter_complex', "[0:a:0]#{filter}[censored]",
                    '-map', '0:v?', '-map', '[censored]', '-c:v', 'copy', '-c:a', codec]
         command += ['-ar', asset['sample_rate'].to_s] if asset['sample_rate']
@@ -961,6 +973,9 @@ module RecordingEditor
       records = RecordingEditor.ranges(payload['record_ranges'], rec.duration)
       raise Error, '録画に残す区間を1つ以上指定してください。BBBは空区間を安全に扱えません。' if records.empty?
       beeps = RecordingEditor.ranges(payload['beep_ranges'] || [], rec.duration)
+      chime = CutChime.enabled(payload)
+      cues = chime ? CutChime.ranges(records, rec.record_ranges(rec.doc), rec.duration) : []
+      effective = CutChime.effective(records, cues, rec.duration)
       root = repo.state_dir(id)
       FileUtils.mkdir_p(root)
       original = Original.new(repo, id)
@@ -972,21 +987,25 @@ module RecordingEditor
       RecordingEditor.atomic_write(baseline, rec.doc.to_xml) unless File.file?(baseline)
       staging = File.join(root, "staging-#{SecureRandom.hex(6)}")
       FileUtils.mkdir_p(staging)
-      replacements, outputs = Media.new(rec).redact(beeps, staging, progress: progress)
-      xml = rec.edited_xml(records, replacements)
+      replacements, outputs = Media.new(rec).redact(beeps, staging, progress: progress, mute_ranges: cues)
+      cue_outputs = CutChime.render(cues, staging, repo.ffmpeg)
+      outputs.concat(cue_outputs)
+      xml = rec.edited_xml(effective, replacements, cue_outputs: cue_outputs)
       current = repo.raw_file(id, 'events.xml')
       raise Error.new('処理中にevents.xmlが変更されました。保存していません。', 409) unless Digest::SHA256.file(current).hexdigest == rec.revision
       stat = File.stat(current)
       backup = "#{current}.bak.#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}.#{SecureRandom.hex(3)}"
       FileUtils.copy_file(current, backup)
       outputs.each do |item|
-        target = File.join(repo.raw_dir(id), item[:relative])
+        target = original.raw_target(item[:relative])
+        FileUtils.mkdir_p(File.dirname(target))
         File.rename(item[:staged], target)
         File.chmod(stat.mode & 0o777, target)
         File.chown(stat.uid, stat.gid, target) if Process.uid.zero?
       end
       # Write-ahead information is kept even if the XML replacement fails.
-      result = { 'record_ranges' => records, 'beep_ranges' => beeps,
+      result = { 'record_ranges' => records, 'beep_ranges' => beeps, 'cut_chime' => chime,
+                 'effective_record_ranges' => effective,
                  'xml_backup' => backup, 'outputs' => outputs.map { |o| o.reject { |k, _v| k == :staged } },
                  'revision' => Digest::SHA256.hexdigest(xml), 'saved_at' => Time.now.utc.iso8601(6) }
       revision_file = File.join(root, "edit-#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}-#{SecureRandom.hex(3)}.json")
@@ -1028,7 +1047,7 @@ module RecordingEditor
       previous_draft = File.file?(draft_path) ? File.binread(draft_path) : nil
       RecordingEditor.atomic_write(File.join(archive, 'saved.json'), previous_saved) if previous_saved
       RecordingEditor.atomic_write(File.join(archive, 'draft.json'), previous_draft) if previous_draft
-      result = { 'operation' => 'reset', 'revision' => data['revision'], 'beep_ranges' => [],
+      result = { 'operation' => 'reset', 'revision' => data['revision'], 'beep_ranges' => [], 'cut_chime' => false,
                  'xml_backup' => File.join(archive, 'events.xml'), 'archive' => archive,
                  'archived_media' => outputs, 'saved_at' => Time.now.utc.iso8601(6), 'status' => 'prepared' }
       journal = File.join(root, "#{token}.json")
@@ -1099,7 +1118,7 @@ module RecordingEditor
       raise Error.new('events.xmlが変更されています。会議を読み直してください。', 409) unless payload['revision'] == rec.revision
       records = RecordingEditor.ranges(payload['record_ranges'], rec.duration)
       beeps = RecordingEditor.ranges(payload['beep_ranges'] || [], rec.duration)
-      data = { revision: rec.revision, record_ranges: records, beep_ranges: beeps }
+      data = { revision: rec.revision, record_ranges: records, beep_ranges: beeps, cut_chime: CutChime.enabled(payload) }
       RecordingEditor.atomic_write(File.join(repo.state_dir(id), 'draft.json'), JSON.pretty_generate(data))
       data
     end

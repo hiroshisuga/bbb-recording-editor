@@ -44,6 +44,16 @@ class ServerTest < Minitest::Test
     assert_equal @id, JSON.parse(request('recordings').body).first['id']
   end
 
+  def test_chime_sample_is_authenticated_read_only_and_seekable
+    assert_equal '401', request('cut-chime.wav', auth: false).code
+    response = request('cut-chime.wav')
+    assert_equal '200', response.code
+    assert_equal 'audio/wav', response['Content-Type']
+    assert_equal File.binread(RecordingEditor::CutChime::SAMPLE), response.body.b
+    assert_equal '206', request('cut-chime.wav', headers: { 'Range' => 'bytes=0-43' }).code
+    assert_equal '405', request('cut-chime.wav', method: Net::HTTP::Post, headers: { 'X-BBB-Editor' => '1' }).code
+  end
+
   def test_external_video_title_route_is_authenticated_and_only_accepts_recorded_urls
     url = 'https://youtu.be/video'
     File.write(File.join(@raw, 'events.xml'), @xml.sub('</recording>', "<event timestamp=\"2000\" eventname=\"StartExternalVideoRecordEvent\"><externalVideoUrl>#{url}</externalVideoUrl></event></recording>"))

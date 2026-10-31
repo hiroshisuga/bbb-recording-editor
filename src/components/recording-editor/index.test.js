@@ -109,6 +109,34 @@ test('reused previews are explicitly identified in both languages', async () => 
   expect(container.querySelector('.re-success').textContent).toBe('Reused the saved preview audio and waveforms.');
 });
 
+test('cut chime is opt-in with a warning, supports cancellation and undo, and is saved in drafts/raw', async () => {
+  const checkbox = () => container.querySelector('.re-chime-settings input');
+  expect(checkbox().checked).toBe(false);
+  expect(container.querySelector('.re-chime-settings audio').src).toContain('/api/cut-chime.wav');
+  await act(async () => Simulate.change(checkbox(), { target: { checked: true } }));
+  expect(checkbox().checked).toBe(false);
+  expect(container.querySelector('[role="alertdialog"]').textContent).toContain('映像・スライド・チャット');
+  await click('キャンセル');
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(checkbox().checked).toBe(false);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  await act(async () => Simulate.change(checkbox(), { target: { checked: true } }));
+  await click('確認して有効にする');
+  expect(checkbox().checked).toBe(true);
+  await click('↶ 元に戻す'); expect(checkbox().checked).toBe(false);
+  await click('↷ やり直す'); expect(checkbox().checked).toBe(true);
+  await language('en');
+  expect(container.querySelector('.re-chime-settings').textContent).toContain('Add a chime');
+  await language('ja');
+  await click('下書きを保存');
+  expect(calls.find(c => c.url.endsWith('/draft')).payload.cut_chime).toBe(true);
+  await click('rawデータへ保存…');
+  expect(container.querySelector('.re-review').textContent).toContain('最大0.25秒');
+  await click('バックアップを作成して保存');
+  expect(calls.find(c => c.url.endsWith('/save')).payload.cut_chime).toBe(true);
+  expect(calls.find(c => c.url.endsWith('/save')).payload.record_ranges).toEqual(manifest.record_ranges);
+});
+
 test('opening and reopening begin unselected and allow entering the start time first', async () => {
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
   expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');
