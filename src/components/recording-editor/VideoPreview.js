@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { useEditorI18n } from './i18n';
 import VideoBufferStatus from './VideoBufferStatus';
+import { createVideoTrace } from './videoTrace';
 
 const SEEK_DRIFT_SECONDS = 1;
 const SEEK_COOLDOWN_MS = 3000;
@@ -36,6 +37,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     let autoSeekInFlight = false;
     let corrections = [];
     let warned = false;
+    const trace = createVideoTrace(video, () => ({ ...desired.current, waiting, correctionAfter, autoSeekInFlight }));
     setError('');
     setSyncWarning(false);
     // Muted playback must also be set on the media element, not just its markup.
@@ -44,6 +46,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       if (!alive) return;
       failed = true;
       const name = cause?.name || (cause?.code ? `MediaError ${cause.code}` : 'MediaError');
+      trace.log('playback-error', { name, message: cause?.message });
       setError([name, cause?.message].filter(Boolean).join(': '));
     };
     const sync = event => {
@@ -65,13 +68,16 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       const now = performance.now();
       const drift = position - video.currentTime;
       const precise = !positioned || requestedSeek || !current.playing;
+      const preciseReason = requestedSeek ? 'user-seek' : !positioned ? 'initial-position' : 'paused-position';
+      if (requestedSeek) trace.log('user-seek');
       if (requestedSeek || !current.playing) corrections = [];
       if (requestedSeek && video.seeking && Math.abs(drift) > 0.01) {
         // Only an explicit user seek may cancel an obsolete HTTP range.
         pendingPlay = null;
         positioned = false;
         autoSeekInFlight = false;
-        try { video.load(); } catch (cause) { fail(cause); }
+        trace.log('reload-request', { reason: 'cancel-obsolete-user-seek', toS: position });
+        try { video.load(); trace.log('reload-applied'); } catch (cause) { fail(cause); }
         return;
       }
       if (event?.type === 'seeked') {
@@ -85,7 +91,9 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
           positioned = true;
           correctionAfter = now + SEEK_SETTLE_MS;
           if (Math.abs(drift) > 0.01) {
+            trace.log('seek-request', { reason: preciseReason, toS: position });
             try { video.currentTime = position; } catch (cause) { fail(cause); return; }
+            trace.log('seek-assigned', { reason: preciseReason, toS: position });
           }
         } else if (!waiting && video.readyState >= 3 && now >= correctionAfter) {
           if (Math.abs(drift) > SEEK_DRIFT_SECONDS) {
@@ -93,7 +101,9 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
             // The cooldown starts again on completion if this fetch is slow.
             correctionAfter = now + SEEK_COOLDOWN_MS;
             autoSeekInFlight = true;
+            trace.log('seek-request', { reason: 'automatic-drift', toS: position });
             try { video.currentTime = position; } catch (cause) { fail(cause); return; }
+            trace.log('seek-assigned', { reason: 'automatic-drift', toS: position });
             corrections = corrections.filter(at => now - at <= CORRECTION_WINDOW_MS);
             corrections.push(now);
             if (!warned && current.clip.kind === 'deskshare' && corrections.length >= CORRECTION_WARNING_COUNT) {
@@ -130,6 +140,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     synchronize.current = sync;
     sync();
     return () => {
+      trace.close();
       alive = false;
       if (synchronize.current === sync) synchronize.current = null;
       events.forEach(name => video.removeEventListener(name, sync));
