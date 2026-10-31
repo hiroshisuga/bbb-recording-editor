@@ -164,6 +164,8 @@
   "videoState_waiting": "Waiting for video data",
   "videoState_seeking": "Seeking",
   "videoState_paused": "Paused",
+  "videoState_catchingUp": "Catching up to audio (video {rate}×)",
+  "videoState_syncing": "Synchronizing with audio (video {rate}×)",
   "videoState_playing": "Playing",
   "videoState_ended": "Video ended",
   "videoState_error": "Video error",

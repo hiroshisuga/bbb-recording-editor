@@ -235,7 +235,7 @@ test('buffer starvation never starts automatic seeks, even as the audio clock ke
   expect(state(video()).writes).toEqual([]);
   await event('canplay');
   expect(state(video()).writes).toEqual([]);
-  expect(video().playbackRate).toBe(2);
+  expect(video().playbackRate).toBe(3);
   expect(state(video()).paused).toBe(false);
 });
 
@@ -243,7 +243,7 @@ test('small drift adjusts only the video rate, returns to the requested rate, an
   await render({ playing: true, rate: 2 }); await event('loadedmetadata', { ready: 4 });
   clock = 1000;
   await render({ time: 1400 });
-  expect(video().playbackRate).toBeCloseTo(2.2);
+  expect(video().playbackRate).toBeCloseTo(2.7);
   await event('waiting');
   expect(video().playbackRate).toBe(2);
   state(video()).time = 0.8; await event('canplay');
@@ -259,7 +259,7 @@ test('large drift never causes automatic seeks or reloads, and an explicit seek 
     clock = at; await render({ time: at + 3000 });
     expect(state(video()).writes).toEqual([]);
     expect(video().playbackRate).toBeGreaterThan(1);
-    expect(video().playbackRate).toBeLessThanOrEqual(2);
+    expect(video().playbackRate).toBeLessThanOrEqual(3);
   }
   expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
   await render({ time: 6000, seekVersion: 1 });
@@ -334,7 +334,7 @@ test('trace identifies rate-based sync and logs explicit seeks without any autom
     await event('loadedmetadata', { ready: 4 });
     clock = 1000; await render({ time: 3000 });
     expect(window.bbbEditorVideoLogs.some(r => r.event === 'seek-request')).toBe(false);
-    expect(window.bbbEditorVideoLogs.some(r => r.syncPolicy === 'playback-rate')).toBe(true);
+    expect(window.bbbEditorVideoLogs.some(r => r.syncPolicy === 'adaptive-playback-rate')).toBe(true);
     await render({ time: 5000, seekVersion: 1 });
     const request = window.bbbEditorVideoLogs.find(r => r.event === 'seek-request');
     const assigned = window.bbbEditorVideoLogs.find(r => r.event === 'seek-assigned');
