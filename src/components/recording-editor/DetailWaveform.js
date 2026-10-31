@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { formatTime } from './model';
+import TimelineTooltip from './TimelineTooltip';
 
 export const CHUNK_MS = 10000;
 const clamp = (value, max) => Math.max(0, Math.min(max, value));
@@ -116,7 +117,7 @@ function WaveCanvas({ tiles, start, span, label }) {
   return <canvas ref={canvas} aria-label={label} role="img" />;
 }
 
-export default function DetailWaveform({ audioUrl, duration, time, playing, selection, setSelection, seek, span, setSpan }) {
+export default function DetailWaveform({ audioUrl, duration, time, playing, selection, setSelection, seek, span, setSpan, recordRanges = [] }) {
   const { t } = useEditorI18n();
   const width = Math.min(span, duration || span);
   const [start, setStart] = useState(() => windowStart(time, duration, width));
@@ -162,6 +163,10 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   const { tiles, loading, error } = useWaveformTiles(audioUrl, start, width, duration,
     following && playing && !dragging && time >= start + width * 0.65, retry);
   const ticks = useMemo(() => [0, 0.5, 1].map(p => formatTime(start + width * p)), [start, width]);
+  const visibleRanges = useMemo(() => recordRanges.map((range, index) => ({
+    ...range, number: index + 1,
+    from: Math.max(start, range.start_ms), to: Math.min(start + width, duration, range.end_ms),
+  })).filter(range => range.to > range.from), [recordRanges, start, width, duration]);
   const pct = value => `${clamp((value - start) / width * 100, 100)}%`;
   const position = e => {
     const bounds = e.currentTarget.getBoundingClientRect();
@@ -195,13 +200,21 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   return <section className="re-detail-wave" aria-label={t('detailWave')}>
     <div className="re-detail-tools"><strong>{t('detailWave')}</strong><label>{t('detailSpan')} <select aria-label={t('detailSpan')} value={span} onChange={e => setSpan(Number(e.target.value))}>
       {[5000, 10000, 30000].map(ms => <option key={ms} value={ms}>{t('detailSeconds', { seconds: ms / 1000 })}</option>)}
-    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-muted">{t('detailHint')}</span></div>
+    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-detail-record-legend">{t('keep')}</span><span className="re-muted">{t('detailHint')}</span></div>
     {(!following || time < start || time > start + width) && <div className="re-detail-view-state" role="status">
       {!following && <span>{t('detailFollowPaused')}</span>}
       {time < start ? <span>{t('detailPlayheadBefore')}</span> : time > start + width ? <span>{t('detailPlayheadAfter')}</span> : null}
     </div>}
     <div className="re-detail-ruler">{ticks.map((tick, i) => <span key={i}>{tick}</span>)}</div>
     <div className="re-detail-plot" ref={plotRef} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={cancel} onLostPointerCapture={cancel}>
+      <div className="re-detail-record-track" role="group" aria-label={t('keepRanges')}>
+        {visibleRanges.map(range => {
+          const label = `${t('keep')} ${range.number}: ${formatTime(range.start_ms)} – ${formatTime(range.end_ms)}`;
+          return <div key={range.number} className="re-detail-record-range" role="img" aria-label={label} data-tooltip={label}
+            style={{ left: pct(range.from), width: `${(range.to - range.from) / width * 100}%` }}>{range.number}</div>;
+        })}
+        {!visibleRanges.length && <span className="re-detail-record-empty">{t('detailNoRecordingInView')}</span>}
+      </div>
       <WaveCanvas tiles={tiles} start={start} span={width} label={t('detailWave')} />
       {selection.end_ms > selection.start_ms && selection.end_ms > start && selection.start_ms < start + width
         && <div className="re-detail-selection" style={{ left: pct(selection.start_ms), right: `${100 - clamp((selection.end_ms - start) / width * 100, 100)}%` }} />}
@@ -209,5 +222,6 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
       {loading && <span className="re-detail-status" role="status">{t('detailLoading')}</span>}
       {error && <span className="re-detail-status" role="status">{t('detailError')} <button onClick={() => setRetry(n => n + 1)} onPointerDown={e => e.stopPropagation()}>{t('detailRetry')}</button></span>}
     </div>
+    <TimelineTooltip key={`${start}:${width}`} targetRef={plotRef} />
   </section>;
 }
