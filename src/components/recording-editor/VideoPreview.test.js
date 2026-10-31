@@ -492,3 +492,41 @@ test('screen recovery can progress when the browser continually reports only a 2
     expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
   });
 });
+
+test('a brief media wait rechecks progress and recovers the tail without extra seeks', async () => {
+  await withFrameCallbacks(async ({ frame }) => {
+    await render({ playing: true, time: 21000 });
+    await event('loadedmetadata', { ready: 4, duration: 1000, ranges: [[0, 1000]], time: 20 });
+    let master = 80;
+    const tick = async () => {
+      clock += 100; master += 0.1;
+      state(video()).time += video().playbackRate * 0.1;
+      frame(); await render({ time: 1000 + master * 1000 });
+    };
+    for (let i = 0; i < 30 && video().playbackRate < 4; i++) await tick();
+    expect(video().playbackRate).toBe(4);
+    master = state(video()).time + 2.4;
+    state(video()).ranges = [[0, state(video()).time + 2.5]];
+    await render({ time: 1000 + master * 1000 });
+    await event('waiting', { ready: 2 });
+    expect(video().playbackRate).toBe(1);
+    clock += 11; master += 0.011;
+    await event('canplay', { ready: 4 });
+    // Apply the new master clock without interpreting it as a user seek.
+    await render({ time: 1000 + master * 1000 });
+    expect(video().playbackRate).toBe(1.25);
+    let accelerated = false;
+    for (let i = 0; i < 80; i++) {
+      state(video()).ranges = [[0, state(video()).time + 2.5]];
+      await tick();
+      if (i < 19) expect(video().playbackRate).toBeLessThanOrEqual(1.25);
+      accelerated ||= video().playbackRate > 1.25;
+    }
+    expect(accelerated).toBe(true);
+    expect(Math.abs(master - state(video()).time)).toBeLessThanOrEqual(0.15);
+    expect(video().playbackRate).toBe(1);
+    expect(state(video()).writes).toEqual([]);
+    expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
+    expect(state(video()).paused).toBe(false);
+  });
+});
