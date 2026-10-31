@@ -315,13 +315,15 @@ test('brief drifts and pauses reset the persistent-drift observation period', as
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
-test('cameras use rate correction without a screen-sharing warning or diagnostic overlay', async () => {
+test('cameras show compact diagnostics while retaining normal correction and no screen-sharing warning', async () => {
   await render({ clip: { ...clip, kind: 'video' }, playing: true });
   await event('loadedmetadata', { ready: 4 });
   for (const at of [4000, 8000, 12000, 16000]) await lagAt(at);
   expect(state(video()).writes).toEqual([]);
   expect(video().playbackRate).toBeGreaterThan(1);
-  expect(container.querySelector('.re-video-buffer')).toBeNull();
+  expect(container.querySelector('.re-video-buffer--compact')).not.toBeNull();
+  expect(container.querySelector('.re-video-buffer').parentElement).toBe(container.querySelector('.re-video'));
+  expect(container.querySelector('.re-video-image').contains(container.querySelector('.re-video-buffer'))).toBe(false);
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
@@ -581,4 +583,31 @@ test('a half-second startup wait permits cautious recovery before thirty seconds
     expect(state(video()).writes).toEqual([]);
     expect(HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
   });
+});
+
+test('each camera reports its own buffer and offset without changing the other camera', async () => {
+  await act(async () => root.render(<EditorLanguageProvider>{[1, 2].map(id =>
+    <VideoPreview key={id} clip={{ ...clip, kind: 'video', id, user: `Camera ${id}`, url: `/camera-${id}.webm` }} time={6000} playing rate={1} />
+  )}</EditorLanguageProvider>));
+  const videos = Array.from(container.querySelectorAll('video'));
+  await act(async () => videos.forEach(v => {
+    Object.assign(state(v), { time: 5, ready: 4 });
+    v.dispatchEvent(new Event('loadedmetadata'));
+  }));
+  await act(async () => {
+    Object.assign(state(videos[0]), { ranges: [[0, 15]] });
+    Object.assign(state(videos[1]), { time: 3, ranges: [[0, 7]], ready: 2 });
+    videos[0].dispatchEvent(new Event('progress'));
+    videos[1].dispatchEvent(new Event('waiting'));
+  });
+  const groups = Array.from(container.querySelectorAll('.re-video-buffer'));
+  expect(groups).toHaveLength(2);
+  expect(groups[0].textContent).toContain('Buffer: 10.0 s');
+  expect(groups[0].textContent).toContain('Offset: about 0 s');
+  expect(groups[0].dataset.state).toBe('playing');
+  expect(groups[1].textContent).toContain('Buffer: 4.0 s');
+  expect(groups[1].textContent).toContain('Behind: 2.0 s');
+  expect(groups[1].dataset.state).toBe('waiting');
+  expect(state(videos[0]).writes).toEqual([]);
+  expect(state(videos[1]).writes).toEqual([]);
 });

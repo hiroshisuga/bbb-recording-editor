@@ -167,3 +167,19 @@ test('compares catch-up to the requested audio speed, not a fixed 1x', async () 
   await render({ playing: false }); await event('pause');
   expect(status().dataset.state).toBe('paused');
 });
+
+test('camera diagnostics use compact labels while retaining buffer, offset, speed, and browser-report explanation', async () => {
+  await render({ clip: { ...clip, kind: 'video' }, time: 9000 });
+  expect(status().classList.contains('re-video-buffer--compact')).toBe(true);
+  expect(status().getAttribute('aria-label')).toBe('Video buffer and sync status');
+  expect(status().title).toContain('Browser-reported');
+  expect(status().textContent).toContain('Buffer: 4.0 s');
+  expect(status().textContent).toContain('Behind: 3.0 s');
+  expect(status().textContent).toContain('Syncing (1×)');
+  await event('ratechange', { rate: 2 });
+  expect(status().textContent).toContain('Catching up (2×)');
+  await event('waiting', { ready: 2 });
+  expect(status().dataset.state).toBe('waiting');
+  await event('seeking', { seeking: true });
+  expect(status().dataset.state).toBe('seeking');
+});
