@@ -791,6 +791,13 @@ test('detailed waveform is opt-in, shares selection with beep editing, and saves
     expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
     await click('ピー音を追加');
     expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:01.000');
+    expect(container.querySelector('.re-detail-record-range').style.left).toBe('10%');
+    await click('録画から除外');
+    expect(container.querySelector('.re-detail-record-range').style.left).toBe('20%');
+    expect(container.querySelector('.re-detail-record-range').dataset.tooltip).toContain('00:00:02.000 – 00:00:59.000');
+    await click('録画に残す');
+    expect(container.querySelector('.re-detail-record-range').style.left).toBe('10%');
+    expect(global.fetch.mock.calls.filter(([url]) => url.includes('/waveform/'))).toHaveLength(1);
     expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
     await act(async () => Simulate.change(container.querySelector('.re-detail-tools select'), { target: { value: '5000' } }));
     expect(readPreferences()).toEqual(expect.objectContaining({ detailWaveOpen: true, detailWaveSpan: 5000 }));

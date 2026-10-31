@@ -220,3 +220,64 @@ test('rapid wheel navigation coalesces waveform requests to the final visible ti
   expect(requests().map(p => p.split('/').pop())).toEqual(['6', '7', '8']);
   expect(props.seek).not.toHaveBeenCalled();
 });
+
+const recordingBars = () => Array.from(container.querySelectorAll('.re-detail-record-range'));
+
+test('recording ribbons clip to the detailed view, omit exact outside boundaries, and keep global interval numbers', async () => {
+  await render({ recordRanges: [
+    { start_ms: 0, end_ms: 63000 }, { start_ms: 64000, end_ms: 65000 },
+    { start_ms: 67000, end_ms: 71000 }, { start_ms: 72000, end_ms: 75000 },
+    { start_ms: 78000, end_ms: 79000 },
+  ] });
+  const bars = recordingBars();
+  expect(bars.map(bar => bar.textContent)).toEqual(['2', '3', '4']);
+  expect(bars.map(bar => [bar.style.left, bar.style.width])).toEqual([['10%', '10%'], ['40%', '40%'], ['90%', '10%']]);
+  expect(bars[2].getAttribute('aria-label')).toContain('00:01:12.000 – 00:01:15.000');
+  await render({ recordRanges: [{ start_ms: 61000, end_ms: 65000 }] });
+  expect(recordingBars()[0].style.left).toBe('0%');
+  expect(recordingBars()[0].style.width).toBe('20%');
+  await render({ recordRanges: [{ start_ms: 0, end_ms: 90000 }] });
+  expect(recordingBars()[0].style.width).toBe('100%');
+});
+
+test('recording ribbons follow wheel browsing and span changes, with meeting-end clipping', async () => {
+  await render({ recordRanges: [{ start_ms: 65000, end_ms: 70000 }] });
+  expect(recordingBars()[0].style.left).toBe('20%');
+  await wheel(100);
+  expect(recordingBars()[0].style.left).toBe('10%');
+  await render({ span: 5000 });
+  expect(recordingBars()[0].style.left).toBe('0%');
+  expect(recordingBars()[0].style.width).toBe('70%');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+  await render({ duration: 3000, span: 10000, recordRanges: [{ start_ms: 1000, end_ms: 9000 }] });
+  await act(async () => Simulate.click(returnToPlayhead()));
+  expect(parseFloat(recordingBars()[0].style.left)).toBeCloseTo(100 / 3);
+  expect(parseFloat(recordingBars()[0].style.width)).toBeCloseTo(200 / 3);
+});
+
+test('editing recording ranges updates the ribbons without fetching or redrawing the waveform', async () => {
+  await render({ recordRanges: [{ start_ms: 63000, end_ms: 66000 }] }); await advance();
+  const count = requests().length, strokes = context.stroke.mock.calls.length;
+  await render({ recordRanges: [{ start_ms: 65000, end_ms: 66500 }], selection: { start_ms: 66000, end_ms: 67000 } });
+  expect(recordingBars()[0].style.left).toBe('20%');
+  expect(recordingBars()[0].style.width).toBe('15%');
+  await advance();
+  expect(requests()).toHaveLength(count);
+  expect(context.stroke).toHaveBeenCalledTimes(strokes);
+  await render({ recordRanges: [] });
+  expect(recordingBars()).toHaveLength(0);
+  expect(container.textContent).toContain('No recording intervals in this view');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+});
+
+test('recording ribbon tooltips show full interval times promptly while pointer and wheel actions still reach the plot', async () => {
+  await render({ recordRanges: [{ start_ms: 62000, end_ms: 65000 }] }); await advance();
+  const bar = recordingBars()[0];
+  await act(async () => bar.dispatchEvent(new MouseEvent('pointerover', { bubbles: true, clientX: 120, clientY: 40 })));
+  await advance(150);
+  expect(document.querySelector('[role="tooltip"]').textContent).toContain('00:01:02.000 – 00:01:05.000');
+  expect((await wheel(100, {}, bar)).defaultPrevented).toBe(true);
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(viewStart()).toBe('00:01:04.000');
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+});

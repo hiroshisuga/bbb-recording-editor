@@ -182,5 +182,6 @@
   "videoClockBehindCompact": "Behind: {seconds} s",
   "videoClockAheadCompact": "Ahead: {seconds} s",
   "videoState_catchingUpCompact": "Catching up ({rate}×)",
-  "videoState_syncingCompact": "Syncing ({rate}×)"
+  "videoState_syncingCompact": "Syncing ({rate}×)",
+  "detailNoRecordingInView": "No recording intervals in this view"
 }

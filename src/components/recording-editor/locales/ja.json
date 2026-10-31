@@ -182,5 +182,6 @@
   "videoClockBehindCompact": "遅れ: {seconds}秒",
   "videoClockAheadCompact": "先行: {seconds}秒",
   "videoState_catchingUpCompact": "追随中（{rate}倍速）",
-  "videoState_syncingCompact": "同期調整（{rate}倍速）"
+  "videoState_syncingCompact": "同期調整（{rate}倍速）",
+  "detailNoRecordingInView": "この表示範囲に録画区間はありません"
 }
