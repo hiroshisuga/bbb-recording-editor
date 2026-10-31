@@ -314,3 +314,23 @@ test('camera corrections use the same limits without showing a screen-sharing wa
   expect(container.querySelector('.re-video-buffer')).toBeNull();
   expect(container.querySelector('[role="status"]')).toBeNull();
 });
+
+test('trace distinguishes automatic correction from explicit seeks and records buffer loss before and after assignment', async () => {
+  window.bbbEditorVideoDebug = true;
+  jest.spyOn(console, 'info').mockImplementation(() => {});
+  try {
+    await render({ playing: true });
+    Object.defineProperty(video(), 'buffered', { configurable: true, get: () => ({ length: 1, start: () => 0, end: () => 1.5 }) });
+    await event('loadedmetadata', { ready: 4 });
+    clock = 1000; await render({ time: 3000 });
+    const request = window.bbbEditorVideoLogs.find(r => r.event === 'seek-request');
+    const assigned = window.bbbEditorVideoLogs.find(r => r.event === 'seek-assigned');
+    expect(request).toEqual(expect.objectContaining({ reason: 'automatic-drift', videoTimeS: 0, targetTimeS: 2, bufferAheadS: 1.5, targetBufferAheadS: 0 }));
+    expect(assigned).toEqual(expect.objectContaining({ reason: 'automatic-drift', videoTimeS: 2, bufferAheadS: 0, seeking: true }));
+    await event('seeked', { seeking: false });
+    await render({ time: 5000, seekVersion: 1 });
+    expect(window.bbbEditorVideoLogs.filter(r => r.event === 'seek-request').map(r => r.reason)).toEqual(['automatic-drift', 'user-seek']);
+  } finally {
+    delete window.bbbEditorVideoDebug; delete window.bbbEditorVideoLogs;
+  }
+});

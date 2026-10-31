@@ -169,6 +169,40 @@ BBB 2.6.9以降（3.0／4.0を含む）の標準設定は `recordFullDurationMed
 
 音声との時刻差は**音声を基準にした目標時刻と動画の内部再生時刻の差**であり、画面に最後に描画されたフレームの遅れを直接測った値ではありません。プレビュー上の説明も参照してください。原因を調べる際は、遅れが出た時点の先読み秒数・状態・音声との時刻差を一緒に確認してください。
 
+### コンソールで同期・バッファのログを取る
+
+画面共有の遅れを調べる場合は、開発者ツールのConsoleで次を実行します。会議を開いた後でも有効にできます。通常は無効で、ページの再読み込みで無効に戻ります。
+
+```js
+window.bbbEditorVideoLogs = [];
+window.bbbEditorVideoDebug = true;
+```
+
+Consoleのフィルターに `[BBB video]` を指定し、音声を再生して30〜60秒ほど症状を再現します。1秒ごとの `sample`、読み込み・待機・シークなどの `media:*` イベント、アプリがシークする直前の `seek-request` と代入直後の `seek-assigned` をJSONで記録します。100ミリ秒ごとの音声時刻更新は記録しません。各行はその時点の値を文字列化したもので、後からオブジェクトを展開して値が変わることはありません。
+
+記録後は次で停止します。Chrome/ChromiumのConsoleでは `copy(...)` で記録をJSONとしてコピーできます（[ChromeのConsole Utilities](https://developer.chrome.com/docs/devtools/console/utilities/#copyobject)）。
+
+```js
+window.bbbEditorVideoDebug = false;
+copy(JSON.stringify(window.bbbEditorVideoLogs, null, 2));
+```
+
+| 主な項目 | 意味 |
+| --- | --- |
+| `traceId`, `file`, `at`, `elapsedMs` | 映像インスタンス、raw相対ファイル名、日時、インスタンス生成からの経過ミリ秒。映像の切り替え・再読み込みで別インスタンスになる |
+| `reason`, `seekNumber`, `seekReason`, `sinceSeekRequestMs` | シーク理由と通し番号、最後のシーク理由、依頼からの経過ミリ秒。`automatic-drift` は自動補正、`user-seek` は手動操作、`initial-position` は初期位置、`paused-position` は停止中の位置合わせ |
+| `audioTimeMs`, `originS`, `targetTimeS`, `videoTimeS`, `driftS` | 会議内の音声時刻、rawの開始時刻、動画の目標時刻、内部再生時刻、目標からの遅れ。音声時刻だけミリ秒、残りはraw動画の時間軸における秒。負の遅れは動画の先行 |
+| `bufferAheadS`, `targetBufferAheadS`, `buffered` | 現在位置からの先読み秒数、移動先からの先読み秒数、読み込み済み全区間の開始・終了秒。離れた区間を合算しない |
+| `lastFrameTimeS`, `frameDriftS`, `frameAgeMs` | ブラウザが描画用に提出した最新フレームの時刻、そのフレームの目標からの遅れ、フレーム通知からの経過ミリ秒。フレーム通知API非対応・通知前は `null` |
+| `readyState`, `networkState`, `seeking`, `waiting` | メディア準備状態・取得状態、シーク中か、同期処理が映像データ待ちと認識しているか |
+| `correctionWaitMs`, `autoSeekInFlight` | 自動補正を再開できるまでの残り待機ミリ秒と、補正シークの完了待ち状態 |
+| `requestedPlaying`, `paused`, `requestedRate`, `playbackRate` | 音声側の再生指示、動画の一時停止状態、指定速度、動画の実際の設定速度 |
+| `totalFrames`, `droppedFrames` | ブラウザが報告する累計フレーム数・欠落フレーム数。API非対応の場合は `null` |
+
+自動補正の `seek-request` では `bufferAheadS: 3` がある一方で `targetBufferAheadS: 0`、直後の `seek-assigned` で `bufferAheadS: 0` となれば、補正で未読み込み位置へ移動したことを確認できます。同じ `seekNumber` の `media:seeked` までの時間も確認してください。補正なしに `sample` の先読みが徐々に減って `media:waiting` に至る場合は、再生による消費にデータの供給・処理が追いついていない手がかりになります。どちらも回線速度だけで原因を断定するものではありません。
+
+ログは画面共有だけが対象で、直近600件をページのメモリ内に保持します。サーバへの送信・永続保存・追加の動画取得は行いません。診断を有効にしても音声・動画の停止、シーク、再生速度を変更しません。フレーム通知は物理ディスプレイ上の描画時刻を直接測定した値ではありません。
+
 ## 下書き保存・raw保存・録画再構築の使い分け
 
 **Save draftは作業途中の区間設定の保管、Save to raw…はBBBが使うrawデータへの反映、Rebuild recording…は保存済みrawから再生用録画を生成し直す操作です。** 3つは独立した操作で、下書き保存やraw保存から自動で再構築することはありません。
