@@ -7,6 +7,7 @@ import { bufferedAhead, synchronizationRate } from './videoSync';
 import { createVideoCatchUp } from './videoCatchUp';
 
 const SEEK_SETTLE_MS = 750;
+const PAUSE_DRIFT_SECONDS = 0.15;
 const DRIFT_WARNING_SECONDS = 1;
 const DRIFT_WARNING_MS = 10000;
 
@@ -33,6 +34,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
     let pendingPlay = null;
     let appliedSeekVersion = desired.current.seekVersion;
     let positioned = false;
+    let pausedPosition = null;
     let waiting = false;
     let correctionAfter = 0;
     let driftSince = null;
@@ -72,7 +74,12 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
       appliedSeekVersion = current.seekVersion;
       const now = performance.now();
       const drift = position - video.currentTime;
-      const precise = !positioned || requestedSeek || !current.playing;
+      // A normal pause may leave a tolerated clock offset. Seeking even 0.14 s
+      // can re-decode a very long GOP. Still honor actual paused-position edits
+      // and explicit seek versions, including fine edits below this tolerance.
+      const pausedMove = !current.playing && pausedPosition !== null && position !== pausedPosition;
+      pausedPosition = current.playing ? null : position;
+      const precise = !positioned || requestedSeek || pausedMove || (!current.playing && Math.abs(drift) > PAUSE_DRIFT_SECONDS);
       const preciseReason = requestedSeek ? 'user-seek' : !positioned ? 'initial-position' : 'paused-position';
       if (requestedSeek) trace.log('user-seek');
       if (requestedSeek || !current.playing) {
@@ -105,7 +112,7 @@ export default function VideoPreview({ clip, time, playing, rate, seekVersion = 
             try { video.currentTime = position; } catch (cause) { fail(cause); return; }
             trace.log('seek-assigned', { reason: preciseReason, toS: position });
           }
-        } else {
+        } else if (current.playing) {
           // A long-GOP raw video can take seconds to seek even within a fully
           // buffered range. Follow the audio by rate only, regardless of drift,
           // so completing an expensive seek cannot trigger another one.

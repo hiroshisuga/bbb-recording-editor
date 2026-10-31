@@ -1,0 +1,84 @@
+{
+  "browser": "Headless Chromium 131.0.6778.204, Linux",
+  "date": "2026-10-31",
+  "baselineCommit": "c824281da93ef54438b6a8c98d6624872d770252",
+  "method": "Actual React VideoPreview; synthetic 240-second HTTP VP8 source, independent native WAV audio master. Audio-time props every 100 ms. Controlled waiting event at first 3x baseline after 700 ms of playback, canplay 540 ms later; run for 10 seconds after waiting starts. Video buffered getter explicitly reports [0,240] to isolate policy under ample reported buffering. This is not an actual network-underflow benchmark. At end, freeze video and set the paused target 141 ms ahead to compare seek assignments. Audio event counts are sampled before test cleanup.",
+  "sourceSha256": {
+    "src/components/recording-editor/videoCatchUp.js": "4030485867589ad630c983d85b258d62d7c647c230a2fde2c83b727ee9a16808",
+    "src/components/recording-editor/VideoPreview.js": "a8270da7235f6a9ce66880b9c88dea95a14e1c16f00e1a73126b9a4662cd8c7f"
+  },
+  "cases": [
+    {
+      "mode": "before",
+      "waitAtS": 0.7025,
+      "finalLag": 67.800039,
+      "frameLag": 67.81929,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioPaused": false,
+      "audioRate": 1,
+      "seeks": 0,
+      "pauseSeeks": 1,
+      "steps": [
+        {
+          "at": 1345.7,
+          "rate": 3,
+          "reason": "baseline"
+        }
+      ],
+      "backoffs": [
+        {
+          "at": 2243.7,
+          "ceiling": 1,
+          "reason": "waiting"
+        }
+      ]
+    },
+    {
+      "mode": "after",
+      "waitAtS": 0.703,
+      "finalLag": 61.985337,
+      "frameLag": 62.005525000000006,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioPaused": false,
+      "audioRate": 1,
+      "seeks": 0,
+      "pauseSeeks": 0,
+      "steps": [
+        {
+          "at": 1314.8,
+          "rate": 3,
+          "reason": "baseline"
+        },
+        {
+          "at": 2454.9,
+          "rate": 1,
+          "reason": "recovery-baseline"
+        },
+        {
+          "at": 4512.3,
+          "rate": 1.25,
+          "reason": "probe"
+        },
+        {
+          "at": 6512.1,
+          "rate": 1.5,
+          "reason": "probe"
+        },
+        {
+          "at": 8611.9,
+          "rate": 2,
+          "reason": "probe"
+        }
+      ],
+      "backoffs": [
+        {
+          "at": 2213,
+          "ceiling": 2,
+          "reason": "waiting"
+        }
+      ]
+    }
+  ]
+}

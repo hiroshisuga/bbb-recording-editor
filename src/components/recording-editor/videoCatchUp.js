@@ -16,6 +16,7 @@ export function createVideoCatchUp(video, report = () => {}) {
   let retryAfter = 0, retryCeiling = Infinity, supportedCeiling = 12;
   let measuredCeiling = null, finishing = false;
   let resumeCeiling = null;
+  let retryBaseline = false;
   const emit = (event, values) => report(event, values);
   const stopFrames = () => {
     generation++;
@@ -47,6 +48,7 @@ export function createVideoCatchUp(video, report = () => {}) {
   };
   const reset = () => {
     stop('reset'); retryAfter = 0; retryCeiling = Infinity; measuredCeiling = null; finishing = false;
+    retryBaseline = false;
   };
   const waiting = now => {
     if (waitingAt === null) {
@@ -78,10 +80,16 @@ export function createVideoCatchUp(video, report = () => {}) {
   };
   const backoff = (now, why) => {
     resumeCeiling = null;
+    const failedRate = pending ?? window?.rate ?? normalRate;
     // A failed probe was never added to good. A failing held speed steps down.
     if (!pending && good.length > 1) good.pop();
     pending = null;
-    retryCeiling = good.at(-1)?.rate ?? (why === 'insufficient-frames' ? normalRate : base);
+    // Suppress the failed stage, not every possible increase. With no verified
+    // stage yet, first observe base-rate progress, then try smaller steps.
+    const lowerStep = STEPS.filter(step => step < failedRate && step >= base).at(-1) ?? base;
+    const ceiling = good.at(-1)?.rate ?? (why === 'insufficient-frames' ? normalRate : lowerStep);
+    retryCeiling = Math.min(ceiling, now < retryAfter ? retryCeiling : Infinity);
+    retryBaseline = why === 'waiting' || (!good.length && why !== 'insufficient-frames');
     retryAfter = now + RETRY_MS;
     measuredCeiling = good.at(-1)?.rate ?? null;
     reason = why;
@@ -90,8 +98,10 @@ export function createVideoCatchUp(video, report = () => {}) {
   };
   const update = ({ now, rate, drift, ahead, blocked = false, visible = true }) => {
     if (rate !== base) { reset(); base = rate; }
+    if (!blocked) ready(now);
+    if (drift <= 0.5) retryBaseline = false;
     const fallbackCeiling = Math.min(supportedCeiling, now < retryAfter ? Math.max(rate, retryCeiling) : Infinity);
-    const fallback = Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead, measuredCeiling));
+    const fallback = retryBaseline ? rate : Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead, measuredCeiling));
     normalRate = fallback;
     if (Math.abs(drift) <= 0.15) finishing = false;
     if (!alive || !supported) return blocked ? rate : fallback;
@@ -99,7 +109,7 @@ export function createVideoCatchUp(video, report = () => {}) {
       if (active) stop(!visible ? 'hidden' : 'tail');
       resumeCeiling = null;
       if (!visible) { measuredCeiling = null; waitingAt = null; }
-      return blocked ? rate : !visible ? Math.min(fallbackCeiling, synchronizationRate(rate, drift, ahead)) : fallback;
+      return blocked ? rate : !visible ? Math.min(fallbackCeiling, retryBaseline ? rate : synchronizationRate(rate, drift, ahead)) : fallback;
     }
     if (blocked) {
       waiting(now);
@@ -108,11 +118,11 @@ export function createVideoCatchUp(video, report = () => {}) {
       }
       return rate;
     }
-    ready(now);
     if (!active) {
-      if ((resumeCeiling === null && (drift < 3 || (finishing && drift < 8))) ||
+      if ((!retryBaseline && resumeCeiling === null && (drift < 3 || (finishing && drift < 8))) ||
         (now < retryAfter && retryCeiling <= fallback) || supportedCeiling <= fallback) return fallback;
-      active = true; good = []; pending = null; reason = resumeCeiling === null ? 'baseline' : 'revalidate';
+      active = true; good = []; pending = null;
+      reason = retryBaseline ? 'recovery-baseline' : resumeCeiling === null ? 'baseline' : 'revalidate';
       begin(now, drift, fallback); observe();
       if (!active) return fallback;
       emit('catch-up-step', { reason, rate: fallback });
@@ -152,10 +162,11 @@ export function createVideoCatchUp(video, report = () => {}) {
           backoff(now, !healthy ? 'slow-progress' : 'no-improvement');
           if (last.waitingFraction >= 0.1) {
             stop('waiting'); measuredCeiling = null;
-            return Math.min(supportedCeiling, Math.max(rate, retryCeiling), synchronizationRate(rate, drift, ahead));
+            return rate;
           }
           if (!good.length) { stop('slow-progress'); return Math.min(fallback, rate); }
         } else {
+          retryBaseline = false;
           if (resumeCeiling !== null) {
             // Fresh frame/clock evidence at ordinary correction speed is needed
             // before a brief interruption's previous ceiling can be reused.
