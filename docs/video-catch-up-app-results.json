@@ -1,0 +1,233 @@
+{
+  "date": "2026-10-31",
+  "browser": "Chromium 131.0.6778.204 headless Linux",
+  "scope": "Actual VideoPreview React component, real native muted video and independent WAV audio clock, fully fetched synthetic single-keyframe VP8 sources",
+  "previousCommit": "afe458c128f3d65510e24b2974ccad4d57245da8",
+  "implementationSha256": "fedd66b341cf7e3e96fb3f1881d825ef05d17e03b4e356cec70d14013c2ad994",
+  "notes": [
+    "Recovery requires <=0.15s clock drift, <=0.3s frame drift and requested base video speed sustained 750ms",
+    "The limited case injects an 8x native video-rate ceiling to verify failed-probe backoff; this is an explicit test double, not an independent hardware benchmark",
+    "No original meeting recording or production BBB server was used"
+  ],
+  "cases": [
+    {
+      "mode": "before",
+      "file": "sparse",
+      "base": 1,
+      "lag": 60,
+      "seconds": 33.303,
+      "recoveredS": 32.50260000000009,
+      "maximumRate": 3,
+      "finalDrift": 0.13842699999999297,
+      "frameDrift": 0.1987799999999993,
+      "frameCount": 929,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioRate": 1,
+      "audioAdvancePerWallS": 0.9968705522025043,
+      "audioPaused": false,
+      "seeks": 0,
+      "steps": [],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "file": "sparse",
+      "base": 1,
+      "lag": 60,
+      "seconds": 16.10939999999991,
+      "recoveredS": 15.302799999999813,
+      "maximumRate": 12,
+      "finalDrift": 0.14269900000000746,
+      "frameDrift": 0.1901810000000097,
+      "frameCount": 557,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioRate": 1,
+      "audioAdvancePerWallS": 0.992599414006735,
+      "audioPaused": false,
+      "seeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 967.6,
+          "rate": 3,
+          "reason": "baseline"
+        },
+        {
+          "elapsedMs": 2967.4,
+          "rate": 4,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 4968.6,
+          "rate": 6,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 7067,
+          "rate": 8,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 9067,
+          "rate": 12,
+          "reason": "probe"
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "file": "sparse",
+      "base": 2,
+      "lag": 60,
+      "seconds": 13.903899999999906,
+      "recoveredS": 13.102799999999814,
+      "maximumRate": 12,
+      "finalDrift": 0.12896999999999537,
+      "frameDrift": 0.13091699999999662,
+      "frameCount": 572,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioRate": 2,
+      "audioAdvancePerWallS": 1.980085947108379,
+      "audioPaused": false,
+      "seeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 1014.4,
+          "rate": 4,
+          "reason": "baseline"
+        },
+        {
+          "elapsedMs": 3013.9,
+          "rate": 6,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 5113.9,
+          "rate": 8,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 7213.8,
+          "rate": 12,
+          "reason": "probe"
+        }
+      ],
+      "backoffs": []
+    },
+    {
+      "mode": "after",
+      "file": "sparse-1080",
+      "base": 1,
+      "lag": 60,
+      "seconds": 16.21730000000028,
+      "recoveredS": 15.403,
+      "maximumRate": 12,
+      "finalDrift": 0.1395920000000075,
+      "frameDrift": 0.16032099999999616,
+      "frameCount": 818,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioRate": 1,
+      "audioAdvancePerWallS": 0.9923551392648423,
+      "audioPaused": false,
+      "seeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 2565,
+          "rate": 3,
+          "reason": "baseline"
+        },
+        {
+          "elapsedMs": 4664.5,
+          "rate": 4,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 6764.3,
+          "rate": 6,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 8764.6,
+          "rate": 8,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 10864.4,
+          "rate": 12,
+          "reason": "probe"
+        }
+      ],
+      "backoffs": [
+        {
+          "elapsedMs": 12464.4,
+          "reason": "waiting",
+          "ceiling": 8,
+          "observedVideoRate": 7.935331460139767,
+          "observedFrameRate": 7.927235040637107,
+          "lagRecoveryRate": 6.93522240213415,
+          "waitingFraction": 0.0063339365655208
+        }
+      ]
+    },
+    {
+      "mode": "limited",
+      "file": "sparse",
+      "base": 1,
+      "lag": 100,
+      "seconds": 22.42680000000028,
+      "recoveredS": 21.603,
+      "maximumRate": 8,
+      "finalDrift": 0.1408959999999979,
+      "frameDrift": 0.2076900000000137,
+      "frameCount": 959,
+      "audioPauses": 0,
+      "audioRateChanges": 0,
+      "audioRate": 1,
+      "audioAdvancePerWallS": 0.9946889435853411,
+      "audioPaused": false,
+      "seeks": 0,
+      "steps": [
+        {
+          "elapsedMs": 962.6,
+          "rate": 3,
+          "reason": "baseline"
+        },
+        {
+          "elapsedMs": 2962.2,
+          "rate": 4,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 5062,
+          "rate": 6,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 7161.9,
+          "rate": 8,
+          "reason": "probe"
+        },
+        {
+          "elapsedMs": 9161.9,
+          "rate": 12,
+          "reason": "probe"
+        }
+      ],
+      "backoffs": [
+        {
+          "elapsedMs": 11162.2,
+          "reason": "slow-progress",
+          "ceiling": 8,
+          "observedVideoRate": 7.9997440127989865,
+          "observedFrameRate": 8.019384988172847,
+          "lagRecoveryRate": 6.999812009399201,
+          "waitingFraction": 0
+        }
+      ]
+    }
+  ]
+}

@@ -60,6 +60,10 @@ export function createVideoTrace(video, getCurrent) {
         requestedRate: current.rate, playbackRate: video.playbackRate, seekVersion: current.seekVersion,
         waiting: current.waiting, correctionWaitMs: round(Math.max(0, current.correctionAfter - now)),
         autoSeekInFlight: current.autoSeekInFlight, syncPolicy: current.syncPolicy ?? null,
+        catchUpPhase: current.catchUpPhase ?? null, catchUpReason: current.catchUpReason ?? null,
+        catchUpRate: current.catchUpRate ?? null, catchUpRetryMs: round(current.catchUpRetryMs),
+        observedVideoRate: round(current.observedVideoRate), observedFrameRate: round(current.observedFrameRate),
+        lagRecoveryRate: round(current.lagRecoveryRate), waitingFraction: round(current.waitingFraction),
         totalFrames: quality?.totalVideoFrames ?? null, droppedFrames: quality?.droppedVideoFrames ?? null,
         ...extra,
       };
