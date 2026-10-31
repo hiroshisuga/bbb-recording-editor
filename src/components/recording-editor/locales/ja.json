@@ -82,10 +82,10 @@
   "draftSaved": "下書きを保存しました。rawデータは変更していません。",
   "savingRaw": "rawデータを保存しています…",
   "rawSaved": "保存しました。XMLバックアップ: {backup}。録画へ反映するには「録画を再構築…」を実行してください。",
-  "recentMeetings": "最近の会議",
+  "recordingList": "録画データ",
   "roomName": "会議室",
   "refreshList": "一覧を更新",
-  "recentHint": "過去14日 · rawデータがない会議は警告",
+  "recordingListHint": "rawが残る録画は日数制限なし · rawなしは警告",
   "show": "表示",
   "filter": "会議の絞り込み",
   "all": "すべて",
@@ -198,5 +198,9 @@
   "selectionReversed": "開始が終了より後です。どちらかを設定し直してください。",
   "selectionReady": "選択範囲の長さ：{time}",
   "showSelectionPoint": "{direction} {point} {time} を表示",
-  "previewReused": "保存済みのプレビュー音声と波形を再利用しました。"
+  "previewReused": "保存済みのプレビュー音声と波形を再利用しました。",
+  "meetingPeriod": "期間",
+  "meetingPeriodLabel": "会議の期間",
+  "meetingPeriodAll": "すべての期間",
+  "meetingPeriodDays": "過去{days}日"
 }

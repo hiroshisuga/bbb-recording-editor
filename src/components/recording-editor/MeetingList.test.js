@@ -29,7 +29,7 @@ beforeEach(async () => {
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
   await act(async () => { root.render(localized(<MeetingList meetings={meetings} selectedId={meetings[0].id} onOpen={onOpen} onRefresh={onRefresh} />)); });
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.restoreAllMocks(); });
 
 test('shows independent badges, meeting length, marked duration and missing raw', () => {
   expect(rows()).toHaveLength(6);
@@ -99,4 +99,36 @@ test('unknown metadata is not guessed to be published or unmarked', async () => 
   expect(rows()[0].textContent).toContain('Metadata unavailable');
   await filter('unmarked');
   expect(rows()).toHaveLength(0);
+});
+
+test('all dates is the default and period filters combine with status counts without changing the editor', async () => {
+  const now = Date.UTC(2026, 9, 31, 12);
+  jest.spyOn(Date, 'now').mockReturnValue(now);
+  const dated = (name, days, publication = 'published', raw = true) => ({
+    ...meeting(name, publication, 'marked', raw), date: new Date(now - days * 86400000).toISOString(),
+  });
+  const entries = [dated('Recent missing', 2, 'unpublished', false), dated('Boundary', 14),
+    { ...dated('Just older', 14), date: new Date(now - 14 * 86400000 - 1).toISOString() },
+    dated('Retained old raw', 400),
+    { ...dated('ID fallback', 30), id: `fallback-${now - 30 * 86400000}`, date: null }];
+  const renderList = () => root.render(localized(<MeetingList meetings={entries} selectedId={entries[3].id} dirty onOpen={onOpen} onRefresh={onRefresh} />));
+  await act(async () => renderList());
+  const select = () => container.querySelector('[aria-label="会議の期間"]');
+  expect(select().value).toBe('all');
+  expect(rows()).toHaveLength(5);
+  expect(container.querySelector('h2').textContent).toBe('録画データ');
+  await act(async () => Simulate.change(select(), { target: { value: '14' } }));
+  expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(['Recent missing', 'Boundary']);
+  expect(container.querySelector('option[value="published"]').textContent).toContain('(1)');
+  expect(container.textContent).toContain('選択中の会議は絞り込み結果に含まれません');
+  await filter('published');
+  expect(rows()).toHaveLength(1);
+  await act(async () => Simulate.change(select(), { target: { value: '30' } }));
+  expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(['Boundary', 'Just older', 'ID fallback']);
+  await act(async () => renderList());
+  expect(select().value).toBe('30');
+  expect(container.querySelector('select').value).toBe('published');
+  await act(async () => Simulate.change(select(), { target: { value: 'all' } }));
+  expect(rows().map(row => row.querySelector('strong').textContent)).toContain('Retained old raw');
+  expect(onOpen).not.toHaveBeenCalled(); expect(onRefresh).not.toHaveBeenCalled();
 });

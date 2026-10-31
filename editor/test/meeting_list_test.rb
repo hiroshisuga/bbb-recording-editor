@@ -222,7 +222,7 @@ class MeetingListTest < Minitest::Test
     assert item[:warnings].any? { |warning| warning.include?('rawデータを読み込めません') }
   end
 
-  def test_list_remains_limited_to_last_fourteen_days_and_sorted_by_meeting_id
+  def test_list_has_no_age_cutoff_and_remains_sorted_by_meeting_id
     raw
     old = "#{'b' * 40}-#{((@now - 15 * 86_400).to_f * 1000).to_i}"
     future = "#{'c' * 40}-#{((@now + 60).to_f * 1000).to_i}"
@@ -230,6 +230,25 @@ class MeetingListTest < Minitest::Test
     metadata(@repo.unpublished_root, 'unpublished', 'false', old)
     metadata(@repo.process_root, 'processing', 'false', future)
     metadata(@repo.published_root, 'published', 'true', newer)
-    assert_equal [newer, @id], @repo.list(now: @now).map { |entry| entry[:id] }
+    assert_equal [newer, @id, old], @repo.list(now: @now).map { |entry| entry[:id] }
+  end
+
+  def test_retained_old_raw_is_available_regardless_of_publication_or_recording_marks
+    published = "#{'b' * 40}-#{((@now - 400 * 86_400).to_f * 1000).to_i}"
+    unpublished = "#{'c' * 40}-#{((@now - 3650 * 86_400).to_f * 1000).to_i}"
+    raw(marks, published)
+    raw('', unpublished)
+    path = metadata(@repo.published_root, 'published', 'true', published, title: 'Retained lecture')
+    metadata(@repo.unpublished_root, 'unpublished', 'false', unpublished)
+    files = [path, File.join(@repo.raw_root, published, 'events.xml'), File.join(@repo.raw_root, unpublished, 'events.xml')]
+    before = files.to_h { |file| [file, File.binread(file)] }
+    entries = @repo.list(now: @now)
+    assert_equal [published, unpublished], entries.map { |entry| entry[:id] }
+    assert entries.all? { |entry| entry[:raw_available] }
+    assert_equal 'Retained lecture', entries.first[:name]
+    assert_equal 'published', entries.first[:publication_status]
+    assert_equal 'unmarked', entries.last[:recording_status]
+    assert @repo.recording(published).duration.positive?
+    before.each { |file, bytes| assert_equal bytes, File.binread(file) }
   end
 end
