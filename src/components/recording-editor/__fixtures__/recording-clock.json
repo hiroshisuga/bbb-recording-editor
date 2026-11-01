@@ -1,0 +1,148 @@
+[
+  {
+    "duration": 50000,
+    "records": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20000
+      },
+      {
+        "start_ms": 30000,
+        "end_ms": 40000
+      }
+    ],
+    "name": "no chime",
+    "gaps": [],
+    "effective": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20000
+      },
+      {
+        "start_ms": 30000,
+        "end_ms": 40000
+      }
+    ],
+    "total": 20000
+  },
+  {
+    "duration": 50000,
+    "records": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20000
+      },
+      {
+        "start_ms": 30000,
+        "end_ms": 40000
+      }
+    ],
+    "name": "balanced chime",
+    "gaps": [
+      {
+        "start_ms": 20000,
+        "end_ms": 30000
+      }
+    ],
+    "effective": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20125
+      },
+      {
+        "start_ms": 29875,
+        "end_ms": 40000
+      }
+    ],
+    "total": 20250
+  },
+  {
+    "name": "short gap 20",
+    "duration": 50000,
+    "records": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20000
+      },
+      {
+        "start_ms": 20020,
+        "end_ms": 40000
+      }
+    ],
+    "gaps": [
+      {
+        "start_ms": 20000,
+        "end_ms": 20020
+      }
+    ],
+    "effective": [
+      {
+        "start_ms": 10000,
+        "end_ms": 40000
+      }
+    ],
+    "total": 30000
+  },
+  {
+    "name": "short gap 100",
+    "duration": 50000,
+    "records": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20000
+      },
+      {
+        "start_ms": 20100,
+        "end_ms": 40000
+      }
+    ],
+    "gaps": [
+      {
+        "start_ms": 20000,
+        "end_ms": 20100
+      }
+    ],
+    "effective": [
+      {
+        "start_ms": 10000,
+        "end_ms": 40000
+      }
+    ],
+    "total": 30000
+  },
+  {
+    "name": "short gap 250",
+    "duration": 50000,
+    "records": [
+      {
+        "start_ms": 10000,
+        "end_ms": 20000
+      },
+      {
+        "start_ms": 20250,
+        "end_ms": 40000
+      }
+    ],
+    "gaps": [
+      {
+        "start_ms": 20000,
+        "end_ms": 20250
+      }
+    ],
+    "effective": [
+      {
+        "start_ms": 10000,
+        "end_ms": 40000
+      }
+    ],
+    "total": 30000
+  },
+  {
+    "name": "no recording",
+    "duration": 50000,
+    "records": [],
+    "gaps": [],
+    "effective": [],
+    "total": 0
+  }
+]

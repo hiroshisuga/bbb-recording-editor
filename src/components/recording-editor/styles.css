@@ -190,3 +190,17 @@
 .re-chime-menu button:hover:not(:disabled) { background:#523c68; }
 .re-chime-menu button:disabled { opacity:.5; cursor:default; }
 .re-chime-menu:focus-visible,.re-chime-menu button:focus-visible { outline:2px solid #cba4ef; outline-offset:2px; }
+
+.re-recording-time { display:flex; align-items:center; flex-wrap:wrap; gap:6px 18px; font-size:12px; }
+.re-recording-time time { font:12px ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+.re-edited-clock, .re-edited-ruler { color:#9fe2c0; }
+.re-edited-ruler { font:10px ui-monospace,monospace; border-bottom:1px solid var(--re-line); background:#172d2c; }
+.re-edited-ruler-overview { position:relative; height:25px; }
+.re-edited-ruler-overview span { position:absolute; top:4px; padding-left:4px; border-left:1px solid #527969; }
+.re-edited-ruler-overview span:last-child { transform:translateX(-100%); }
+.re-edited-ruler-detail { display:flex; justify-content:space-between; padding:4px 8px; }
+.re-detail-wave > .re-recording-time { padding:6px 8px; }
+.re-edited-position { font-variant-numeric:tabular-nums; }
+@media(max-width:700px) {
+  .re-detail-ruler span:nth-child(2), .re-edited-ruler-detail span:nth-child(2) { display:none; }
+}

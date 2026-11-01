@@ -1,4 +1,10 @@
 {
+  "sourceClock": "Original time",
+  "editedClock": "Edited time (current settings)",
+  "editedDuration": "Edited duration",
+  "editedExcluded": "Not in recording",
+  "editedJoin": "Join position: {time}",
+  "editedNoRanges": "No recording intervals",
   "title": "Recording editor",
   "language": "Language",
   "unsaved": "Unsaved changes",

@@ -307,3 +307,26 @@ test('recording ribbon tooltips show full interval times promptly while pointer 
   expect(viewStart()).toBe('00:01:04.000');
   expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
 });
+
+test('edited current time and ruler share the clock without fetching waveform tiles on edits', async () => {
+  const { recordingClock } = require('./recordingClock');
+  const ranges = [{ start_ms: 10000, end_ms: 20000 }, { start_ms: 30000, end_ms: 40000 }];
+  await render({ time: 35000, recordRanges: ranges, clock: recordingClock(ranges, [], props.duration) });
+  await advance();
+  expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:15.000');
+  expect(container.querySelector('.re-recording-time').textContent).toContain('Edited duration: 00:00:20.000');
+  const previousRequests = requests().length;
+  await render({ clock: recordingClock(ranges, [{ start_ms: 20000, end_ms: 30000 }], props.duration) });
+  await advance();
+  expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:15.250');
+  expect(requests()).toHaveLength(previousRequests);
+  await render({ time: 32000 });
+  expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:12.250');
+  await render({ time: 25000 });
+  expect(container.querySelector('.re-edited-ruler').textContent).toContain('—');
+  expect(container.querySelector('.re-edited-position').textContent).toContain('Not in recording');
+  expect(container.querySelector('.re-edited-position').textContent).toContain('Join position: 00:00:10.125');
+  await render({ clock: recordingClock([], [], props.duration) });
+  expect(container.querySelector('.re-edited-position').textContent).toBe('No recording intervals');
+  expect(container.querySelector('.re-recording-time').textContent).toContain('Edited duration: 00:00:00.000');
+});

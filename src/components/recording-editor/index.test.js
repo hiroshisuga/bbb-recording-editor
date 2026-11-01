@@ -1145,3 +1145,30 @@ test('editor navigation identifies new seeks for both screen sharing and webcams
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
+
+test('overview clock responds to unsaved keep/chime edits and keeps original-time seeking', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest,
+      record_ranges: [{ start_ms: 10000, end_ms: 20000 }, { start_ms: 30000, end_ms: 40000 }],
+      cut_chime_gaps: [{ start_ms: 20000, end_ms: 30000 }] }) } : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const positionLabel = container.querySelector('.re-transport input.re-time').getAttribute('aria-label');
+  await time(positionLabel, '00:00:35.000');
+  expect(container.querySelector('.re-transport .re-edited-position').textContent).toBe('00:00:15.250');
+  expect(container.querySelector('.re-transport').textContent).toContain('編集後（現在の設定）');
+  const requestsBefore = calls.length;
+  const startLabel = container.querySelector('.re-range-row input').getAttribute('aria-label');
+  await time(startLabel, '00:00:11.000');
+  expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:14.250');
+  await act(async () => Simulate.click(container.querySelectorAll('.re-chime-tools button')[1]));
+  expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:14.000');
+  expect(container.querySelector('.re-transport input.re-time').value).toBe('00:00:35.000');
+  expect(calls).toHaveLength(requestsBefore);
+  await time(positionLabel, '00:00:25.000');
+  expect(container.querySelector('.re-edited-position').textContent).toContain('録画対象外');
+  expect(container.querySelector('.re-edited-position').textContent).toContain('00:00:09.000');
+  await language('en');
+  expect(container.querySelector('.re-transport').textContent).toContain('Edited time (current settings)');
+  expect(container.querySelector('.re-edited-position').textContent).toContain('Not in recording');
+});
