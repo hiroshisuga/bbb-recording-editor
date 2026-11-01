@@ -989,6 +989,39 @@ test('rebuild helper absence is visible and prevents submitting a request', asyn
   expect(container.querySelector('#re-rebuild-reason code').textContent).toBe('sudo bash editor/deploy/install-rebuild-helper.sh');
 });
 
+test('opening a previously completed or pending rebuild does not trigger the visibility reminder', async () => {
+  const originalMock = global.fetch.getMockImplementation();
+  let status = 'completed';
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status } }) }
+    : !options?.method && url.endsWith('/rebuild')
+      ? { ok: true, json: async () => ({ available: true, status: 'completed' }) }
+      : originalMock(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-visibility-check')).toBeNull();
+  status = 'requested';
+  jest.useFakeTimers();
+  try {
+    await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+    status = 'completed';
+    await act(async () => { jest.advanceTimersByTime(5000); });
+    expect(container.querySelector('.re-visibility-check')).toBeNull();
+  } finally { jest.useRealTimers(); }
+});
+
+test('an immediately completed rebuild shows the reminder only until the recording is reopened', async () => {
+  const originalMock = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith('/rebuild')
+    ? { ok: true, json: async () => ({ status: 'done', result: { available: true, status: 'completed' } }) }
+    : url.endsWith(`/${id}`)
+      ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status: 'completed' } }) }
+      : originalMock(url, options));
+  await click('録画を再構築…'); await click('確認して再構築を依頼');
+  expect(container.querySelector('.re-visibility-check')).not.toBeNull();
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-visibility-check')).toBeNull();
+});
+
 test('polling a completed rebuild updates the message and unlocks raw saving', async () => {
   jest.useFakeTimers();
   try {
@@ -1011,6 +1044,9 @@ test('polling a completed rebuild updates the message and unlocks raw saving', a
     await selectRange();
     await click('ピー音を追加');
     expect(button('rawデータへ保存…').disabled).toBe(false);
+    expect(container.querySelector('.re-visibility-check')).toBeNull();
+    await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+    expect(container.querySelector('.re-visibility-check')).toBeNull();
   } finally { jest.useRealTimers(); }
 });
 
