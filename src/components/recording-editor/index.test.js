@@ -491,15 +491,80 @@ test('editing, undo/redo and draft send meeting-time ranges with revision', asyn
   await time('選択開始', '00:00:06.500');
   await time('選択終了', '00:00:09.500');
   await click('ピー音を追加');
-  expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:06.500');
+  expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:06.500 – 00:00:09.500');
   await click('↶ 元に戻す');
-  expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]')).toBeNull();
+  expect(container.querySelector('.beep_ranges .re-bar')).toBeNull();
   await click('↷ やり直す');
   await click('下書きを保存');
   const draft = calls.find(c => c.url.endsWith('/draft'));
   expect(draft.payload).toMatchObject({ revision: 'revision-one', beep_ranges: [{ start_ms: 6500, end_ms: 9500 }] });
   expect(draft.headers['X-BBB-Editor']).toBe('1');
   expect(calls.some(c => c.url.endsWith('/save'))).toBe(false);
+});
+
+test('beep removal can split an interval, undo, delete an entire ribbon and save without changing keep ranges', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, beep_ranges: [{ start_ms: 1000, end_ms: 3000 }] }) }
+    : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(button('選択範囲のピー音を除去').disabled).toBe(true);
+  await selectRange();
+  await time('選択開始', '00:00:01.500');
+  await time('選択終了', '00:00:02.500');
+  await click('選択範囲のピー音を除去');
+  const beepBars = () => container.querySelectorAll('.beep_ranges .re-bar');
+  expect(beepBars()).toHaveLength(2);
+  expect(beepBars()[0].getAttribute('data-tooltip')).toContain('00:00:01.000 – 00:00:01.500');
+  expect(beepBars()[1].getAttribute('data-tooltip')).toContain('00:00:02.500 – 00:00:03.000');
+  expect(button('選択範囲のピー音を除去').disabled).toBe(true);
+  await click('↶ 元に戻す'); expect(beepBars()).toHaveLength(1);
+  await click('↷ やり直す'); expect(beepBars()).toHaveLength(2);
+  await click('下書きを保存');
+  const draft = calls.filter(c => c.url.endsWith('/draft')).pop().payload;
+  expect(draft.beep_ranges).toEqual([{ start_ms: 1000, end_ms: 1500 }, { start_ms: 2500, end_ms: 3000 }]);
+  expect(draft.record_ranges).toEqual(manifest.record_ranges);
+  await act(async () => Simulate.click(beepBars()[0]));
+  await click('選択範囲のピー音を除去'); expect(beepBars()).toHaveLength(1);
+  expect(container.querySelectorAll('.re-range-list')).toHaveLength(1);
+  await act(async () => Simulate.contextMenu(beepBars()[0], { clientX: 200, clientY: 200 }));
+  await act(async () => Simulate.click(document.querySelector('.re-beep-menu [role="menuitem"]')));
+  expect(beepBars()).toHaveLength(0);
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:01.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:01.500');
+  expect(container.querySelector('.re-transport input').value).toBe('00:00:00.000');
+  expect(container.querySelectorAll('.record_ranges .re-bar')).toHaveLength(1);
+  await click('rawデータへ保存…'); await click('バックアップを作成して保存');
+  const saved = calls.find(c => c.url.endsWith('/save')).payload;
+  expect(saved.beep_ranges).toEqual([]);
+  expect(saved.record_ranges).toEqual(manifest.record_ranges);
+  expect(saved.cut_chime_gaps).toEqual([]);
+});
+
+test('beep context menu preserves selection/playhead, cancels safely, and supports keyboard deletion', async () => {
+  await selectRange(); await click('ピー音を追加');
+  const bar = () => container.querySelector('.beep_ranges .re-bar');
+  const selection = () => [...container.querySelectorAll('.re-selection input')].map(input => input.value);
+  const before = selection(), timeBefore = container.querySelector('.re-transport input').value;
+  await act(async () => Simulate.contextMenu(bar(), { clientX: 400, clientY: 200 }));
+  const menu = () => document.querySelector('.re-beep-menu');
+  expect(menu().textContent).toContain('ピー音を削除');
+  expect(menu().contains(document.activeElement)).toBe(true);
+  expect(selection()).toEqual(before);
+  expect(container.querySelector('.re-transport input').value).toBe(timeBefore);
+  await act(async () => Simulate.keyDown(menu(), { key: 'Escape' }));
+  expect(menu()).toBeNull(); expect(bar()).not.toBeNull();
+  expect(document.activeElement).toBe(bar());
+  await act(async () => Simulate.keyDown(bar(), { key: 'F10', shiftKey: true }));
+  await act(async () => document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })));
+  expect(menu()).toBeNull(); expect(bar()).not.toBeNull();
+  await language('en');
+  await act(async () => Simulate.keyDown(bar().querySelector('.re-handle'), { key: 'ContextMenu' }));
+  expect(menu().querySelector('button').textContent).toBe('Delete beep');
+  await act(async () => Simulate.click(menu().querySelector('button')));
+  expect(menu()).toBeNull(); expect(bar()).toBeNull();
+  expect(selection()).toEqual(before);
+  await click('↶ Undo'); expect(bar()).not.toBeNull();
 });
 
 test('volume and mute affect preview playback without changing edits or saving raw data', async () => {
@@ -709,7 +774,7 @@ test('reopening restores saved beep intervals without changing the beep preview 
   global.fetch.mockImplementation(async url => ({ ok: true, json: async () => url.endsWith('/preview')
     ? { status: 'done', result: { audio_url: '/demo.webm', peaks: [] } } : { ...manifest, beep_ranges: beeps } }));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
-  expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:06.500');
+  expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:06.500 – 00:00:09.500');
   expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
   expect(useAudioPreview).toHaveBeenLastCalledWith(expect.anything(), beeps, false);
 });
@@ -788,7 +853,7 @@ test('reset requires confirmation and clears edits, draft and undo without rebui
   expect(container.querySelector('.re-reset-review').textContent).toContain('履歴へ退避');
   await click('確認して初期状態に戻す');
   expect(calls.find(call => call.url.endsWith('/reset')).payload).toEqual({ revision: 'revision-one', confirmed: true });
-  expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]')).toBeNull();
+  expect(container.querySelector('.beep_ranges .re-bar')).toBeNull();
   expect(button('↶ 元に戻す').disabled).toBe(true);
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
   expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');
@@ -902,7 +967,7 @@ test('switching language preserves edits, selection, filter, undo history and me
   expect(document.documentElement.lang).toBe('en');
   expect(container.querySelector('.re-header strong').textContent).toBe('Recording editor');
   expect(container.querySelector('[aria-label="Selection start"]').value).toBe('00:00:06.500');
-  expect(container.querySelector('[aria-label="Intervals to replace with beeps 1 start"]').value).toBe('00:00:06.500');
+  expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:06.500');
   expect(container.querySelector('[aria-label="Filter meetings"]').value).toBe('unpublished');
   expect(container.querySelector('.re-status-unpublished').textContent).toBe('Unpublished');
   expect(container.querySelector('.re-dirty').textContent).toBe('Unsaved changes');
@@ -917,7 +982,7 @@ test('switching language preserves edits, selection, filter, undo history and me
   expect(calls.find(c => c.url.endsWith('/draft')).payload.beep_ranges).toEqual([{ start_ms: 6500, end_ms: 9500 }]);
   await language('ja');
   expect(container.textContent).toContain('下書きを保存しました。rawデータは変更していません。');
-  expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:06.500');
+  expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:06.500 – 00:00:09.500');
 });
 
 test('warnings, save review, errors and completed messages follow the selected language', async () => {
@@ -1078,7 +1143,7 @@ test('detailed waveform is opt-in, shares selection with beep editing, and saves
     expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:02.000');
     expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
     await click('ピー音を追加');
-    expect(container.querySelector('[aria-label="ピー音で置き換える区間1 開始"]').value).toBe('00:00:01.000');
+    expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:01.000 – 00:00:02.000');
     expect(container.querySelector('.re-detail-record-range').style.left).toBe('10%');
     await click('録画から除外');
     expect(container.querySelector('.re-detail-record-range').style.left).toBe('20%');
