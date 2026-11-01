@@ -10,6 +10,7 @@ require 'time'
 require 'uri'
 require_relative 'detail_waveform'
 require_relative 'cut_chime'
+require_relative 'audio_render'
 
 module RecordingEditor
   class Error < StandardError
@@ -1009,9 +1010,8 @@ module RecordingEditor
       RecordingEditor.atomic_write(baseline, rec.doc.to_xml) unless File.file?(baseline)
       staging = File.join(root, "staging-#{SecureRandom.hex(6)}")
       FileUtils.mkdir_p(staging)
-      replacements, outputs = Media.new(rec).redact(beeps, staging, progress: progress, mute_ranges: cues)
-      cue_outputs = CutChime.render(cues, staging, repo.ffmpeg)
-      outputs.concat(cue_outputs)
+      replacements, outputs, audio_render = AudioRender.new(rec).render(beeps, cues, staging, history: history, progress: progress)
+      cue_outputs = outputs.select { |output| output[:cue] }
       xml = rec.edited_xml(effective, replacements, cue_outputs: cue_outputs)
       current = repo.raw_file(id, 'events.xml')
       raise Error.new('処理中にevents.xmlが変更されました。保存していません。', 409) unless Digest::SHA256.file(current).hexdigest == rec.revision
@@ -1019,6 +1019,7 @@ module RecordingEditor
       backup = "#{current}.bak.#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}.#{SecureRandom.hex(3)}"
       FileUtils.copy_file(current, backup)
       outputs.each do |item|
+        next unless item[:staged] # Verified outputs of the previous save stay in raw.
         target = original.raw_target(item[:relative])
         FileUtils.mkdir_p(File.dirname(target))
         File.rename(item[:staged], target)
@@ -1028,6 +1029,7 @@ module RecordingEditor
       # Write-ahead information is kept even if the XML replacement fails.
       result = { 'record_ranges' => records, 'beep_ranges' => beeps, 'cut_chime' => chime, 'cut_chime_gaps' => chime_gaps,
                  'effective_record_ranges' => effective,
+                 'audio_render' => audio_render,
                  'xml_backup' => backup, 'outputs' => outputs.map { |o| o.reject { |k, _v| k == :staged } },
                  'revision' => Digest::SHA256.hexdigest(xml), 'saved_at' => Time.now.utc.iso8601(6) }
       revision_file = File.join(root, "edit-#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}-#{SecureRandom.hex(3)}.json")
