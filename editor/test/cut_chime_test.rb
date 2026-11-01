@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 require 'minitest/autorun'
+require 'minitest/mock'
 require 'tmpdir'
 require_relative '../lib/recording_editor'
 
@@ -61,14 +62,20 @@ class CutChimeTest < Minitest::Test
   def test_save_adds_exact_sound_a_and_mutes_all_original_sources_even_under_a_beep
     sources
     originals = %w[audio/microphone.wav deskshare/screen.mp4].to_h { |r| [r, Digest::SHA256.file(File.join(@raw, r)).hexdigest] }
-    result = @editor.save(@id, payload(beeps: [{ 'start_ms' => 2400, 'end_ms' => 2900 }]))
-    cue = result['outputs'].find { |o| o[:cue] }
-    assert_equal Digest::SHA256.file(RecordingEditor::CutChime::SAMPLE).hexdigest, Digest::SHA256.file(File.join(@raw, cue[:relative])).hexdigest
-    assert_operator rms(File.join(@raw, cue[:relative]), 0.04), :>, 0.02
+    result = @editor.save(@id, payload(beeps: [{ 'start_ms' => 2400, 'end_ms' => 2900 }, { 'start_ms' => 3300, 'end_ms' => 3600 }]))
+    cues = result['outputs'].select { |o| o[:cue] }.sort_by { |o| o[:cue]['start_ms'] }
+    assert_equal 2, cues.size
+    decode = ->(path) { RecordingEditor.run('ffmpeg', '-v', 'error', '-i', path, '-f', 's16le', '-') }
+    # Concatenating the two halves must reproduce sample A exactly, without
+    # restarting it or adding a fade at its midpoint.
+    assert_equal decode.call(RecordingEditor::CutChime::SAMPLE), cues.map { |o| decode.call(File.join(@raw, o[:relative])) }.join
+    cues.each { |cue| assert_in_delta 0.125, @repo.probe(File.join(@raw, cue[:relative])).dig('format', 'duration').to_f, 0.0001 }
     mic = result['outputs'].find { |o| o[:source] == 'audio/microphone.wav' }
     screen = result['outputs'].find { |o| o[:source] == 'deskshare/screen.mp4' }
     assert_operator rms(File.join(@raw, mic[:relative]), 2.56), :<, 0.001
     assert_operator rms(File.join(@raw, screen[:relative]), 1.56), :<, 0.003
+    assert_operator rms(File.join(@raw, mic[:relative]), 3.4), :<, 0.001
+    assert_operator rms(File.join(@raw, screen[:relative]), 2.4), :<, 0.003
     assert_operator rms(File.join(@raw, mic[:relative]), 3.8), :>, 0.03
     video_hash = ->(path) { RecordingEditor.run('ffmpeg', '-nostdin', '-v', 'error', '-i', path, '-map', '0:v:0', '-c:v', 'copy', '-f', 'hash', '-hash', 'sha256', '-') }
     assert_equal video_hash.call(File.join(@raw, 'deskshare/screen.mp4')), video_hash.call(File.join(@raw, screen[:relative]))
@@ -76,7 +83,12 @@ class CutChimeTest < Minitest::Test
     originals.each { |relative, sha| assert_equal sha, Digest::SHA256.file(File.join(@raw, relative)).hexdigest }
     xml = @repo.recording(@id).current_doc
     assert_empty xml.xpath('/recording/event[@eventname="StartRecordingEvent"]')
-    assert_equal 2, xml.xpath('/recording/event[@eventname="AudioTrackPublishedEvent"]').size
+    assert_equal 3, xml.xpath('/recording/event[@eventname="AudioTrackPublishedEvent"]').size
+    cues.each do |cue|
+      filename = File.basename(cue[:relative])
+      events = xml.xpath('/recording/event[filename]').select { |e| e.at_xpath('filename').text == filename }
+      assert_equal [cue[:cue]['start_ms'] + 1000, cue[:cue]['end_ms'] + 1000], events.map { |e| e['timestamp'].to_i }
+    end
   end
 
   def test_repeated_saves_preserve_logical_ranges_and_preview_identity_and_disable_removes_cue_references
@@ -86,17 +98,37 @@ class CutChimeTest < Minitest::Test
       result = @editor.save(@id, payload)
       rec = @repo.recording(@id)
       assert_equal @records, rec.record_ranges
-      assert_equal 2750, rec.record_ranges(rec.current_doc).first['end_ms']
+      assert_equal 2625, rec.record_ranges(rec.current_doc).first['end_ms']
+      assert_equal 3375, rec.record_ranges(rec.current_doc).last['start_ms']
       assert_equal @records, rec.to_h[:record_ranges]
       assert_equal true, rec.to_h[:cut_chime]
       assert_equal key, rec.to_h[:preview_key]
-      assert_equal 2750, result['effective_record_ranges'].first['end_ms']
+      assert_equal 2625, result['effective_record_ranges'].first['end_ms']
+      assert_equal 3375, result['effective_record_ranges'].last['start_ms']
     end
     @editor.save(@id, payload(enabled: false))
     rec = @repo.recording(@id)
     assert_equal @records, rec.record_ranges(rec.current_doc)
     assert_equal false, rec.to_h[:cut_chime]
     assert_equal 'microphone.wav', rec.current_doc.at_xpath('/recording/event[@eventname="StartRecordingEvent"]/filename').text
+  end
+
+  def test_resaving_a_legacy_one_sided_chime_rebuilds_from_the_same_logical_ranges
+    sources
+    legacy = [{ 'start_ms' => 2500, 'end_ms' => 2750 }]
+    RecordingEditor::CutChime.stub(:cues, legacy) { @editor.save(@id, payload) }
+    state = File.join(@repo.state_dir(@id), 'saved.json')
+    history = JSON.parse(File.read(state))
+    history.delete('cut_chime_gaps') # Older saves had only the global flag.
+    File.write(state, JSON.generate(history))
+    rec = @repo.recording(@id)
+    assert_equal @records, rec.to_h[:record_ranges]
+    assert_equal [{ 'start_ms' => 2500, 'end_ms' => 3500 }], rec.to_h[:cut_chime_gaps]
+    assert_equal 2750, rec.record_ranges(rec.current_doc).first['end_ms']
+    result = @editor.save(@id, payload)
+    assert_equal @records, @repo.recording(@id).to_h[:record_ranges]
+    assert_equal [{ 'start_ms' => 500, 'end_ms' => 2625 }, { 'start_ms' => 3375, 'end_ms' => 6000 }], result['effective_record_ranges']
+    assert_equal 2, result['outputs'].count { |output| output[:cue] }
   end
 
   def test_cue_in_a_silent_gap_is_shortened_and_reset_archives_it
@@ -108,7 +140,8 @@ class CutChimeTest < Minitest::Test
     records = [{ 'start_ms' => 500, 'end_ms' => 2500 }, { 'start_ms' => 2570, 'end_ms' => 6000 }]
     result = @editor.save(@id, payload(records: records))
     cue = result['outputs'].first
-    assert_equal({ 'start_ms' => 2500, 'end_ms' => 2570 }, cue[:cue])
+    assert_equal({ 'start_ms' => 2500, 'end_ms' => 2570, 'fade_out' => true }, cue[:cue])
+    assert_equal [{ 'start_ms' => 500, 'end_ms' => 6000 }], result['effective_record_ranges']
     duration = @repo.probe(File.join(@raw, cue[:relative])).dig('format', 'duration').to_f
     assert_in_delta 0.07, duration, 0.001
     assert_equal 1, @repo.recording(@id).current_doc.xpath('/recording/event[@eventname="AudioTrackPublishedEvent"]').size
@@ -117,6 +150,40 @@ class CutChimeTest < Minitest::Test
     assert File.file?(File.join(reset['archive'], 'media', cue[:relative]))
     assert_equal false, @repo.recording(@id).to_h[:cut_chime]
     assert_equal File.binread(File.join(@repo.state_dir(@id), 'original-events.xml')), File.binread(File.join(@raw, 'events.xml'))
+  end
+
+  def test_balanced_plans_keep_short_gaps_whole_and_long_gaps_split_at_their_edges
+    [20, 21, 70, 125, 249, 250, 251, 269, 500, 1000].each do |length|
+      records = [{ 'start_ms' => 0, 'end_ms' => 1000 }, { 'start_ms' => 1000 + length, 'end_ms' => 3000 }]
+      cues = RecordingEditor::CutChime.cues(RecordingEditor::CutChime.gaps(records))
+      effective = RecordingEditor::CutChime.effective(records, cues, 3000)
+      assert_equal [length, 250].min, cues.sum { |cue| cue['end_ms'] - cue['start_ms'] }
+      if length <= 250
+        assert_equal [{ 'start_ms' => 0, 'end_ms' => 3000 }], effective
+        assert_equal 1, cues.size
+        assert_equal(length < 250, cues.first.fetch('fade_out', false))
+      else
+        assert_equal [{ 'start_ms' => 0, 'end_ms' => 1125 }, { 'start_ms' => 875 + length, 'end_ms' => 3000 }], effective
+        assert_equal [0, 125], cues.map { |cue| cue.fetch('sample_offset_ms', 0) }
+      end
+      assert_equal [1000, 1000 + length], [cues.first['start_ms'], cues.last['end_ms']]
+    end
+  end
+
+  def test_all_500_keep_ranges_and_500_beeps_still_fit_the_two_slices_per_cut_plan
+    records = 500.times.map { |i| { 'start_ms' => i * 400, 'end_ms' => i * 400 + 100 } }
+    cues = RecordingEditor::CutChime.cues(RecordingEditor::CutChime.gaps(records))
+    assert_equal 998, cues.size
+    effective = RecordingEditor::CutChime.effective(records, cues, 200_000)
+    assert_equal 500, effective.size
+    beeps = records.map { |r| r.merge('end_ms' => r['start_ms'] + 20) }
+    untouched = { 'id' => 'untouched', 'relative' => 'not-used.wav', 'start_ms' => 199_900, 'end_ms' => 200_000 }
+    rec = Struct.new(:duration, :audible_assets, :assets, :unmapped_audio).new(200_000, [untouched], [], [])
+    # Reach production mask validation with both input types, without encoding
+    # 998 files. The only source is outside every beep/cue interval.
+    replacements, outputs = RecordingEditor::Media.new(rec).redact(beeps, @dir, mute_ranges: cues)
+    assert_empty replacements
+    assert_empty outputs
   end
 
   def test_draft_roundtrips_the_flag_and_invalid_flags_are_rejected
@@ -142,12 +209,13 @@ class CutChimeTest < Minitest::Test
     2.times do
       result = @editor.save(@id, payload(records: records).merge('cut_chime_gaps' => [gap]))
       assert_equal [gap], result['cut_chime_gaps']
-      assert_equal 1, result['outputs'].count { |item| item[:cue] }
+      assert_equal 2, result['outputs'].count { |item| item[:cue] }
       rec = @repo.recording(@id)
       assert_equal [gap], rec.to_h[:cut_chime_gaps]
       assert_equal records, rec.record_ranges
       assert_equal 1000, rec.record_ranges(rec.current_doc).first['end_ms']
-      assert_equal 3250, rec.record_ranges(rec.current_doc)[1]['end_ms']
+      assert_equal 3125, rec.record_ranges(rec.current_doc)[1]['end_ms']
+      assert_equal 3875, rec.record_ranges(rec.current_doc)[2]['start_ms']
     end
     @editor.save(@id, payload(records: records).merge('cut_chime_gaps' => []))
     rec = @repo.recording(@id)

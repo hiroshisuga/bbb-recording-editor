@@ -168,6 +168,55 @@ test('timeline cut chimes warn on additions and persist only selected gaps throu
   expect(latest.record_ranges).toEqual(cutRanges);
 });
 
+test('confirm-once preference covers individual and bulk additions, survives reopening and can be restored without changing edits', async () => {
+  await openCuts();
+  await cutMenu(0, 'right'); await menuAction(); await click('キャンセル');
+  expect(readPreferences().skipChimeConfirm).toBe(false);
+  await cutMenu(0, 'right'); await menuAction();
+  await act(async () => Simulate.cancel(container.querySelector('[role="alertdialog"]')));
+  expect(readPreferences().skipChimeConfirm).toBe(false);
+  await cutMenu(0, 'right'); await menuAction(); await click('追加して今後確認しない');
+  expect(cues()).toHaveLength(1); expect(readPreferences().skipChimeConfirm).toBe(true);
+  await act(async () => Simulate.click(cues()[0]));
+  await cutMenu(1, 'left'); await menuAction();
+  expect(cues()).toHaveLength(1); expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await click('すべての切れ目にチャイム');
+  expect(cues()).toHaveLength(2); expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await click('rawデータへ保存…');
+  expect(container.querySelector('.re-review').textContent).toContain('両端を最大0.125秒ずつ');
+  await click('バックアップを作成して保存');
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  await act(async () => root.unmount()); root = createRoot(container);
+  await act(async () => root.render(<RecordingEditor />));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(cues()).toHaveLength(2); expect(button('確認を再表示')).toBeDefined();
+  await click('確認を再表示');
+  expect(readPreferences().skipChimeConfirm).toBe(false);
+  expect(cues()).toHaveLength(2); expect(button('rawデータへ保存…').disabled).toBe(true);
+  await click('チャイムを全消去'); await click('すべての切れ目にチャイム');
+  expect(cues()).toHaveLength(0); expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+  await click('キャンセル');
+});
+
+test('normal confirmation keeps future warnings and blocked preference storage only suppresses within the current page', async () => {
+  await openCuts();
+  await cutMenu(0, 'right'); await menuAction(); await click('確認して有効にする');
+  expect(readPreferences().skipChimeConfirm).toBe(false);
+  await cutMenu(1, 'right'); await menuAction();
+  expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+  jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage disabled'); });
+  await click('追加して今後確認しない');
+  expect(button('確認を再表示')).toBeDefined();
+  await click('チャイムを全消去'); await click('すべての切れ目にチャイム');
+  expect(cues()).toHaveLength(2); expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await act(async () => root.unmount()); root = createRoot(container);
+  await act(async () => root.render(<RecordingEditor />));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await click('すべての切れ目にチャイム');
+  expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+  expect(cues()).toHaveLength(0);
+});
+
 test('both handles edit one cut; either end mark or link removes it without seeking or changing the selection', async () => {
   await openCuts(); await selectRange();
   const audio = container.querySelector('audio'); audio.currentTime = 25;
@@ -646,7 +695,7 @@ test('language, volume, mute, beep preview, speed, zoom and preview split surviv
   expect(audio.muted).toBe(true);
   expect(audio.playbackRate).toBe(1.5);
   expect(audio.paused).toBe(true);
-  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: false, detailWaveSpan: 10000, previewSplit: 0.65 });
+  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: false, detailWaveSpan: 10000, previewSplit: 0.65, skipChimeConfirm: false });
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 

@@ -9,7 +9,7 @@ test.each([null, '{invalid', 'null', '[]', '{"version":2,"volume":0.2}'])('missi
 });
 
 test('valid preferences are restored without importing unrelated recording data', () => {
-  const values = { ...DEFAULT_PREFERENCES, volume: 0.35, muted: true, lastVolume: 0.35, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: true, detailWaveSpan: 5000, previewSplit: 0.4 };
+  const values = { ...DEFAULT_PREFERENCES, volume: 0.35, muted: true, lastVolume: 0.35, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: true, detailWaveSpan: 5000, previewSplit: 0.4, skipChimeConfirm: true };
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ version: 1, ...values, recordingId: 'not-a-preference' }));
   expect(readPreferences()).toEqual(values);
 });
@@ -31,4 +31,9 @@ test('storage access restrictions use defaults', () => {
 test.each([0, 1, -1, 0.19, 0.81, '0.5', null])('invalid preview split falls back without losing other preferences: %s', previewSplit => {
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ version: 1, previewSplit, volume: 0.4 }));
   expect(readPreferences()).toEqual({ ...DEFAULT_PREFERENCES, volume: 0.4, lastVolume: 0.4 });
+});
+
+test.each(['true', 1, null])('invalid chime confirmation preferences keep confirmation enabled: %s', skipChimeConfirm => {
+  localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ version: 1, skipChimeConfirm }));
+  expect(readPreferences().skipChimeConfirm).toBe(false);
 });

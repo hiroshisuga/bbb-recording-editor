@@ -255,7 +255,7 @@ function Editor() {
   const [seekVersion, setSeekVersion] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [preferences, updatePreferences] = useEditorPreferences();
-  const { rate, volume, muted, lastVolume, zoom, beepPreview, detailWaveOpen, detailWaveSpan, previewSplit } = preferences;
+  const { rate, volume, muted, lastVolume, zoom, beepPreview, detailWaveOpen, detailWaveSpan, previewSplit, skipChimeConfirm } = preferences;
   const [audio, setAudio] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState('');
@@ -473,6 +473,7 @@ function Editor() {
         </div>
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button><span className="re-muted">{t('dragHint')}</span></div>
         <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sampleUrl={`${API}/cut-chime.wav`}
+          skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
           onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
           {toggle => <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} onChimeToggle={toggle} busy={!!busy || rebuilding} />}
         </CutChimeControl>

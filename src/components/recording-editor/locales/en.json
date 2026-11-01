@@ -208,7 +208,7 @@
   "cutChimeOff": "No chime",
   "cutChimeCount": "{count} selected",
   "cutChimeConfirmTitle": "Include a short part of each excluded section?",
-  "cutChimeWarning": "To play the chime, up to 0.25 seconds of each affected excluded section will be included in the recording. Original microphone and screenshare audio in that interval will be silenced and replaced by the chime, but video, slides, chat, and other events may remain visible. Audio from externally shared videos is not modified.",
+  "cutChimeWarning": "To play the chime, up to 0.125 seconds at each end of the excluded section (up to 0.25 seconds total per cut) will be included in the recording. Gaps of 0.25 seconds or less are included in full. Original microphone and screenshare audio in those intervals will be silenced and replaced by the chime, but video, slides, chat, and other events may remain visible. Audio from externally shared videos is not modified.",
   "cutChimeAccept": "Confirm and enable",
   "cutChimeCancel": "Cancel",
   "cutChimeHint": "The paired notes and dashed line represent one chime. Click either mark or the line to remove it. Save to raw and rebuild recording to apply changes.",
@@ -224,5 +224,7 @@
   "cutChimeOn": "Chime enabled",
   "cutChimeSamplePlay": "Listen to chime",
   "cutChimeSampleStop": "Stop sample",
-  "cutChimeSampleError": "Could not play the chime sample."
+  "cutChimeSampleError": "Could not play the chime sample.",
+  "cutChimeAcceptAndSkip": "Add and don't ask again",
+  "cutChimeRestoreConfirm": "Show confirmations again"
 }
