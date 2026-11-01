@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import traceback
 
 RATE = 48000
 PATCH_DELAY = 312  # FFmpeg libopus, application=audio; checked against its header.
@@ -106,6 +107,9 @@ def side_data_check(probe, source, count, delay, frame):
         with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=errors, text=True) as proc:
             valid = True
             for line in proc.stdout:
+                # FFprobe 4 appends a blank line after packet side data.
+                if not line.strip():
+                    continue
                 if not line.startswith('packet|'):
                     valid = False
                     continue
@@ -172,7 +176,10 @@ def encode_patch(av, config, pcm, window, directory, channels, delay, frame, lib
         for i, packet in enumerate(p for p in container.demux(stream) if p.size):
             if context <= i < context + j - n:
                 require(packet_samples(lib, packet) == frame, 'unexpected patch frame size')
-                replacements[n + i - context] = bytes(packet)
+                require(packet.is_keyframe, 'patch packet is not a keyframe')
+                # Keep the demuxed packet, including its read-only keyframe flag
+                # and duration on PyAV 8. Rebuilding it from bytes loses both.
+                replacements[n + i - context] = packet
     require(len(replacements) == j - n, 'incomplete encoded patch')
     return replacements, len(raw) // channels
 
@@ -189,9 +196,13 @@ def remux(av, source, output, replacements):
             if not packet.size:
                 continue
             if index in replacements:
-                patch = av.Packet(replacements[index])
-                patch.pts, patch.dts, patch.time_base = packet.pts, packet.dts, packet.time_base
-                patch.is_keyframe = True
+                patch = replacements[index]
+                # Keep the patch time base so its (read-only in older PyAV)
+                # duration retains the correct units. Rescale only timestamps.
+                pts = packet.pts * packet.time_base / patch.time_base
+                dts = packet.dts * packet.time_base / patch.time_base
+                require(pts.denominator == dts.denominator == 1, 'incompatible patch time base')
+                patch.pts, patch.dts = int(pts), int(dts)
             else:
                 patch = packet  # Retains original side data, including end padding.
             patch.stream = out
@@ -210,8 +221,9 @@ def validate(av, lib, source, output, replacements, count):
             new = next(packets_b, None)
             require(new is not None and (old.pts * old.time_base, old.dts * old.time_base, old.duration * old.time_base) ==
                     (new.pts * new.time_base, new.dts * new.time_base, new.duration * new.time_base), 'output packet clock changed')
-            require(bytes(new) == replacements.get(seen, bytes(old)) and packet_samples(lib, new) == packet_samples(lib, old),
+            require(bytes(new) == bytes(replacements.get(seen, old)) and packet_samples(lib, new) == packet_samples(lib, old),
                     'output packet payload changed')
+            require(new.is_keyframe == old.is_keyframe, 'output packet keyframe flag changed')
             seen += 1
         require(seen == count and next(packets_b, None) is None, 'output packet count changed')
 
@@ -272,5 +284,9 @@ if __name__ == '__main__':
     try:
         result = render(json.load(sys.stdin))
     except Exception as error:  # An optional accelerator must not disable raw saving.
-        result = {'status': 'fallback', 'reason': str(error) if isinstance(error, Unsupported) else 'accelerator unavailable or failed'}
+        result = {'status': 'fallback', 'reason': str(error)}
+        if not isinstance(error, Unsupported):
+            result.update(error_type=type(error).__name__,
+                          reason=f'accelerator error ({type(error).__name__}): {str(error)[:256]}')
+            traceback.print_exc(file=sys.stderr)
     print(json.dumps(result))

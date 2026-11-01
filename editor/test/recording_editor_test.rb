@@ -270,6 +270,24 @@ class RecordingEditorTest < Minitest::Test
     assert_in_delta 0.12, rms(samples(File.join(@raw, mic[:relative]), 0.15, 0.1)), 0.015
   end
 
+  def test_unexpected_accelerator_errors_keep_the_reason_and_log_the_traceback
+    opus_sources
+    rec = @repo.recording(@id)
+    asset = rec.audible_assets.find { |a| a['relative'] == 'audio/microphone.webm' }
+    reason = 'accelerator error (AttributeError): test compatibility error'
+    response = [{ status: 'fallback', reason: reason, error_type: 'AttributeError' }.to_json,
+                "Traceback: test compatibility error\n", Struct.new(:success?).new(true)]
+    result = nil
+    _out, err = capture_io do
+      Open3.stub(:capture3, response) do
+        result = RecordingEditor::Media.new(rec).partial_opus(asset, 'unused.webm', 'unused-output.webm', [], 'anull')
+      end
+    end
+    assert_equal 'full', result['status']
+    assert_equal reason, result['reason']
+    assert_includes err, 'Opus partial renderer: Traceback: test compatibility error'
+  end
+
   def test_preview_has_full_meeting_duration_and_waveform
     sources
     rec = @repo.recording(@id)
