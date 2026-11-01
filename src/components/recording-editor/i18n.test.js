@@ -52,6 +52,8 @@ test('diagnostics retain dynamic details and translate nested causes', () => {
   expect(translateDiagnostic('素材がありません: 会議の音声.webm', 'en')).toBe('Media is missing: 会議の音声.webm');
   expect(translateDiagnostic('音声加工 2/12', 'en')).toBe('Processing audio 2/12');
   expect(translateDiagnostic('ffmpeg: invalid input', 'en')).toBe('ffmpeg: invalid input');
+  expect(translateDiagnostic('音声全体を再エンコードします。部分処理を使用しない理由: non-continuous timestamps', 'en'))
+    .toBe('Re-encoding the entire audio. Partial processing was not used because: non-continuous timestamps');
 });
 
 test('a saved language is restored without an enclosing IntlProvider', async () => {
