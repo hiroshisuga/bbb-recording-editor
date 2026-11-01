@@ -109,53 +109,111 @@ test('reused previews are explicitly identified in both languages', async () => 
   expect(container.querySelector('.re-success').textContent).toBe('Reused the saved preview audio and waveforms.');
 });
 
-test('per-cut chimes and bulk controls warn on additions and persist only selected gaps', async () => {
-  const ranges = [{ start_ms: 1000, end_ms: 10000 }, { start_ms: 20000, end_ms: 30000 }, { start_ms: 40000, end_ms: 59000 }];
-  const first = { start_ms: 10000, end_ms: 20000 }, second = { start_ms: 30000, end_ms: 40000 };
-  let saved = { ...manifest, record_ranges: ranges, original_record_ranges: ranges, cut_chime_gaps: [] };
+const cutRanges = [{ start_ms: 1000, end_ms: 10000 }, { start_ms: 20000, end_ms: 30000 }, { start_ms: 40000, end_ms: 59000 }];
+const cutOne = { start_ms: 10000, end_ms: 20000 }, cutTwo = { start_ms: 30000, end_ms: 40000 };
+async function openCuts(extra = {}) {
   const fetch = global.fetch.getMockImplementation();
+  let saved = { ...manifest, record_ranges: cutRanges, original_record_ranges: cutRanges, cut_chime_gaps: [], ...extra };
   global.fetch.mockImplementation(async (url, options) => {
     if (url.endsWith(`/${id}`)) return { ok: true, json: async () => saved };
     if (url.endsWith('/save')) saved = { ...saved, ...JSON.parse(options.body) };
     return fetch(url, options);
   });
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
-  const boxes = () => [...container.querySelectorAll('.re-chime-row input')];
-  expect(boxes().map(b => b.checked)).toEqual([false, false]);
-  expect(container.querySelector('.re-chime-settings audio').src).toContain('/api/cut-chime.wav');
-  await click('すべてに追加');
+}
+const cutHandle = (index, edge) => container.querySelectorAll('.record_ranges .re-bar')[index].querySelector(`.re-handle.${edge}`);
+const cues = () => [...container.querySelectorAll('.re-chime-cue')];
+const cueTimes = () => cues().map(node => node.getAttribute('aria-label').split('\n')[1]);
+async function cutMenu(index, edge) {
+  await act(async () => Simulate.contextMenu(cutHandle(index, edge), { clientX: 300, clientY: 300 }));
+}
+async function menuAction() { await act(async () => Simulate.click(document.querySelector('.re-chime-menu button'))); }
+
+test('timeline cut chimes warn on additions and persist only selected gaps through save and reopening', async () => {
+  await openCuts();
+  expect(cues()).toHaveLength(0);
+  expect(container.querySelector('.re-chime-tools audio').src).toContain('/api/cut-chime.wav');
+  expect(container.querySelector('.re-chime-track').previousElementSibling.classList.contains('record_ranges')).toBe(true);
+  expect(container.querySelector('.re-chime-settings')).toBeNull();
+  await click('すべての切れ目にチャイム');
   expect(container.querySelector('[role="alertdialog"]').textContent).toContain('映像・スライド・チャット');
-  await click('キャンセル');
-  expect(boxes().map(b => b.checked)).toEqual([false, false]);
+  await click('キャンセル'); expect(cues()).toHaveLength(0);
   expect(button('rawデータへ保存…').disabled).toBe(true);
-  await act(async () => Simulate.change(boxes()[1], { target: { checked: true } }));
-  expect(boxes()[1].checked).toBe(false);
+  await cutMenu(1, 'right'); await menuAction();
+  expect(cues()).toHaveLength(0);
   await click('確認して有効にする');
-  expect(boxes().map(b => b.checked)).toEqual([false, true]);
-  await click('↶ 元に戻す'); expect(boxes().map(b => b.checked)).toEqual([false, false]);
-  await click('↷ やり直す'); expect(boxes().map(b => b.checked)).toEqual([false, true]);
+  expect(cueTimes()).toEqual(['00:00:30.000 → 00:00:40.000']);
+  expect(cues()[0].querySelectorAll('.re-chime-end')).toHaveLength(2);
+  await click('↶ 元に戻す'); expect(cues()).toHaveLength(0);
+  await click('↷ やり直す'); expect(cues()).toHaveLength(1);
   await click('下書きを保存');
-  expect(calls.find(c => c.url.endsWith('/draft')).payload.cut_chime_gaps).toEqual([second]);
-  await click('すべてに追加'); await click('確認して有効にする');
-  expect(boxes().map(b => b.checked)).toEqual([true, true]);
-  await act(async () => Simulate.change(boxes()[1], { target: { checked: false } }));
-  expect(boxes().map(b => b.checked)).toEqual([true, false]);
+  expect(calls.find(c => c.url.endsWith('/draft')).payload.cut_chime_gaps).toEqual([cutTwo]);
+  await click('すべての切れ目にチャイム'); await click('確認して有効にする');
+  expect(cues()).toHaveLength(2);
+  await cutMenu(2, 'left'); await menuAction();
+  expect(cueTimes()).toEqual(['00:00:10.000 → 00:00:20.000']);
   await click('rawデータへ保存…');
   expect(container.querySelector('.re-review').textContent).toContain('最大0.25秒');
   await click('バックアップを作成して保存');
-  expect(calls.find(c => c.url.endsWith('/save')).payload.cut_chime_gaps).toEqual([first]);
-  expect(calls.find(c => c.url.endsWith('/save')).payload.record_ranges).toEqual(ranges);
+  expect(calls.find(c => c.url.endsWith('/save')).payload.cut_chime_gaps).toEqual([cutOne]);
+  expect(calls.find(c => c.url.endsWith('/save')).payload.record_ranges).toEqual(cutRanges);
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
-  expect(boxes().map(b => b.checked)).toEqual([true, false]);
-  await language('en');
-  expect(button('Remove all chimes').disabled).toBe(false);
-  await click('Remove all chimes');
-  expect(boxes().map(b => b.checked)).toEqual([false, false]);
+  expect(cues()).toHaveLength(1);
+  await language('en'); await click('Remove all chimes');
+  expect(cues()).toHaveLength(0);
   expect(container.querySelector('[role="alertdialog"]')).toBeNull();
   await click('Save draft');
   const latest = calls.filter(c => c.url.endsWith('/draft')).pop().payload;
   expect(latest.cut_chime_gaps).toEqual([]); expect(latest.cut_chime).toBe(false);
-  expect(latest.record_ranges).toEqual(ranges);
+  expect(latest.record_ranges).toEqual(cutRanges);
+});
+
+test('both handles edit one cut; either end mark or link removes it without seeking or changing the selection', async () => {
+  await openCuts(); await selectRange();
+  const audio = container.querySelector('audio'); audio.currentTime = 25;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  const selection = () => [...container.querySelectorAll('.re-selection input')].map(e => e.value);
+  const before = selection();
+  await cutMenu(0, 'right'); await menuAction(); await click('確認して有効にする');
+  expect(cutHandle(0, 'right').classList.contains('re-handle--chime')).toBe(true);
+  expect(cutHandle(1, 'left').classList.contains('re-handle--chime')).toBe(true);
+  await cutMenu(1, 'left');
+  expect(document.querySelector('.re-chime-menu button').textContent).toBe('この切れ目のチャイムを削除');
+  await act(async () => Simulate.keyDown(document.querySelector('.re-chime-menu button'), { key: 'Escape' }));
+  for (const part of ['.re-chime-start', '.re-chime-finish', '.re-chime-link']) {
+    await act(async () => Simulate.click(cues()[0].querySelector(part)));
+    expect(cues()).toHaveLength(0);
+    expect(selection()).toEqual(before); expect(audio.currentTime).toBe(25);
+    await click('↶ 元に戻す'); expect(cues()).toHaveLength(1);
+  }
+  await click('下書きを保存');
+  expect(calls.find(c => c.url.endsWith('/draft')).payload.record_ranges).toEqual(cutRanges);
+});
+
+test('context-click including macOS Control-click never installs handle drag listeners; outer boundaries explain the disabled action', async () => {
+  await openCuts();
+  for (const values of [{ button: 2 }, { button: 0, ctrlKey: true }]) {
+    await act(async () => {
+      Simulate.pointerDown(cutHandle(0, 'right'), { ...values, clientX: 100, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 500 }));
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 500 }));
+    });
+    expect(button('rawデータへ保存…').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');
+  }
+  await cutMenu(0, 'left');
+  expect(document.querySelector('.re-chime-menu button').disabled).toBe(true);
+  expect(document.querySelector('.re-chime-menu').textContent).toContain('冒頭・末尾');
+  await act(async () => document.dispatchEvent(new Event('scroll')));
+  expect(document.querySelector('.re-chime-menu')).toBeNull();
+  await cutMenu(2, 'right'); expect(document.querySelector('.re-chime-menu button').disabled).toBe(true);
+  await act(async () => document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })));
+  expect(document.querySelector('.re-chime-menu')).toBeNull();
+  await act(async () => Simulate.keyDown(cutHandle(0, 'right'), { key: 'F10', shiftKey: true }));
+  expect(document.querySelector('.re-chime-menu button').disabled).toBe(false);
+  await menuAction(); await click('キャンセル');
+  expect(cues()).toHaveLength(0);
+  expect(button('rawデータへ保存…').disabled).toBe(true);
 });
 
 test('opening and reopening begin unselected and allow entering the start time first', async () => {

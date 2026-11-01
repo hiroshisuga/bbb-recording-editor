@@ -166,16 +166,22 @@
 .re-selection-status { margin:6px 0 12px; color:var(--re-muted); font-size:12px; }
 .re-selection-status.re-selection-invalid { color:#ffc17d; }
 
-.re-chime-settings { margin:8px 0; padding:10px; border:1px solid var(--re-line); border-radius:5px; font-size:12px; }
-.re-chime-tools { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
-.re-chime-tools audio { width:220px; max-width:100%; height:32px; }
-.re-chime-settings>p { margin:7px 0 0; }
-
+/* The cut-chime toolbar stays above the waveform; the cue row shares timeline scrolling. */
+.re-chime-tools { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; padding:5px 0 9px; font-size:11px; }
+.re-chime-tools audio { display:none; }
 .re-chime-confirm { margin:auto; max-width:min(620px,calc(100vw - 32px)); color:var(--re-text); }
 .re-chime-confirm::backdrop { background:#0008; }
-.re-chime-list { margin-top:10px; }
-.re-chime-list summary { cursor:pointer; margin-bottom:6px; }
-.re-chime-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:5px 0; border-top:1px solid var(--re-line); }
-.re-chime-row label { flex:1 1 280px; min-width:0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-.re-chime-row input { vertical-align:middle; }
-.re-chime-row button { font-size:11px; }
+.re-chime-track { height:43px; }
+.recording-editor .re-handle--chime { background:#d7b4ff; box-shadow:0 0 0 1px #9f73d0; }
+.recording-editor .re-chime-cue { position:absolute; top:17px; height:23px; min-width:0; padding:0; border:0; border-radius:0; background:transparent; color:#cba4ef; z-index:4; }
+.recording-editor .re-chime-cue:hover:not(:disabled),.recording-editor .re-chime-cue:focus-visible { background:transparent; color:#f1dcff; }
+.re-chime-link { position:absolute; left:0; right:0; top:11px; border-top:2px dashed currentColor; pointer-events:none; }
+.re-chime-end { position:absolute; top:4px; width:15px; height:15px; border:1px solid currentColor; border-radius:50%; background:#30223f; color:inherit; font:12px/13px system-ui,sans-serif; }
+.re-chime-start { left:0; transform:translateX(-50%); }
+.re-chime-finish { right:0; transform:translateX(50%); }
+.re-chime-menu { position:fixed; z-index:10001; width:270px; max-width:calc(100vw - 16px); padding:8px; border:1px solid #9575b4; border-radius:5px; background:#221b2d; color:#edf3fa; box-shadow:0 4px 16px #0009; font:12px/1.5 system-ui,sans-serif; }
+.re-chime-menu p { margin:0 0 7px; overflow-wrap:anywhere; }
+.re-chime-menu button { display:block; width:100%; padding:7px; border:1px solid #6e527e; border-radius:3px; background:#3b2c4b; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.re-chime-menu button:hover:not(:disabled) { background:#523c68; }
+.re-chime-menu button:disabled { opacity:.5; cursor:default; }
+.re-chime-menu:focus-visible,.re-chime-menu button:focus-visible { outline:2px solid #cba4ef; outline-offset:2px; }
