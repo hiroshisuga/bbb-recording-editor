@@ -58,7 +58,7 @@ function TimeField({ value, onChange, label, max, onFocus, optional = false }) {
     placeholder={optional ? t('endpointUnset') : undefined} aria-invalid={invalid} value={text} onFocus={onFocus} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-function RangeRows({ label, ranges, onChange, duration, seek }) {
+function RangeRows({ label, ranges, onChange, duration, seek, deleteLabel }) {
   const { t } = useEditorI18n();
   return <div className="re-range-list"><h3>{label} <small>{t('rangeCount', { count: ranges.length })}</small></h3>
     {!ranges.length && <p className="re-muted">{t('noRanges')}</p>}
@@ -73,7 +73,7 @@ function RangeRows({ label, ranges, onChange, duration, seek }) {
         if (v <= r.start_ms) return false;
         onChange(ranges.map((item, index) => index === i ? { ...item, end_ms: v } : item)); return true;
       }} />
-      <button title={t('deleteRange')} aria-label={t('rangeDelete', { label, number: i + 1 })} onClick={() => onChange(ranges.filter((_, index) => index !== i))}>×</button>
+      <button title={deleteLabel || t('deleteRange')} aria-label={t('rangeDelete', { label, number: i + 1 })} onClick={() => onChange(ranges.filter((_, index) => index !== i))}>{deleteLabel || '×'}</button>
     </div>)}
   </div>;
 }
@@ -493,9 +493,10 @@ function Editor() {
           </div>)}
           <button onClick={() => setSelection(current => ({ ...current, start_ms: Math.round(time) }))}>{t('startHere')}</button><button onClick={() => setSelection(current => ({ ...current, end_ms: Math.round(time) }))}>{t('endHere')}</button>
           <button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', [...edit.record_ranges, selection])}>{t('keep')}</button><button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', removeRange(edit.record_ranges, selection, duration))}>{t('exclude')}</button><button className="re-beep-button" disabled={!validSelection || !!busy} onClick={() => change('beep_ranges', [...edit.beep_ranges, selection])}>{t('addBeep')}</button>
+          <button disabled={!validSelection || !!busy || !edit.beep_ranges.some(r => r.start_ms < selection.end_ms && r.end_ms > selection.start_ms)} title={t('removeBeepHint')} onClick={() => change('beep_ranges', removeRange(edit.beep_ranges, selection, duration))}>{t('removeBeepSelection')}</button>
         </div>
         <p className={`re-selection-status ${selectionMessage === 'selectionEqual' || selectionMessage === 'selectionReversed' ? 're-selection-invalid' : ''}`} role="status" aria-live="polite">{t(selectionMessage, { time: validSelection ? formatTime(selection.end_ms - selection.start_ms) : '' })}</p>
-        <div className="re-bottom"><section className="re-edits"><RangeRows label={t('keepRanges')} ranges={edit.record_ranges} duration={duration} seek={seek} onChange={r => change('record_ranges', r)} /><RangeRows label={t('beepRanges')} ranges={edit.beep_ranges} duration={duration} seek={seek} onChange={r => change('beep_ranges', r)} /></section>
+        <div className="re-bottom"><section className="re-edits"><RangeRows label={t('keepRanges')} ranges={edit.record_ranges} duration={duration} seek={seek} onChange={r => change('record_ranges', r)} /><RangeRows label={t('beepRanges')} deleteLabel={t('deleteBeep')} ranges={edit.beep_ranges} duration={duration} seek={seek} onChange={r => change('beep_ranges', r)} /></section>
           <section className="re-events"><h3>{t('events')}</h3><div>{recording.events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div></section></div>
       </>}
     </main></div>

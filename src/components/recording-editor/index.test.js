@@ -502,6 +502,42 @@ test('editing, undo/redo and draft send meeting-time ranges with revision', asyn
   expect(calls.some(c => c.url.endsWith('/save'))).toBe(false);
 });
 
+test('beep removal can split an interval, undo, delete an entire ribbon and save without changing keep ranges', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, beep_ranges: [{ start_ms: 1000, end_ms: 3000 }] }) }
+    : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(button('選択範囲のピー音を除去').disabled).toBe(true);
+  await selectRange();
+  await time('選択開始', '00:00:01.500');
+  await time('選択終了', '00:00:02.500');
+  await click('選択範囲のピー音を除去');
+  const beepBars = () => container.querySelectorAll('.beep_ranges .re-bar');
+  expect(beepBars()).toHaveLength(2);
+  expect(container.querySelector('[aria-label="ピー音で置き換える区間1 終了"]').value).toBe('00:00:01.500');
+  expect(container.querySelector('[aria-label="ピー音で置き換える区間2 開始"]').value).toBe('00:00:02.500');
+  expect(button('選択範囲のピー音を除去').disabled).toBe(true);
+  await click('↶ 元に戻す'); expect(beepBars()).toHaveLength(1);
+  await click('↷ やり直す'); expect(beepBars()).toHaveLength(2);
+  await click('下書きを保存');
+  const draft = calls.filter(c => c.url.endsWith('/draft')).pop().payload;
+  expect(draft.beep_ranges).toEqual([{ start_ms: 1000, end_ms: 1500 }, { start_ms: 2500, end_ms: 3000 }]);
+  expect(draft.record_ranges).toEqual(manifest.record_ranges);
+  await act(async () => Simulate.click(beepBars()[0]));
+  await click('選択範囲のピー音を除去'); expect(beepBars()).toHaveLength(1);
+  await click('ピー音を削除'); expect(beepBars()).toHaveLength(0);
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:01.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:01.500');
+  expect(container.querySelector('.re-transport input').value).toBe('00:00:00.000');
+  expect(container.querySelectorAll('.record_ranges .re-bar')).toHaveLength(1);
+  await click('rawデータへ保存…'); await click('バックアップを作成して保存');
+  const saved = calls.find(c => c.url.endsWith('/save')).payload;
+  expect(saved.beep_ranges).toEqual([]);
+  expect(saved.record_ranges).toEqual(manifest.record_ranges);
+  expect(saved.cut_chime_gaps).toEqual([]);
+});
+
 test('volume and mute affect preview playback without changing edits or saving raw data', async () => {
   const audio = container.querySelector('audio');
   expect(audio.volume).toBe(1);
