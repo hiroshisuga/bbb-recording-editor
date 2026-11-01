@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useSta
 import { EditorLanguageProvider, languages, useEditorI18n } from './i18n';
 import ExternalVideoPlayer from 'components/external-video-player';
 import SlidePreview from './SlidePreview';
+import PreviewPanes from './PreviewPanes';
 import DetailWaveform from './DetailWaveform';
 import CutChimeControl from './CutChimeControl';
 import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection } from './SelectionMarkers';
@@ -219,7 +220,7 @@ function Editor() {
   const [seekVersion, setSeekVersion] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [preferences, updatePreferences] = useEditorPreferences();
-  const { rate, volume, muted, lastVolume, zoom, beepPreview, detailWaveOpen, detailWaveSpan } = preferences;
+  const { rate, volume, muted, lastVolume, zoom, beepPreview, detailWaveOpen, detailWaveSpan, previewSplit } = preferences;
   const [audio, setAudio] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState('');
@@ -422,9 +423,9 @@ function Editor() {
           {!edit.record_ranges.length && <p className="re-warnings">{t('needRange')}</p>}
           <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><button onClick={() => setReview(false)}>{t('close')}</button><small>{t('noRebuild')}</small>
         </div>}
-        <div className="re-preview"><div className="re-content-preview">
-          {external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} />}
-        </div><div className="re-cameras">{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</div></div>
+        <PreviewPanes ratio={previewSplit} onChange={value => updatePreferences({ previewSplit: value })}
+          content={external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} />}
+          cameras={<>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</>} />
         {external && <p className="re-warnings">{t('externalAudio')}</p>}
         <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
           <TimeField label={t('position')} value={Math.round(time)} max={duration} onChange={seek} onFocus={() => audio?.pause()} /><span>/ {formatTime(duration)}</span>

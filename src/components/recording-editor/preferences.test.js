@@ -9,7 +9,7 @@ test.each([null, '{invalid', 'null', '[]', '{"version":2,"volume":0.2}'])('missi
 });
 
 test('valid preferences are restored without importing unrelated recording data', () => {
-  const values = { ...DEFAULT_PREFERENCES, volume: 0.35, muted: true, lastVolume: 0.35, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: true, detailWaveSpan: 5000 };
+  const values = { ...DEFAULT_PREFERENCES, volume: 0.35, muted: true, lastVolume: 0.35, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: true, detailWaveSpan: 5000, previewSplit: 0.4 };
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ version: 1, ...values, recordingId: 'not-a-preference' }));
   expect(readPreferences()).toEqual(values);
 });
@@ -26,4 +26,9 @@ test('invalid fields fall back independently and do not reach media controls', (
 test('storage access restrictions use defaults', () => {
   jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage disabled'); });
   expect(readPreferences()).toEqual(DEFAULT_PREFERENCES);
+});
+
+test.each([0, 1, -1, 0.19, 0.81, '0.5', null])('invalid preview split falls back without losing other preferences: %s', previewSplit => {
+  localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ version: 1, previewSplit, volume: 0.4 }));
+  expect(readPreferences()).toEqual({ ...DEFAULT_PREFERENCES, volume: 0.4, lastVolume: 0.4 });
 });

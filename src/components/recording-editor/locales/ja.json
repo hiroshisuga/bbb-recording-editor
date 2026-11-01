@@ -217,5 +217,7 @@
   "cutChimeGap": "繋ぎ目{number}：{time} ～ {end}",
   "cutChimeList": "繋ぎ目ごとのチャイムを選択",
   "cutChimeNoGaps": "録画区間の間に20ミリ秒以上の空きがありません。",
-  "cutChimeSeek": "繋ぎ目{number}へ移動"
+  "cutChimeSeek": "繋ぎ目{number}へ移動",
+  "previewResize": "スライド・画面共有とwebcamの幅を調整",
+  "previewResizeHint": "左右にドラッグして幅を調整。左右矢印キーでも操作できます。ダブルクリックで標準比率に戻します。"
 }
