@@ -2,6 +2,8 @@ import SelectionMarkers, { SelectionOffscreen, validSelection } from './Selectio
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { formatTime } from './model';
+import RecordingTime, { EditedRuler } from './RecordingTime';
+import { recordingClock } from './recordingClock';
 import TimelineTooltip from './TimelineTooltip';
 
 export const CHUNK_MS = 10000;
@@ -118,7 +120,8 @@ function WaveCanvas({ tiles, start, span, label }) {
   return <canvas ref={canvas} aria-label={label} role="img" />;
 }
 
-export default function DetailWaveform({ audioUrl, duration, time, playing, selection, setSelection, seek, span, setSpan, recordRanges = [] }) {
+export default function DetailWaveform({ audioUrl, duration, time, playing, selection, setSelection, seek, span, setSpan, recordRanges = [], clock: suppliedClock }) {
+  const clock = useMemo(() => suppliedClock || recordingClock(recordRanges, [], duration), [suppliedClock, recordRanges, duration]);
   const { t } = useEditorI18n();
   const width = Math.min(span, duration || span);
   const [start, setStart] = useState(() => windowStart(time, duration, width));
@@ -206,7 +209,9 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
       {!following && <span>{t('detailFollowPaused')}</span>}
       {time < start ? <span>{t('detailPlayheadBefore')}</span> : time > start + width ? <span>{t('detailPlayheadAfter')}</span> : null}
     </div>}
-    <div className="re-detail-ruler">{ticks.map((tick, i) => <span key={i}>{tick}</span>)}</div>
+    <RecordingTime clock={clock} time={time} />
+    <div className="re-detail-ruler" aria-label={t('sourceClock')}>{ticks.map((tick, i) => <span key={i}>{tick}</span>)}</div>
+    <EditedRuler clock={clock} positions={[start, start + width / 2, start + width]} />
     <div className="re-detail-plot" ref={plotRef} onPointerDown={down} onPointerMove={move} onPointerUp={release} onPointerCancel={cancel} onLostPointerCapture={cancel}>
       <div className="re-detail-record-track" role="group" aria-label={t('keepRanges')}>
         {visibleRanges.map(range => {

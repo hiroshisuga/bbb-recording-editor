@@ -1,4 +1,10 @@
 {
+  "sourceClock": "元の時刻",
+  "editedClock": "編集後（現在の設定）",
+  "editedDuration": "編集後の録画時間",
+  "editedExcluded": "録画対象外",
+  "editedJoin": "接続位置：{time}",
+  "editedNoRanges": "録画区間なし",
   "title": "録画エディター",
   "language": "言語",
   "unsaved": "未保存の変更あり",
