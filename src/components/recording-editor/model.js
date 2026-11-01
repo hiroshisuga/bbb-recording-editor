@@ -147,3 +147,15 @@ export const audioAdapter = (audio, duration) => ({
   muted: () => audio.muted,
   isDisposed: () => false,
 });
+
+// Mirror the server's cut plan for the displayed count; the server derives the
+// actual ranges again when saving. Original OFF gaps and outer trims are skipped.
+export const cutChimeRanges = (ranges, original, duration) => {
+  const records = normalizeRanges(ranges, duration);
+  const baseline = original.length ? original : [{ start_ms: 0, end_ms: duration }];
+  return records.slice(0, -1).flatMap((left, i) => {
+    const from = left.end_ms, to = records[i + 1].start_ms;
+    return to - from >= 20 && baseline.some(r => r.start_ms < to && r.end_ms > from)
+      ? [{ start_ms: from, end_ms: Math.min(from + 250, to) }] : [];
+  });
+};

@@ -3,6 +3,7 @@ import { EditorLanguageProvider, languages, useEditorI18n } from './i18n';
 import ExternalVideoPlayer from 'components/external-video-player';
 import SlidePreview from './SlidePreview';
 import DetailWaveform from './DetailWaveform';
+import CutChimeControl from './CutChimeControl';
 import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection } from './SelectionMarkers';
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
@@ -11,7 +12,7 @@ import useTimelineFollow from './useTimelineFollow';
 import TimelineTooltip from './TimelineTooltip';
 import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
 import useExternalVideoTitles from './useExternalVideoTitles';
-import { audioAdapter, externalVideos, formatTime, normalizeRanges, parseTime, presentationRanges, removeRange } from './model';
+import { audioAdapter, cutChimeRanges, externalVideos, formatTime, normalizeRanges, parseTime, presentationRanges, removeRange } from './model';
 import './styles.css';
 
 const PREFIX = process.env.REACT_APP_EDITOR_PREFIX || '/recording-editor';
@@ -211,7 +212,7 @@ function Editor() {
   const { locale, setLocale, t, diagnostic, message: displayMessage } = useEditorI18n();
   const [meetings, setMeetings] = useState([]);
   const [recording, setRecording] = useState(null);
-  const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [] });
+  const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [], cut_chime: false });
   const [history, setHistory] = useState({ past: [], future: [] });
   const [selection, setSelection] = useState({ start_ms: null, end_ms: null });
   const [time, setTime] = useState(0);
@@ -228,7 +229,8 @@ function Editor() {
   const [rebuildReview, setRebuildReview] = useState(false);
   const [resetReview, setResetReview] = useState(false);
   const duration = recording?.duration_ms || 0;
-  const dirty = recording && JSON.stringify(edit) !== JSON.stringify({ record_ranges: recording.record_ranges, beep_ranges: recording.beep_ranges });
+  const chimeRanges = useMemo(() => edit.cut_chime ? cutChimeRanges(edit.record_ranges, recording?.original_record_ranges || [], duration) : [], [edit.cut_chime, edit.record_ranges, recording, duration]);
+  const dirty = recording && JSON.stringify(edit) !== JSON.stringify({ record_ranges: recording.record_ranges, beep_ranges: recording.beep_ranges, cut_chime: !!recording.cut_chime });
   const rebuildPending = ['requesting', 'requested'].includes(recording?.rebuild?.status);
   const rebuilding = rebuildPending || recording?.rebuild?.processing;
   const needsRangeSave = recording?.record_ranges_persisted === false;
@@ -310,7 +312,7 @@ function Editor() {
   };
   useEffect(() => {
     const key = e => {
-      if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(e.target.tagName) || busy) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'AUDIO', 'VIDEO'].includes(e.target.tagName) || busy) return;
       if (e.code === 'Space' && audio) { e.preventDefault(); if (audio.paused) audio.play().catch(err => setError(err.message)); else audio.pause(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     };
@@ -331,7 +333,7 @@ function Editor() {
     try {
       const data = await request(`/recordings/${id}`);
       setRecording(data);
-      setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
+      setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges, cut_chime: !!data.cut_chime });
       setHistory({ past: [], future: [] }); setSelection({ start_ms: null, end_ms: null });
       const generated = await runJob(`/recordings/${id}/preview`, {});
       setPreview(generated);
@@ -349,7 +351,7 @@ function Editor() {
     try {
       const result = await runJob(`/recordings/${recording.id}/save`, { ...edit, revision: recording.revision });
       const data = await request(`/recordings/${recording.id}`);
-      setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
+      setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges, cut_chime: !!data.cut_chime });
       setHistory({ past: [], future: [] }); setReview(false);
       setMessage({ id: 'rawSaved', values: { backup: result.xml_backup } });
       await refreshList();
@@ -373,7 +375,7 @@ function Editor() {
       await runJob(`/recordings/${id}/reset`, { revision: recording.revision, confirmed: true });
       setPreview(null); setTime(0); setPlaying(false);
       const data = await request(`/recordings/${id}`);
-      setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges });
+      setRecording(data); setEdit({ record_ranges: data.record_ranges, beep_ranges: data.beep_ranges, cut_chime: !!data.cut_chime });
       setHistory({ past: [], future: [] }); setSelection({ start_ms: null, end_ms: null });
       setReview(false); setRebuildReview(false); setResetReview(false);
       setPreview(await runJob(`/recordings/${id}/preview`, {}));
@@ -397,7 +399,7 @@ function Editor() {
       {!recording ? <div className="re-welcome"><h1>{t('welcomeTitle')}</h1><p>{t('welcomeSelect')}</p><p>{t('welcomeEdit')}</p><p>{t('manualRebuild')}</p></div> : <>
         <div className="re-title"><div><h1>{recording.name || recording.id}</h1><small>{recording.id} · {t('wholeMeeting', { time: formatTime(duration) })}</small></div>{recording.published_url && <a href={recording.published_url} target="_blank" rel="noreferrer">{t('publishedLink')}</a>}</div>
         {recording.warnings.length > 0 && <details className="re-warnings" open><summary>{t('warnings', { count: recording.warnings.length })}</summary>{recording.warnings.map((w, i) => <p key={i}>{diagnostic(w)}</p>)}</details>}
-        {recording.draft?.revision === recording.revision && <div className="re-draft">{t('draftAvailable')} <button disabled={!!busy} onClick={() => replaceEdit({ record_ranges: recording.draft.record_ranges, beep_ranges: recording.draft.beep_ranges })}>{t('loadDraft')}</button></div>}
+        {recording.draft?.revision === recording.revision && <div className="re-draft">{t('draftAvailable')} <button disabled={!!busy} onClick={() => replaceEdit({ record_ranges: recording.draft.record_ranges, beep_ranges: recording.draft.beep_ranges, cut_chime: !!recording.draft.cut_chime })}>{t('loadDraft')}</button></div>}
         {!busy && !dirty && !needsRangeSave && <p className="re-muted">{t('rawAlreadySaved')}</p>}
         {recording.playback_sync === 'needs_rebuild' && !rebuilding && <div className="re-notice" role="status">{t(recording.last_operation === 'reset' ? needsRangeSave ? 'resetUnmarkedCompleted' : 'resetNeedsRebuild' : 'rawNeedsRebuild')}</div>}
         {recording.playback_sync === 'reflected' && !rebuilding && <p className="re-muted">{t('rawReflected')}</p>}
@@ -412,6 +414,7 @@ function Editor() {
           <button className="re-primary" disabled={!!rebuildBlock} onClick={rebuild}>{t('confirmRebuild')}</button><button disabled={!!busy} onClick={() => setRebuildReview(false)}>{t('close')}</button>
         </div>}
         {review && <div className="re-review"><h3>{t('reviewTitle')}</h3><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>
+          {edit.cut_chime && <p className="re-warnings">{t('cutChimeWarning')}</p>}
           {edit.beep_ranges.length > 0 && <p className="re-warnings">{t('reviewAudioWarning')}</p>}
           {recording.beep_ranges.length > 0 && !edit.beep_ranges.length && <p>{t('reviewAudioRestore')}</p>}
           {!edit.record_ranges.length && <p className="re-warnings">{t('needRange')}</p>}
@@ -430,6 +433,8 @@ function Editor() {
           <label><input type="checkbox" checked={beepPreview} onChange={e => updatePreferences({ beepPreview: e.target.checked })} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
           {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
         </div>
+        <CutChimeControl key={recording.id} enabled={edit.cut_chime} busy={!!busy || rebuilding} count={chimeRanges.length} sampleUrl={`${API}/cut-chime.wav`}
+          onChange={value => replaceEdit({ ...edit, cut_chime: value })} />
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button><span className="re-muted">{t('dragHint')}</span></div>
         <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
         {detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} />}

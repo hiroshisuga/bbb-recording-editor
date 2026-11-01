@@ -1,4 +1,4 @@
-import { formatTime, parseTime, normalizeRanges, removeRange, externalVideos, presentationRanges, slideState } from './model';
+import { cutChimeRanges, formatTime, parseTime, normalizeRanges, removeRange, externalVideos, presentationRanges, slideState } from './model';
 
 test('millisecond clock and invalid input', () => {
   expect(formatTime(3723045)).toBe('01:02:03.045');
@@ -120,4 +120,14 @@ test('presentation filenames label ribbons without replacing their identity or s
   ], 3000);
   expect(ranges.map(r => [r.presentation, r.filename, r.start_ms, r.end_ms]))
     .toEqual([['id-A', 'Lecture.pptx', 0, 2000], ['id-B', 'Lecture.pptx', 2000, 3000]]);
+});
+
+test('transition chimes only cover newly edited interior gaps with bounded durations', () => {
+  const baseline = [{ start_ms: 0, end_ms: 1000 }, { start_ms: 2000, end_ms: 3000 }];
+  expect(cutChimeRanges(baseline, baseline, 3000)).toEqual([]);
+  for (const gap of [19, 20, 70, 250, 500]) {
+    const ranges = [{ start_ms: 0, end_ms: 1000 }, { start_ms: 1000 + gap, end_ms: 3000 }];
+    expect(cutChimeRanges(ranges, [], 3000)).toEqual(gap < 20 ? [] : [{ start_ms: 1000, end_ms: 1000 + Math.min(250, gap) }]);
+  }
+  expect(cutChimeRanges([{ start_ms: 500, end_ms: 2000 }], [], 3000)).toEqual([]);
 });

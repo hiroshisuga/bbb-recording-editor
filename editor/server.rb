@@ -68,6 +68,9 @@ module RecordingEditor
       end
       path = req.path.delete_prefix(@repo.prefix)
       case path
+      when '/api/cut-chime.wav'
+        require_method(req, 'GET', 'HEAD')
+        serve_file(req, res, CutChime::SAMPLE)
       when '/api/recordings'
         require_method(req, 'GET')
         json(res, @repo.list)

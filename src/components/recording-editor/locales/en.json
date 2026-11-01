@@ -202,5 +202,14 @@
   "meetingPeriod": "Period",
   "meetingPeriodLabel": "Meeting date range",
   "meetingPeriodAll": "All dates",
-  "meetingPeriodDays": "Past {days} days"
+  "meetingPeriodDays": "Past {days} days",
+  "cutChime": "Add a chime at edited cuts",
+  "cutChimeSample": "Sample A: soft two-note transition chime",
+  "cutChimeOff": "Off",
+  "cutChimeCount": "{count} cut(s)",
+  "cutChimeConfirmTitle": "Include a short part of each excluded section?",
+  "cutChimeWarning": "To play the chime, up to 0.25 seconds of each affected excluded section will be included in the recording. Original microphone and screenshare audio in that interval will be silenced and replaced by the chime, but video, slides, chat, and other events may remain visible. Audio from externally shared videos is not modified.",
+  "cutChimeAccept": "Confirm and enable",
+  "cutChimeCancel": "Cancel",
+  "cutChimeHint": "Sound A. Audition it with the player above. Save to raw, then rebuild to apply. Transition chimes are not played in the full-meeting editing preview."
 }

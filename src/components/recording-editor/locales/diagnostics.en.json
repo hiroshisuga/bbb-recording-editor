@@ -84,5 +84,6 @@
   "初期状態へ復元し、現在の編集結果を履歴へ退避しています。": "Restoring original state and archiving the current edits.",
   "初期状態に戻しました。録画への反映には別途再構築が必要です。": "Original state restored. Rebuild separately to update playback.",
   "録画の再構築・処理中はraw保存・初期化・再構築を実行できません。完了後に一覧を更新してください。": "Cannot save raw data, restore original state, or request another rebuild while recording processing is in progress. Refresh the list after it finishes.",
-  "保存済みのプレビュー音声と波形を再利用しました。": "Reused the saved preview audio and waveforms."
+  "保存済みのプレビュー音声と波形を再利用しました。": "Reused the saved preview audio and waveforms.",
+  "合図音の設定が不正です。": "Invalid transition-chime setting."
 }
