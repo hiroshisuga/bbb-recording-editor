@@ -464,7 +464,7 @@ test.each([
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
-test('ordinary clicks preserve an existing selection while dragging replaces it', async () => {
+test('ordinary clicks release a complete selection keeping its start while dragging replaces it', async () => {
   const timeline = container.querySelector('.re-timeline');
   timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
   timeline.setPointerCapture = jest.fn();
@@ -473,7 +473,16 @@ test('ordinary clicks preserve an existing selection while dragging replaces it'
   await timelineClick(container.querySelector('.re-wave'), 400, { shiftKey: false });
   expect(container.querySelector('audio').currentTime).toBe(30);
   expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
-  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:20.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('');
+  expect(container.querySelector('.re-selection-overlay')).toBeNull();
+  expect(container.querySelector('.re-selection-start_ms')).not.toBeNull();
+  expect(container.querySelector('.re-selection-end_ms')).toBeNull();
+  expect(button('録画に残す').disabled).toBe(true);
+  expect(button('ピー音を追加').disabled).toBe(true);
+  expect(button('↶ 元に戻す').disabled).toBe(true);
+  await click('終了を現在位置に');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:30.000');
+  expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
   await act(async () => {
     [['pointerdown', 400], ['pointermove', 200], ['pointerup', 200]].forEach(([type, clientX]) => {
       const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX });
@@ -485,6 +494,19 @@ test('ordinary clicks preserve an existing selection while dragging replaces it'
   expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:30.000');
   expect(container.querySelector('audio').currentTime).toBe(10);
   expect(button('rawデータへ保存…').disabled).toBe(true);
+});
+
+test.each([150, 250, 600])('background click at %s clears a complete range even before, inside or after it', async clientX => {
+  const timeline = container.querySelector('.re-timeline');
+  timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  timeline.setPointerCapture = jest.fn();
+  await time('選択開始', '00:00:10.000'); await time('選択終了', '00:00:20.000');
+  await timelineClick(container.querySelector('.re-wave'), clientX, { shiftKey: false });
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('');
+  expect(container.querySelector('audio').currentTime).toBe((clientX - 100) / 10);
+  expect(container.querySelectorAll('.record_ranges .re-bar')).toHaveLength(1);
+  expect(calls.some(c => /\/(save|draft|reset)$/.test(c.url))).toBe(false);
 });
 
 test('editing, undo/redo and draft send meeting-time ranges with revision', async () => {

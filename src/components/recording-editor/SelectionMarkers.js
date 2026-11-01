@@ -5,6 +5,10 @@ import { formatTime } from './model';
 export const validSelection = selection => Number.isFinite(selection.start_ms)
   && Number.isFinite(selection.end_ms) && selection.end_ms > selection.start_ms;
 
+// A completed range becomes a pending start; incomplete/invalid endpoints stay intact.
+export const releaseCompleteSelection = selection => validSelection(selection)
+  ? { ...selection, end_ms: null } : selection;
+
 const points = [['start_ms', 'endpointStart'], ['end_ms', 'endpointEnd']];
 
 export default function SelectionMarkers({ selection, start, end }) {

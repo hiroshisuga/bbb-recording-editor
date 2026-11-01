@@ -113,7 +113,7 @@ test('rapid distant seeks are debounced and stale requests cannot overwrite the 
   expect(container.querySelector('.re-detail-ruler').textContent).toContain('02:13:15.000');
 });
 
-test('click preserves selection, Shift-click anchors to playhead, and dragging shares millisecond intervals', async () => {
+test('click preserves incomplete endpoints, Shift-click anchors to playhead, and dragging shares millisecond intervals', async () => {
   await render(); await advance();
   await pointer('pointerDown', 200); await pointer('pointerUp', 200);
   expect(props.seek).toHaveBeenLastCalledWith(65000); expect(props.setSelection).not.toHaveBeenCalled();
@@ -329,4 +329,34 @@ test('edited current time and ruler share the clock without fetching waveform ti
   await render({ clock: recordingClock([], [], props.duration) });
   expect(container.querySelector('.re-edited-position').textContent).toBe('No recording intervals');
   expect(container.querySelector('.re-recording-time').textContent).toContain('Edited duration: 00:00:00.000');
+});
+
+
+test.each([
+  [{ start_ms: null, end_ms: null }, false],
+  [{ start_ms: 65000, end_ms: null }, false],
+  [{ start_ms: null, end_ms: 69000 }, false],
+  [{ start_ms: 65000, end_ms: 65000 }, false],
+  [{ start_ms: 69000, end_ms: 65000 }, false],
+  [{ start_ms: 65000, end_ms: 69000 }, true],
+])('detail click releases only completed ranges: %j', async (selection, completed) => {
+  await render({ selection }); await advance();
+  await pointer('pointerDown', 250); await pointer('pointerUp', 251);
+  expect(props.seek).toHaveBeenLastCalledWith(66020);
+  if (completed) {
+    const update = props.setSelection.mock.calls.at(-1)[0];
+    expect(update(selection)).toEqual({ start_ms: 65000, end_ms: null });
+    await render({ selection: update(selection) });
+    expect(container.querySelector('.re-detail-selection')).toBeNull();
+    expect(container.querySelector('.re-selection-start_ms')).not.toBeNull();
+    expect(container.querySelector('.re-selection-end_ms')).toBeNull();
+  } else expect(props.setSelection).not.toHaveBeenCalled();
+});
+
+test('detail cancellation and Ctrl-click do not release ranges or seek', async () => {
+  await render({ selection: { start_ms: 65000, end_ms: 69000 } });
+  await pointer('pointerDown', 250); await pointer('pointerCancel', 250); await pointer('pointerUp', 250);
+  await act(async () => Simulate.pointerDown(container.querySelector('.re-detail-plot'), { button: 0, ctrlKey: true, clientX: 250 }));
+  await pointer('pointerUp', 250);
+  expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
 });
