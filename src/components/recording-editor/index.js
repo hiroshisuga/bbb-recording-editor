@@ -140,8 +140,8 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     const startX = e.clientX;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
-    // Release only a completed range on click. Keep its start (or either
-    // incomplete endpoint) available for Set start/end here; drags replace it.
+    // Release only the nearer endpoint of a completed range on click.
+    // Preserve incomplete endpoints; a real drag replaces the range.
     let dragged = false;
     const move = next => {
       if (!dragged && Math.abs(next.clientX - startX) < 4) return;
@@ -155,8 +155,9 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     };
     const up = next => {
       move(next);
-      if (!dragged && isValidSelection(selection)) setSelection(releaseCompleteSelection);
-      seek(position(next)); cleanup();
+      const clicked = position(next);
+      if (!dragged && isValidSelection(selection)) setSelection(current => releaseCompleteSelection(current, clicked));
+      seek(clicked); cleanup();
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up, { once: true });

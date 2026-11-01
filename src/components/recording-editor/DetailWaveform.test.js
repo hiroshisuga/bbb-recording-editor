@@ -345,11 +345,11 @@ test.each([
   expect(props.seek).toHaveBeenLastCalledWith(66020);
   if (completed) {
     const update = props.setSelection.mock.calls.at(-1)[0];
-    expect(update(selection)).toEqual({ start_ms: 65000, end_ms: null });
+    expect(update(selection)).toEqual({ start_ms: null, end_ms: 69000 });
     await render({ selection: update(selection) });
     expect(container.querySelector('.re-detail-selection')).toBeNull();
-    expect(container.querySelector('.re-selection-start_ms')).not.toBeNull();
-    expect(container.querySelector('.re-selection-end_ms')).toBeNull();
+    expect(container.querySelector('.re-selection-start_ms')).toBeNull();
+    expect(container.querySelector('.re-selection-end_ms')).not.toBeNull();
   } else expect(props.setSelection).not.toHaveBeenCalled();
 });
 
@@ -359,4 +359,17 @@ test('detail cancellation and Ctrl-click do not release ranges or seek', async (
   await act(async () => Simulate.pointerDown(container.querySelector('.re-detail-plot'), { button: 0, ctrlKey: true, clientX: 250 }));
   await pointer('pointerUp', 250);
   expect(props.seek).not.toHaveBeenCalled(); expect(props.setSelection).not.toHaveBeenCalled();
+});
+
+
+test.each([
+  [150, { start_ms: null, end_ms: 69000 }],
+  [400, { start_ms: 65000, end_ms: null }],
+  [350, { start_ms: 65000, end_ms: null }],
+  [550, { start_ms: 65000, end_ms: null }],
+])('detailed waveform uses original-time distance at pixel %s', async (x, expected) => {
+  await render({ time: 67000, selection: { start_ms: 65000, end_ms: 69000 } }); await advance();
+  await pointer('pointerDown', x); await pointer('pointerUp', x);
+  const update = props.setSelection.mock.calls.at(-1)[0];
+  expect(update(props.selection)).toEqual(expected);
 });

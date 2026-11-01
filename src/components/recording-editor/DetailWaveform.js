@@ -199,8 +199,9 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   const release = e => {
     if (!pointer.current) return;
     move(e);
-    if (!pointer.current.moved && validSelection(selection)) setSelection(releaseCompleteSelection);
-    seek(position(e)); pointer.current = null; setDragging(false);
+    const clicked = position(e);
+    if (!pointer.current.moved && validSelection(selection)) setSelection(current => releaseCompleteSelection(current, clicked));
+    seek(clicked); pointer.current = null; setDragging(false);
   };
   const cancel = () => { pointer.current = null; setDragging(false); };
   return <section className="re-detail-wave" aria-label={t('detailWave')}>
