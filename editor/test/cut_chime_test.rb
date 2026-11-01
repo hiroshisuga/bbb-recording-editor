@@ -47,7 +47,7 @@ class CutChimeTest < Minitest::Test
     Math.sqrt(samples.sum { |s| s * s } / samples.size)
   end
 
-  def test_plan_skips_outer_trims_original_off_gaps_and_subframe_cuts
+  def test_legacy_plan_skips_outer_trims_original_off_gaps_and_subframe_cuts
     original = [{ 'start_ms' => 0, 'end_ms' => 1000 }, { 'start_ms' => 2000, 'end_ms' => 3000 }]
     assert_empty RecordingEditor::CutChime.ranges(original, original, 3000)
     assert_empty RecordingEditor::CutChime.ranges([{ 'start_ms' => 500, 'end_ms' => 2000 }], [], 3000)
@@ -125,6 +125,49 @@ class CutChimeTest < Minitest::Test
     assert_equal true, JSON.parse(File.read(File.join(@repo.state_dir(@id), 'draft.json')))['cut_chime']
     assert_raises(RecordingEditor::Error) { @editor.draft(@id, payload.merge('cut_chime' => 'yes')) }
     assert_raises(RecordingEditor::Error) { @editor.save(@id, payload.merge('cut_chime' => 1)) }
+    assert_equal @events, File.read(File.join(@raw, 'events.xml'))
+  end
+
+  def test_individual_selections_include_original_off_gaps_and_survive_saves_drafts_and_clearing
+    # These are the original recording intervals, so the old global flag would
+    # not mark either gap. Explicit choices can now address every interior gap.
+    records = [{ 'start_ms' => 0, 'end_ms' => 1000 }, { 'start_ms' => 2000, 'end_ms' => 3000 }, { 'start_ms' => 4000, 'end_ms' => 6000 }]
+    xml = RecordingEditor.xml(@events)
+    xml.xpath('/recording/event[filename or @eventname="RecordStatusEvent"]').each(&:remove)
+    File.write(File.join(@raw, 'events.xml'), xml.to_xml)
+    File.write(File.join(@raw, 'events.xml'), @repo.recording(@id).edited_xml(records))
+    gap = { 'start_ms' => 3000, 'end_ms' => 4000 }
+    input = payload(records: records).merge('cut_chime_gaps' => [gap])
+    assert_equal [gap], @editor.draft(@id, input)[:cut_chime_gaps]
+    2.times do
+      result = @editor.save(@id, payload(records: records).merge('cut_chime_gaps' => [gap]))
+      assert_equal [gap], result['cut_chime_gaps']
+      assert_equal 1, result['outputs'].count { |item| item[:cue] }
+      rec = @repo.recording(@id)
+      assert_equal [gap], rec.to_h[:cut_chime_gaps]
+      assert_equal records, rec.record_ranges
+      assert_equal 1000, rec.record_ranges(rec.current_doc).first['end_ms']
+      assert_equal 3250, rec.record_ranges(rec.current_doc)[1]['end_ms']
+    end
+    @editor.save(@id, payload(records: records).merge('cut_chime_gaps' => []))
+    rec = @repo.recording(@id)
+    assert_empty rec.to_h[:cut_chime_gaps]
+    assert_equal false, rec.to_h[:cut_chime]
+    assert_equal records, rec.record_ranges(rec.current_doc)
+  end
+
+  def test_explicit_gap_validation_and_legacy_migration
+    records = [{ 'start_ms' => 0, 'end_ms' => 1000 }, { 'start_ms' => 2000, 'end_ms' => 3000 }, { 'start_ms' => 4000, 'end_ms' => 6000 }]
+    gaps = RecordingEditor::CutChime.gaps(records)
+    select = ->(value) { RecordingEditor::CutChime.selection(value, records, records, 6000) }
+    assert_empty select.call('cut_chime' => true), 'Legacy mode must not newly enable original OFF gaps'
+    assert_equal gaps, select.call('cut_chime_gaps' => gaps)
+    assert_empty select.call('cut_chime' => true, 'cut_chime_gaps' => [])
+    [nil, [gaps.first, gaps.first], [{ 'start_ms' => 500, 'end_ms' => 2000 }], [{ 'start_ms' => 1000, 'end_ms' => 1250 }]].each do |invalid|
+      assert_raises(RecordingEditor::Error) { select.call('cut_chime_gaps' => invalid) }
+    end
+    assert_equal gaps, RecordingEditor::CutChime.selection({ 'cut_chime' => true }, records, [], 6000)
+    assert_raises(RecordingEditor::Error) { @editor.draft(@id, payload.merge('cut_chime_gaps' => [gaps.first])) }
     assert_equal @events, File.read(File.join(@raw, 'events.xml'))
   end
 end

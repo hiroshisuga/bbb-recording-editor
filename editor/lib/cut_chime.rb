@@ -12,6 +12,34 @@ module RecordingEditor
       value
     end
 
+    def self.gaps(records)
+      records.each_cons(2).filter_map do |left, right|
+        next if right['start_ms'] - left['end_ms'] < MIN_DURATION_MS
+        { 'start_ms' => left['end_ms'], 'end_ms' => right['start_ms'] }
+      end
+    end
+
+    # Explicit selections are authoritative, including an empty selection.
+    # Legacy recordings/drafts keep exactly the cuts selected by the old flag;
+    # upgrading must not silently enable chimes on original recording-OFF gaps.
+    def self.selection(payload, records, original, duration)
+      legacy_enabled = enabled(payload)
+      candidates = gaps(records)
+      unless payload.key?('cut_chime_gaps')
+        legacy = legacy_enabled ? ranges(records, original, duration) : []
+        return candidates.select { |gap| legacy.any? { |cue| cue['start_ms'] == gap['start_ms'] } }
+      end
+      selected = RecordingEditor.ranges(payload['cut_chime_gaps'], duration)
+      unless selected.size == payload['cut_chime_gaps'].size && selected.all? { |gap| candidates.include?(gap) }
+        raise Error, '繋ぎ目の選択が録画範囲と一致しません。選択を確認してください。'
+      end
+      selected
+    end
+
+    def self.cues(selected)
+      selected.map { |gap| gap.merge('end_ms' => [gap['start_ms'] + DURATION_MS, gap['end_ms']].min) }
+    end
+
     # Only interior gaps which remove previously recorded content. If the
     # meeting was never marked, the editor's new ranges define its cuts.
     def self.ranges(records, original, duration)
