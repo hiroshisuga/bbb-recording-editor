@@ -5,9 +5,13 @@ import { formatTime } from './model';
 export const validSelection = selection => Number.isFinite(selection.start_ms)
   && Number.isFinite(selection.end_ms) && selection.end_ms > selection.start_ms;
 
-// A completed range becomes a pending start; incomplete/invalid endpoints stay intact.
-export const releaseCompleteSelection = selection => validSelection(selection)
-  ? { ...selection, end_ms: null } : selection;
+// Release the endpoint nearest the click, keeping the opposite anchor.
+// At the midpoint keep the start. Incomplete/invalid endpoints stay intact.
+export const releaseCompleteSelection = (selection, position) => {
+  if (!validSelection(selection) || !Number.isFinite(position)) return selection;
+  const middle = selection.start_ms + (selection.end_ms - selection.start_ms) / 2;
+  return position < middle ? { ...selection, start_ms: null } : { ...selection, end_ms: null };
+};
 
 const points = [['start_ms', 'endpointStart'], ['end_ms', 'endpointEnd']];
 
