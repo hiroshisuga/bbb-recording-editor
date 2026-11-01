@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the approved 250 ms transition cue A, without dependencies."""
+"""Reproduce 250 ms cue A without dependencies. C and the voice cue are approved WAV assets."""
 import math
 import struct
 import wave
@@ -19,11 +19,7 @@ def note(t, onset, frequency, decay):
                         for ratio, a in [(1, 1), (2, 0.12), (3, 0.025)])
 
 
-def generate(path):
-    values = [note(i / RATE, 0.004, 659.255, 0.033)
-              + note(i / RATE, 0.105, 523.251, 0.048) for i in range(N)]
-    values = [v * (0.5 - 0.5 * math.cos(math.pi * min(1, (N - 1 - i) / (RATE * 0.025))))
-              for i, v in enumerate(values)]
+def write_pcm(path, values):
     rms = math.sqrt(sum(v * v for v in values) / N)
     gain = min(10 ** (-25.5 / 20) / rms, 0.28 / max(map(abs, values)))
     with wave.open(str(path), 'wb') as wav:
@@ -31,6 +27,14 @@ def generate(path):
         wav.setsampwidth(2)
         wav.setframerate(RATE)
         wav.writeframes(struct.pack('<' + 'h' * N, *(round(v * gain * 32767) for v in values)))
+
+
+def generate(path):
+    values = [note(i / RATE, 0.004, 659.255, 0.033)
+              + note(i / RATE, 0.105, 523.251, 0.048) for i in range(N)]
+    values = [v * (0.5 - 0.5 * math.cos(math.pi * min(1, (N - 1 - i) / (RATE * 0.025))))
+              for i, v in enumerate(values)]
+    write_pcm(path, values)
 
 
 if __name__ == '__main__':

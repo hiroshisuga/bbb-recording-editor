@@ -557,6 +557,7 @@ module RecordingEditor
         rebuild: rebuild, reset: Original.new(repo, id).info,
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
         cut_chime: !chime_gaps.empty?, cut_chime_gaps: chime_gaps,
+        cut_chime_sound: history && history['revision'] == revision ? CutChime.sound(history) : 'a',
         assets: media, slides: slides, events: events, warnings: warnings.uniq,
         published_url: published ? "/playback/presentation/2.3/#{id}" : nil,
         preview_key: Media.new(self).preview_key }
@@ -1015,6 +1016,7 @@ module RecordingEditor
       raise Error, '録画に残す区間を1つ以上指定してください。BBBは空区間を安全に扱えません。' if records.empty?
       beeps = RecordingEditor.ranges(payload['beep_ranges'] || [], rec.duration)
       chime_gaps = CutChime.selection(payload, records, rec.record_ranges(rec.doc), rec.duration)
+      sound = CutChime.sound(payload)
       chime = !chime_gaps.empty?
       cues = CutChime.cues(chime_gaps)
       effective = CutChime.effective(records, cues, rec.duration)
@@ -1029,7 +1031,7 @@ module RecordingEditor
       RecordingEditor.atomic_write(baseline, rec.doc.to_xml) unless File.file?(baseline)
       staging = File.join(root, "staging-#{SecureRandom.hex(6)}")
       FileUtils.mkdir_p(staging)
-      replacements, outputs, audio_render = AudioRender.new(rec).render(beeps, cues, staging, history: history, progress: progress)
+      replacements, outputs, audio_render = AudioRender.new(rec).render(beeps, cues, staging, history: history, progress: progress, sound: sound)
       cue_outputs = outputs.select { |output| output[:cue] }
       xml = rec.edited_xml(effective, replacements, cue_outputs: cue_outputs)
       current = repo.raw_file(id, 'events.xml')
@@ -1046,7 +1048,7 @@ module RecordingEditor
         File.chown(stat.uid, stat.gid, target) if Process.uid.zero?
       end
       # Write-ahead information is kept even if the XML replacement fails.
-      result = { 'record_ranges' => records, 'beep_ranges' => beeps, 'cut_chime' => chime, 'cut_chime_gaps' => chime_gaps,
+      result = { 'record_ranges' => records, 'beep_ranges' => beeps, 'cut_chime' => chime, 'cut_chime_gaps' => chime_gaps, 'cut_chime_sound' => sound,
                  'effective_record_ranges' => effective,
                  'audio_render' => audio_render,
                  'xml_backup' => backup, 'outputs' => outputs.map { |o| o.reject { |k, _v| k == :staged } },
@@ -1090,7 +1092,7 @@ module RecordingEditor
       previous_draft = File.file?(draft_path) ? File.binread(draft_path) : nil
       RecordingEditor.atomic_write(File.join(archive, 'saved.json'), previous_saved) if previous_saved
       RecordingEditor.atomic_write(File.join(archive, 'draft.json'), previous_draft) if previous_draft
-      result = { 'operation' => 'reset', 'revision' => data['revision'], 'beep_ranges' => [], 'cut_chime' => false, 'cut_chime_gaps' => [],
+      result = { 'operation' => 'reset', 'revision' => data['revision'], 'beep_ranges' => [], 'cut_chime' => false, 'cut_chime_gaps' => [], 'cut_chime_sound' => 'a',
                  'xml_backup' => File.join(archive, 'events.xml'), 'archive' => archive,
                  'archived_media' => outputs, 'saved_at' => Time.now.utc.iso8601(6), 'status' => 'prepared' }
       journal = File.join(root, "#{token}.json")
@@ -1162,7 +1164,7 @@ module RecordingEditor
       records = RecordingEditor.ranges(payload['record_ranges'], rec.duration)
       beeps = RecordingEditor.ranges(payload['beep_ranges'] || [], rec.duration)
       chime_gaps = CutChime.selection(payload, records, rec.record_ranges(rec.doc), rec.duration)
-      data = { revision: rec.revision, record_ranges: records, beep_ranges: beeps, cut_chime: !chime_gaps.empty?, cut_chime_gaps: chime_gaps }
+      data = { revision: rec.revision, record_ranges: records, beep_ranges: beeps, cut_chime: !chime_gaps.empty?, cut_chime_gaps: chime_gaps, cut_chime_sound: CutChime.sound(payload) }
       RecordingEditor.atomic_write(File.join(repo.state_dir(id), 'draft.json'), JSON.pretty_generate(data))
       data
     end

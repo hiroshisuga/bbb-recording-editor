@@ -143,3 +143,13 @@ test('per-cut candidates include original OFF gaps, and edited boundaries prune 
   expect(readEditorEdit({ record_ranges: ranges, duration_ms: 5000, cut_chime: true, cut_chime_gaps: [] }).cut_chime_gaps).toEqual([]);
   expect(readEditorEdit({ record_ranges: ranges, duration_ms: 5000, cut_chime_gaps: [gaps[1]] }).cut_chime_gaps).toEqual([gaps[1]]);
 });
+
+
+test('chime sounds roundtrip and older edits use sound A', () => {
+  const input = { record_ranges: [], duration_ms: 1000 };
+  expect(readEditorEdit(input).cut_chime_sound).toBe('a');
+  for (const sound of ['a', 'c', 'tape']) {
+    expect(readEditorEdit({ ...input, cut_chime_sound: sound }).cut_chime_sound).toBe(sound);
+  }
+  expect(readEditorEdit({ ...input, cut_chime_sound: 'invalid' }).cut_chime_sound).toBe('a');
+});

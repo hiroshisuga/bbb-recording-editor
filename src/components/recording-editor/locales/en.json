@@ -204,7 +204,7 @@
   "meetingPeriodAll": "All dates",
   "meetingPeriodDays": "Past {days} days",
   "cutChime": "Audio chimes at recording cuts",
-  "cutChimeSample": "Sample A: soft two-note transition chime",
+  "cutChimeSample": "Audition the selected chime sound",
   "cutChimeOff": "No chime",
   "cutChimeCount": "{count} selected",
   "cutChimeConfirmTitle": "Include a short part of each excluded section?",
@@ -229,5 +229,9 @@
   "cutChimeRestoreConfirm": "Show confirmations again",
   "rebuildTitleFailed": "Recording title restoration could not be verified. Check the published title and BBB post_process logs. This is separate from the recording rebuild result.",
   "rebuildKeepTitle": "The current recording title “{title}” will be saved before rebuilding and restored before publication.",
-  "rebuildVisibilityCheck": "Check recording visibility after rebuilding. Publication, listing and protection settings may have changed. If you use Greenlight, restore the desired settings in Greenlight."
+  "rebuildVisibilityCheck": "Check recording visibility after rebuilding. Publication, listing and protection settings may have changed. If you use Greenlight, restore the desired settings in Greenlight.",
+  "cutChimeSound": "Sound (all cuts)",
+  "cutChimeSound_a": "A: Soft two notes",
+  "cutChimeSound_c": "C: Wooden double tap",
+  "cutChimeSound_tape": "Fast-forward voice"
 }

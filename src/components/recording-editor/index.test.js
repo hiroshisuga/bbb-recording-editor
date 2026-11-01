@@ -148,6 +148,31 @@ async function cutMenu(index, edge) {
 }
 async function menuAction() { await act(async () => Simulate.click(document.querySelector('.re-chime-menu button'))); }
 
+test('chime sound applies globally, supports audition, undo, drafts and raw saves', async () => {
+  await openCuts({ cut_chime_gaps: [cutOne, cutTwo] });
+  const select = () => container.querySelector('.re-chime-tools select');
+  expect(select().value).toBe('a');
+  expect([...select().options].map(option => option.value)).toEqual(['tape', 'a', 'c']);
+  const choose = value => act(async () => Simulate.change(select(), { target: { value } }));
+  await choose('c');
+  expect(container.querySelector('.re-chime-tools audio').src).toContain('sound=c');
+  expect(cues()).toHaveLength(2);
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await click('↶ 元に戻す'); expect(select().value).toBe('a');
+  await click('↷ やり直す'); expect(select().value).toBe('c');
+  await click('下書きを保存');
+  expect(calls.find(call => call.url.endsWith('/draft')).payload.cut_chime_sound).toBe('c');
+  await choose('tape');
+  await click('rawデータへ保存…'); await click('バックアップを作成して保存');
+  expect(calls.find(call => call.url.endsWith('/save')).payload.cut_chime_sound).toBe('tape');
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(select().value).toBe('tape');
+  expect(container.querySelector('.re-chime-tools audio').src).toContain('sound=tape');
+  await language('en');
+  expect(select().getAttribute('aria-label')).toBe('Sound (all cuts)');
+  expect([...select().options].map(option => option.textContent)).toContain('Fast-forward voice');
+});
+
 test('timeline cut chimes warn on additions and persist only selected gaps through save and reopening', async () => {
   await openCuts();
   expect(cues()).toHaveLength(0);

@@ -204,7 +204,7 @@
   "meetingPeriodAll": "すべての期間",
   "meetingPeriodDays": "過去{days}日",
   "cutChime": "録画の切れ目の音声チャイム",
-  "cutChimeSample": "合図音A：柔らかい二音の試聴",
+  "cutChimeSample": "選択中のチャイム音を試聴",
   "cutChimeOff": "チャイムなし",
   "cutChimeCount": "{count}か所を選択",
   "cutChimeConfirmTitle": "除外区間の一部を録画に含めます",
@@ -229,5 +229,9 @@
   "cutChimeRestoreConfirm": "確認を再表示",
   "rebuildTitleFailed": "録画タイトルの復元を確認できませんでした。公開録画の名前とBBBのpost_processログを確認してください。録画自体の再構築結果とは別の状態です。",
   "rebuildKeepTitle": "再構築前の録画タイトル「{title}」を退避し、公開前に復元します。",
-  "rebuildVisibilityCheck": "再構築後の公開度を確認してください。公開・非公開、一覧掲載、保護の設定が変わっている場合があります。Greenlightを使用している場合は、Greenlight側で設定し直してください。"
+  "rebuildVisibilityCheck": "再構築後の公開度を確認してください。公開・非公開、一覧掲載、保護の設定が変わっている場合があります。Greenlightを使用している場合は、Greenlight側で設定し直してください。",
+  "cutChimeSound": "チャイム音（全切れ目共通）",
+  "cutChimeSound_a": "A：やわらかい2音",
+  "cutChimeSound_c": "C：木琴風のコト・コト",
+  "cutChimeSound_tape": "早回し音声（キュルキュル）"
 }

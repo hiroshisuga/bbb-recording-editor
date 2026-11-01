@@ -248,7 +248,7 @@ function Editor() {
   const { locale, setLocale, t, diagnostic, message: displayMessage } = useEditorI18n();
   const [meetings, setMeetings] = useState([]);
   const [recording, setRecording] = useState(null);
-  const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [], cut_chime_gaps: [] });
+  const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [], cut_chime_gaps: [], cut_chime_sound: 'a' });
   const [history, setHistory] = useState({ past: [], future: [] });
   const [selection, setSelection] = useState({ start_ms: null, end_ms: null });
   const [time, setTime] = useState(0);
@@ -454,7 +454,7 @@ function Editor() {
           <button className="re-primary" disabled={!!rebuildBlock} onClick={rebuild}>{t('confirmRebuild')}</button><button disabled={!!busy} onClick={() => setRebuildReview(false)}>{t('close')}</button>
         </div>}
         {review && <div className="re-review"><h3>{t('reviewTitle')}</h3><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>
-          {edit.cut_chime_gaps.length > 0 && <p className="re-warnings">{t('cutChimeWarning')}</p>}
+          {edit.cut_chime_gaps.length > 0 && <><p>{t('cutChimeSound')}: {t(`cutChimeSound_${edit.cut_chime_sound}`)}</p><p className="re-warnings">{t('cutChimeWarning')}</p></>}
           {edit.beep_ranges.length > 0 && <p className="re-warnings">{t('reviewAudioWarning')}</p>}
           {recording.beep_ranges.length > 0 && !edit.beep_ranges.length && <p>{t('reviewAudioRestore')}</p>}
           {!edit.record_ranges.length && <p className="re-warnings">{t('needRange')}</p>}
@@ -474,7 +474,7 @@ function Editor() {
           {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
         </div>
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button><span className="re-muted">{t('dragHint')}</span></div>
-        <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sampleUrl={`${API}/cut-chime.wav`}
+        <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sound={edit.cut_chime_sound} onSoundChange={value => replaceEdit({ ...edit, cut_chime_sound: value })} sampleUrl={`${API}/cut-chime.wav?sound=${edit.cut_chime_sound}`}
           skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
           onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
           {toggle => <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} onChimeToggle={toggle} busy={!!busy || rebuilding} />}
