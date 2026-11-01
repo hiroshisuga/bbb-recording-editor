@@ -152,7 +152,7 @@ test('chime sound applies globally, supports audition, undo, drafts and raw save
   await openCuts({ cut_chime_gaps: [cutOne, cutTwo] });
   const select = () => container.querySelector('.re-chime-tools select');
   expect(select().value).toBe('a');
-  expect([...select().options].map(option => option.value)).toEqual(['a', 'c', 'tape']);
+  expect([...select().options].map(option => option.value)).toEqual(['tape', 'a', 'c']);
   const choose = value => act(async () => Simulate.change(select(), { target: { value } }));
   await choose('c');
   expect(container.querySelector('.re-chime-tools audio').src).toContain('sound=c');
@@ -170,7 +170,7 @@ test('chime sound applies globally, supports audition, undo, drafts and raw save
   expect(container.querySelector('.re-chime-tools audio').src).toContain('sound=tape');
   await language('en');
   expect(select().getAttribute('aria-label')).toBe('Sound (all cuts)');
-  expect([...select().options].map(option => option.textContent)).toContain('Tape fast-forward');
+  expect([...select().options].map(option => option.textContent)).toContain('Fast-forward voice');
 });
 
 test('timeline cut chimes warn on additions and persist only selected gaps through save and reopening', async () => {

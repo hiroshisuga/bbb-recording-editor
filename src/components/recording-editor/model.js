@@ -169,7 +169,7 @@ export const cutChimeGaps = (ranges, duration) => {
 export const sameChimeGap = (a, b) => a.start_ms === b.start_ms && a.end_ms === b.end_ms;
 export const retainChimeGaps = (ranges, selected, duration) => cutChimeGaps(ranges, duration)
   .filter(gap => selected.some(item => sameChimeGap(gap, item)));
-export const CUT_CHIME_SOUNDS = ['a', 'c', 'tape'];
+export const CUT_CHIME_SOUNDS = ['tape', 'a', 'c'];
 export const readEditorEdit = (data, duration = data.duration_ms) => {
   const records = data.record_ranges || [];
   let selected = data.cut_chime_gaps;
