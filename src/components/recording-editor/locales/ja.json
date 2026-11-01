@@ -208,7 +208,7 @@
   "cutChimeOff": "チャイムなし",
   "cutChimeCount": "{count}か所を選択",
   "cutChimeConfirmTitle": "除外区間の一部を録画に含めます",
-  "cutChimeWarning": "合図音のため、対象の除外区間の一部（1か所につき最大0.25秒）を録画に含めます。この間の元のマイク音声・画面共有内の音声は合図音に置き換えますが、映像・スライド・チャットなどは録画に含まれることがあります。外部共有動画の音声は加工しません。",
+  "cutChimeWarning": "合図音のため、対象の除外区間の両端を最大0.125秒ずつ、合計最大0.25秒録画に含めます。0.25秒以下の省略では区間全体を含めます。この間の元のマイク音声・画面共有内の音声は合図音に置き換えますが、映像・スライド・チャットなどは録画に含まれることがあります。外部共有動画の音声は加工しません。",
   "cutChimeAccept": "確認して有効にする",
   "cutChimeCancel": "キャンセル",
   "cutChimeHint": "両端の音符と破線は一つのチャイム設定です。マークまたは線のクリックで削除できます。反映にはraw保存と録画の再構築が必要です。",
@@ -224,5 +224,7 @@
   "cutChimeOn": "チャイムあり",
   "cutChimeSamplePlay": "チャイムを試聴",
   "cutChimeSampleStop": "試聴を停止",
-  "cutChimeSampleError": "チャイムを試聴できませんでした。"
+  "cutChimeSampleError": "チャイムを試聴できませんでした。",
+  "cutChimeAcceptAndSkip": "追加して今後確認しない",
+  "cutChimeRestoreConfirm": "確認を再表示"
 }

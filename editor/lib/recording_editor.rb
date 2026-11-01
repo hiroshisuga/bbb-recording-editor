@@ -782,7 +782,8 @@ module RecordingEditor
 
     def redact(beeps, output_dir, progress: ->(_) {}, mute_ranges: [])
       sources = rec.audible_assets
-      masks = RecordingEditor.ranges(beeps + mute_ranges, rec.duration, max_ranges: 1000)
+      # Up to 500 beep ranges plus two cue slices for each of 499 cuts.
+      masks = RecordingEditor.ranges(beeps + mute_ranges, rec.duration, max_ranges: 1500)
       unless masks.empty?
         unavailable = rec.assets.select do |a|
           %w[audio deskshare].include?(a['kind']) && a['error'] && masks.any? { |r| r['start_ms'] < a['end_ms'] && r['end_ms'] > a['start_ms'] }

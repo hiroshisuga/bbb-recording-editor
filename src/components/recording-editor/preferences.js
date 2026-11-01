@@ -6,7 +6,7 @@ export const TIMELINE_ZOOMS = [1, 2, 4, 8, 16];
 export const PREVIEW_SPLIT_MIN = 0.2;
 export const PREVIEW_SPLIT_MAX = 0.8;
 export const DEFAULT_PREFERENCES = Object.freeze({
-  volume: 1, muted: false, lastVolume: 1, beepPreview: true, rate: 1, zoom: 1, detailWaveOpen: false, detailWaveSpan: 10000, previewSplit: 0.75,
+  volume: 1, muted: false, lastVolume: 1, beepPreview: true, rate: 1, zoom: 1, detailWaveOpen: false, detailWaveSpan: 10000, previewSplit: 0.75, skipChimeConfirm: false,
 });
 const validVolume = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 
@@ -27,6 +27,7 @@ export function readPreferences() {
       previewSplit: typeof saved.previewSplit === 'number' && Number.isFinite(saved.previewSplit)
         && saved.previewSplit >= PREVIEW_SPLIT_MIN && saved.previewSplit <= PREVIEW_SPLIT_MAX
         ? saved.previewSplit : DEFAULT_PREFERENCES.previewSplit,
+      skipChimeConfirm: saved.skipChimeConfirm === true,
     };
   } catch {
     return { ...DEFAULT_PREFERENCES };

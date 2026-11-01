@@ -37,7 +37,17 @@ module RecordingEditor
     end
 
     def self.cues(selected)
-      selected.map { |gap| gap.merge('end_ms' => [gap['start_ms'] + DURATION_MS, gap['end_ms']].min) }
+      selected.flat_map do |gap|
+        length = gap['end_ms'] - gap['start_ms']
+        if length <= DURATION_MS
+          # Include a short gap in full: don't create sub-20ms audio tracks.
+          [length < DURATION_MS ? gap.merge('fade_out' => true) : gap.dup]
+        else
+          half = DURATION_MS / 2
+          [{ 'start_ms' => gap['start_ms'], 'end_ms' => gap['start_ms'] + half },
+           { 'start_ms' => gap['end_ms'] - half, 'end_ms' => gap['end_ms'], 'sample_offset_ms' => half }]
+        end
+      end
     end
 
     # Only interior gaps which remove previously recorded content. If the
@@ -53,22 +63,35 @@ module RecordingEditor
     end
 
     def self.effective(records, cues, duration)
-      extensions = cues.to_h { |cue| [cue['start_ms'], cue['end_ms']] }
-      RecordingEditor.ranges(records.map { |r| r.merge('end_ms' => extensions.fetch(r['end_ms'], r['end_ms'])) }, duration)
+      ends = cues.to_h { |cue| [cue['start_ms'], cue['end_ms']] }
+      starts = cues.to_h { |cue| [cue['end_ms'], cue['start_ms']] }
+      RecordingEditor.ranges(records.map do |r|
+        r.merge('start_ms' => starts.fetch(r['start_ms'], r['start_ms']),
+                'end_ms' => ends.fetch(r['end_ms'], r['end_ms']))
+      end, duration)
     end
 
     def self.render(cues, staging, ffmpeg)
+      templates = {}
       cues.map do |cue|
         name = "bbb-editor-cue-#{SecureRandom.hex(6)}.wav"
         output = File.join(staging, name)
         seconds = (cue['end_ms'] - cue['start_ms']) / 1000.0
-        if seconds == 0.25
+        offset = cue.fetch('sample_offset_ms', 0) / 1000.0
+        key = [seconds, offset, cue['fade_out']]
+        if templates[key]
+          FileUtils.copy_file(templates[key], output)
+        elsif seconds == 0.25 && offset.zero?
           FileUtils.copy_file(SAMPLE, output)
         else
+          # Split sound A without a fade/restart at the join. After BBB removes
+          # the middle gap, these PCM slices form the original continuous cue.
+          filter = "atrim=start=#{offset}:end=#{offset + seconds},asetpts=PTS-STARTPTS"
+          filter += ",afade=t=out:st=#{[seconds - 0.005, 0].max}:d=0.005" if cue['fade_out']
           RecordingEditor.run(ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', SAMPLE,
-                              '-t', seconds.to_s, '-af', "afade=t=out:st=#{[seconds - 0.005, 0].max}:d=0.005",
-                              '-c:a', 'pcm_s16le', output)
+                              '-af', filter, '-c:a', 'pcm_s16le', output)
         end
+        templates[key] = output
         { relative: "audio/#{name}", staged: output, cue: cue }
       end
     end
