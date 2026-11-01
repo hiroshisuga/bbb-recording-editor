@@ -1,34 +1,45 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
-import { formatTime, sameChimeGap } from './model';
+import { sameChimeGap } from './model';
 
-export default function CutChimeControl({ gaps, selected, onChange, busy, sampleUrl, seek }) {
+export default function CutChimeControl({ gaps, selected, onChange, busy, sampleUrl, children }) {
   const { t } = useEditorI18n();
   const [pending, setPending] = useState(null);
+  const [audition, setAudition] = useState(false);
+  const [sampleError, setSampleError] = useState(false);
+  const sample = useRef(null);
   const dialogRef = useRef(null);
+  useEffect(() => { setPending(null); }, [gaps, busy]);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!pending || !dialog || dialog.open) return;
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute('open', '');
   }, [pending]);
-  const chosen = gap => selected.some(item => sameChimeGap(gap, item));
-  return <section className="re-chime-settings" aria-label={t('cutChime')}>
-    <div className="re-chime-tools"><strong>{t('cutChime')}</strong>
+  const toggle = (gap, enabled) => {
+    if (busy || !gaps.some(item => sameChimeGap(item, gap))) return;
+    if (enabled) setPending([...selected.filter(item => !sameChimeGap(item, gap)), gap]);
+    else onChange(selected.filter(item => !sameChimeGap(item, gap)));
+  };
+  const playSample = () => {
+    if (!sample.current) return;
+    setSampleError(false);
+    if (audition) sample.current.pause();
+    else {
+      sample.current.currentTime = 0;
+      sample.current.play().catch(() => setSampleError(true));
+    }
+  };
+  return <section className="re-chime-editor" aria-label={t('cutChime')}>
+    <div className="re-chime-tools">
       <button disabled={busy || !gaps.length || selected.length === gaps.length} onClick={() => setPending(gaps)}>{t('cutChimeAll')}</button>
       <button disabled={busy || !selected.length} onClick={() => onChange([])}>{t('cutChimeClear')}</button>
-      <audio controls preload="none" src={sampleUrl} aria-label={t('cutChimeSample')} />
-      <span className="re-muted" role="status">{t('cutChimeCount', { count: selected.length })}</span>
+      <button onClick={playSample} title={t('cutChimeSample')}>{t(audition ? 'cutChimeSampleStop' : 'cutChimeSamplePlay')}</button>
+      <audio ref={sample} preload="none" src={sampleUrl} onPlay={() => setAudition(true)} onPause={() => setAudition(false)} onEnded={() => setAudition(false)} onError={() => setSampleError(true)} />
+      <span className="re-muted" role="status" title={t('cutChimeHint')}>{t('cutChimeCount', { count: selected.length })}</span>
+      {sampleError && <span role="alert">{t('cutChimeSampleError')}</span>}
     </div>
-    {gaps.length ? <details className="re-chime-list" open><summary>{t('cutChimeList')} ({gaps.length})</summary>
-      {gaps.map((gap, i) => <div className="re-chime-row" key={`${gap.start_ms}:${gap.end_ms}`}>
-        <label><input type="checkbox" checked={chosen(gap)} disabled={busy} onChange={e => {
-          if (e.target.checked) setPending([...selected, gap]);
-          else onChange(selected.filter(item => !sameChimeGap(item, gap)));
-        }} /> {t('cutChimeGap', { number: i + 1, time: formatTime(gap.start_ms), end: formatTime(gap.end_ms) })}</label>
-        <button disabled={busy} onClick={() => seek(gap.start_ms)}>{t('cutChimeSeek', { number: i + 1 })}</button>
-      </div>)}
-    </details> : <p className="re-muted">{t('cutChimeNoGaps')}</p>}
+    {children(toggle)}
     {pending && <dialog ref={dialogRef} className="re-review re-chime-confirm" role="alertdialog" aria-modal="true" aria-labelledby="re-chime-title" aria-describedby="re-chime-warning"
       onCancel={() => setPending(null)}>
       <h3 id="re-chime-title">{t('cutChimeConfirmTitle')}</h3>
@@ -36,6 +47,5 @@ export default function CutChimeControl({ gaps, selected, onChange, busy, sample
       <button disabled={busy} onClick={() => setPending(null)}>{t('cutChimeCancel')}</button>
       <button disabled={busy} onClick={() => { setPending(null); onChange(pending); }}>{t('cutChimeAccept')}</button>
     </dialog>}
-    <p className="re-muted">{t('cutChimeHint')}</p>
   </section>;
 }

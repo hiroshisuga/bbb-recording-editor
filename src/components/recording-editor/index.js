@@ -5,6 +5,7 @@ import SlidePreview from './SlidePreview';
 import PreviewPanes from './PreviewPanes';
 import DetailWaveform from './DetailWaveform';
 import CutChimeControl from './CutChimeControl';
+import CutChimeMenu from './CutChimeMenu';
 import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection } from './SelectionMarkers';
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
@@ -13,7 +14,7 @@ import useTimelineFollow from './useTimelineFollow';
 import TimelineTooltip from './TimelineTooltip';
 import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
 import useExternalVideoTitles from './useExternalVideoTitles';
-import { audioAdapter, cutChimeGaps, readEditorEdit, retainChimeGaps, externalVideos, formatTime, normalizeRanges, parseTime, presentationRanges, removeRange } from './model';
+import { audioAdapter, cutChimeGaps, sameChimeGap, readEditorEdit, retainChimeGaps, externalVideos, formatTime, normalizeRanges, parseTime, presentationRanges, removeRange } from './model';
 import './styles.css';
 
 const PREFIX = process.env.REACT_APP_EDITOR_PREFIX || '/recording-editor';
@@ -77,11 +78,14 @@ function RangeRows({ label, ranges, onChange, duration, seek }) {
   </div>;
 }
 
-function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom }) {
+function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, busy }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
   const scrollRef = useRef(null);
   const shiftSelection = useRef(false);
+  const [chimeMenu, setChimeMenu] = useState(null);
+  const closeChimeMenu = useCallback(() => setChimeMenu(null), []);
+  useEffect(closeChimeMenu, [chimeGaps, busy, closeChimeMenu]);
   const [view, setView] = useState({ start: 0, end: recording.duration_ms });
   useLayoutEffect(() => {
     const scroll = scrollRef.current, timeline = ref.current;
@@ -105,7 +109,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     return Math.round(Math.max(0, Math.min(duration, (e.clientX - bounds.left) / bounds.width * duration)));
   };
   const selectFromPlayhead = e => {
-    shiftSelection.current = e.button === 0 && e.shiftKey;
+    shiftSelection.current = e.button === 0 && !e.ctrlKey && e.shiftKey && !e.target.closest('.re-handle,.re-chime-track');
     if (!shiftSelection.current) return;
     e.preventDefault(); e.stopPropagation();
     const anchor = Math.round(time);
@@ -119,7 +123,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     e.preventDefault(); e.stopPropagation();
   };
   const select = e => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.ctrlKey) return;
     const start = position(e);
     const startX = e.clientX;
     const target = e.currentTarget;
@@ -138,7 +142,9 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     e.currentTarget.addEventListener('pointerup', up, { once: true });
   };
   const handle = (e, kind, index, edge) => {
-    e.stopPropagation(); e.preventDefault();
+    e.stopPropagation();
+    if (e.button !== 0 || e.ctrlKey || e.isPrimary === false) return;
+    e.preventDefault();
     const range = edit[kind][index];
     const move = next => {
       const value = position(next);
@@ -153,11 +159,27 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up, { once: true });
   };
+  const selectedChime = gap => !!gap && edit.cut_chime_gaps.some(item => sameChimeGap(item, gap));
+  const rangeHandle = (kind, label, r, i, edge) => {
+    const start = edge === 'start_ms';
+    const gap = kind === 'record_ranges' ? chimeGaps.find(item => item[start ? 'end_ms' : 'start_ms'] === r[edge]) : null;
+    const enabled = selectedChime(gap);
+    const description = t(start ? 'dragStart' : 'dragEnd', { label, number: i + 1 });
+    const openMenu = (event, keyboard = false) => {
+      event.preventDefault(); event.stopPropagation();
+      const anchor = event.currentTarget, bounds = anchor.getBoundingClientRect();
+      setChimeMenu({ anchor, gap, x: keyboard ? bounds.left : event.clientX, y: keyboard ? bounds.bottom : event.clientY });
+    };
+    return <button className={`re-handle ${start ? 'left' : 'right'}${enabled ? ' re-handle--chime' : ''}`} aria-label={description}
+      data-tooltip={kind === 'record_ranges' ? `${description}\n${t('cutChimeHandleHint')}\n${t(enabled ? 'cutChimeOn' : 'cutChimeOff')}` : description}
+      aria-haspopup={kind === 'record_ranges' ? 'menu' : undefined}
+      onPointerDown={e => handle(e, kind, i, edge)} onClick={e => e.stopPropagation()}
+      onContextMenu={kind === 'record_ranges' ? e => openMenu(e) : undefined}
+      onKeyDown={e => { if (kind === 'record_ranges' && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) openMenu(e, true); }} />;
+  };
   const rangeTrack = (kind, label) => <div className={`re-track ${kind}`}><span className="re-track-label">{label}</span>
     {edit[kind].map((r, i) => <div className="re-bar" key={i} style={{ left: pct(r.start_ms), width: pct(r.end_ms - r.start_ms) }} onPointerDown={e => e.stopPropagation()} onClick={() => setSelection(r)} data-tooltip={`${formatTime(r.start_ms)} – ${formatTime(r.end_ms)}`}>
-      <button className="re-handle left" aria-label={t('dragStart', { label, number: i + 1 })} onPointerDown={e => handle(e, kind, i, 'start_ms')} />
-      <span>{i + 1}</span>
-      <button className="re-handle right" aria-label={t('dragEnd', { label, number: i + 1 })} onPointerDown={e => handle(e, kind, i, 'end_ms')} />
+      {rangeHandle(kind, label, r, i, 'start_ms')}<span>{i + 1}</span>{rangeHandle(kind, label, r, i, 'end_ms')}
     </div>)}
   </div>;
   return <><div className="re-timeline-scroll" ref={scrollRef} onPointerDownCapture={follow.onPointerDownCapture} onWheelCapture={follow.onWheelCapture} onKeyDownCapture={follow.onKeyDownCapture} onScroll={follow.onScroll}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDownCapture={selectFromPlayhead} onClickCapture={suppressShiftClick} onPointerCancelCapture={() => { shiftSelection.current = false; }} onPointerDown={select}>
@@ -165,7 +187,19 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     <div className="re-wave"><span className="re-track-label">{t('meetingAudio')}</span><svg viewBox="0 0 2048 64" preserveAspectRatio="none" aria-label={t('waveform')}>
       {(peaks || []).map((p, i) => <line key={i} x1={i} x2={i} y1={32 - Math.min(1, p) * 30} y2={32 + Math.min(1, p) * 30} />)}
     </svg>{!peaks && <span className="re-wave-pending">{t('wavePending')}</span>}</div>
-    {rangeTrack('record_ranges', t('keep'))}{rangeTrack('beep_ranges', t('beep'))}
+    {rangeTrack('record_ranges', t('keep'))}
+    <div className="re-track re-chime-track" role="group" aria-label={t('cutChime')}>
+      <span className="re-track-label">{t('cutChimeTrack')}</span>
+      {edit.cut_chime_gaps.map(gap => {
+        const description = `${t('cutChimeRemove')}\n${formatTime(gap.start_ms)} → ${formatTime(gap.end_ms)}`;
+        return <button key={`${gap.start_ms}:${gap.end_ms}`} className="re-chime-cue" disabled={busy}
+          style={{ left: pct(gap.start_ms), width: pct(gap.end_ms - gap.start_ms) }} aria-label={description} data-tooltip={description}
+          onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChimeToggle(gap, false); }}>
+          <span className="re-chime-link" aria-hidden="true" /><span className="re-chime-end re-chime-start" aria-hidden="true">♪</span><span className="re-chime-end re-chime-finish" aria-hidden="true">♪</span>
+        </button>;
+      })}
+    </div>
+    {rangeTrack('beep_ranges', t('beep'))}
     {['video', 'deskshare'].map(kind => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
       {recording.assets.filter(a => a.kind === kind).map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} data-tooltip={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
@@ -202,7 +236,8 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     {isValidSelection(selection) && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
     <SelectionMarkers selection={selection} start={0} end={duration} />
     <div className="re-playhead" style={{ left: pct(time) }} />
-  </div></div><SelectionOffscreen selection={selection} start={view.start} end={view.end} onShow={follow.showTime} /><TimelineTooltip key={recording.id} targetRef={scrollRef} /></>;
+  </div></div><SelectionOffscreen selection={selection} start={view.start} end={view.end} onShow={follow.showTime} /><TimelineTooltip key={recording.id} targetRef={scrollRef} />
+    {chimeMenu && <CutChimeMenu context={chimeMenu} enabled={selectedChime(chimeMenu.gap)} busy={busy} onToggle={onChimeToggle} onClose={closeChimeMenu} />}</>;
 }
 
 export default function RecordingEditor() {
@@ -436,10 +471,11 @@ function Editor() {
           <label><input type="checkbox" checked={beepPreview} onChange={e => updatePreferences({ beepPreview: e.target.checked })} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
           {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
         </div>
-        <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} seek={seek} sampleUrl={`${API}/cut-chime.wav`}
-          onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })} />
         <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button><span className="re-muted">{t('dragHint')}</span></div>
-        <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} />
+        <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sampleUrl={`${API}/cut-chime.wav`}
+          onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
+          {toggle => <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} onChimeToggle={toggle} busy={!!busy || rebuilding} />}
+        </CutChimeControl>
         {detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} />}
         <div className="re-selection"><strong>{t('selection')}</strong>
           {['start_ms', 'end_ms'].map((edge, i) => <div className="re-selection-field" key={edge}>
