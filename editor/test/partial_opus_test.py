@@ -47,15 +47,74 @@ class CodecTest(unittest.TestCase):
         ff('-f', 'lavfi', '-i', 'aevalsrc=0.12*sin(2*PI*(220*t+3*t*t))|0.12*sin(2*PI*(370*t+5*t*t)):s=48000:d=12',
            '-ac', channels, '-c:a', codec, *(['-frame_duration', frame] if codec == 'libopus' else []), *extra, self.source)
 
+    def headerless_source(self, channels=2, gap=False, keep_delay=False):
+        import av
+        self.generate(channels=channels)
+        path = self.root / 'headerless.webm'
+        with av.open(str(self.source)) as src, av.open(str(path), 'w', format='webm') as dst:
+            stream = src.streams.audio[0]
+            out = dst.add_stream_from_template(stream) if hasattr(dst, 'add_stream_from_template') else dst.add_stream(template=stream)
+            head = bytearray(stream.codec_context.extradata)
+            if not keep_delay:
+                head[10:12] = b'\0\0'
+            out.codec_context.extradata = bytes(head)
+            for i, packet in enumerate(p for p in src.demux(stream) if p.size):
+                if not keep_delay:
+                    packet.pts = packet.dts = i * 20 + (100 if gap and i >= 300 else 0)
+                packet.stream = out
+                dst.mux(packet)
+        # Replace CodecPrivate with an equal-sized EBML Void, preserving all
+        # cluster offsets. This models a real file with no OpusHead at all.
+        data = path.read_bytes()
+        element = b'\x63\xa2\x93' + bytes(head)
+        self.assertEqual(1, data.count(element))
+        path.write_bytes(data.replace(element, b'\xec\x94' + bytes(20)))
+        self.source = path
+        with av.open(str(path)) as src:
+            self.assertFalse(src.streams.audio[0].codec_context.extradata)
+
+    def test_headerless_mono_and_stereo_preserve_clock_payload_and_samples(self):
+        for channels in (1, 2):
+            with self.subTest(channels=channels):
+                self.source = self.root / 'source.webm'
+                self.headerless_source(channels=channels)
+                original_bytes = self.source.read_bytes()
+                result = partial.render(self.config())
+                self.assertEqual('partial', result['status'])
+                self.assertLess(result['encoded_samples'], 48000)
+                original, output = self.decode(self.source), self.decode(self.output)
+                self.assertEqual(len(original), len(output))
+                self.assertEqual(len(self.decode(self.source, clock=True)), len(self.decode(self.output, clock=True)))
+                for seconds in (0, 1, 5, 10):
+                    pos = seconds * 48000 * channels
+                    self.assertLess(max(abs(a-b) for a, b in zip(original[pos:pos+2000], output[pos:pos+2000])), 1e-6)
+                middle = output[round(3.16*48000)*channels:round(3.33*48000)*channels]
+                self.assertLess(sum(v*v for v in middle) / len(middle), 1e-6)
+                # BBB's normal FFmpeg path uses the native Opus decoder.
+                native_original = self.decode(self.source, native=True)
+                native_output = self.decode(self.output, native=True)
+                self.assertEqual(len(native_original), len(native_output))
+                self.assertLess(max(abs(a-b) for a, b in zip(native_original[:48000], native_output[:48000])), 1e-6)
+                self.assertEqual(original_bytes, self.source.read_bytes())
+
+    def test_headerless_gaps_and_nonzero_container_delay_are_rejected(self):
+        for options in ({'gap': True}, {'keep_delay': True}):
+            with self.subTest(options=options):
+                self.source = self.root / 'source.webm'
+                self.headerless_source(**options)
+                with self.assertRaisesRegex(partial.Unsupported, 'non-continuous timestamps'):
+                    partial.render(self.config())
+                self.assertFalse(self.output.exists())
+
     def config(self, masks=None, effect=None):
         return {'source': str(self.source), 'output': str(self.output), 'ffmpeg': 'ffmpeg', 'ffprobe': 'ffprobe',
                 'masks': masks or [{'start_ms': 3123, 'end_ms': 3373}],
                 'effect': effect or "aeval=exprs='if(gte(t,3.123)*lt(t,3.373),0,val(ch))':c=same"}
 
-    def decode(self, path, clock=False):
+    def decode(self, path, clock=False, native=False):
         values = array.array('f')
         effect = ['-af', 'aresample=async=480:first_pts=0:flags=res'] if clock else []
-        values.frombytes(ff('-c:a', 'libopus', '-i', path, *effect, '-f', 'f32le', '-'))
+        values.frombytes(ff(*([] if native else ['-c:a', 'libopus']), '-i', path, *effect, '-f', 'f32le', '-'))
         return values
 
     def test_partial_mute_preserves_clock_samples_copied_packets_and_original(self):

@@ -39,12 +39,24 @@ def opus_library():
     return lib
 
 
+def effective_header(stream):
+    ctx = stream.codec_context
+    require(ctx.name == 'opus' and ctx.sample_rate == RATE, 'unsupported Opus configuration')
+    data = ctx.extradata
+    if not data:
+        # Match FFmpeg's headerless mono/stereo Opus defaults. The complete
+        # packet clock and trimming checks below must still prove zero pre-skip.
+        channels = len(ctx.layout.channels)
+        require(channels in (1, 2), 'unsupported headerless Opus channels')
+        data = (b'OpusHead' + bytes((1, channels)) + b'\0\0' +
+                RATE.to_bytes(4, 'little') + b'\0\0\0')
+    require(len(data) == 19 and data[:8] == b'OpusHead' and data[8] == 1 and
+            data[9] in (1, 2) and data[16:19] == b'\0\0\0', 'unsupported Opus configuration')
+    return data
+
+
 def header(stream):
-    data = stream.codec_context.extradata
-    require(stream.codec_context.name == 'opus' and data and len(data) == 19 and
-            data[:8] == b'OpusHead' and data[8] == 1 and data[9] in (1, 2) and
-            data[16:19] == b'\0\0\0' and stream.codec_context.sample_rate == RATE,
-            'unsupported Opus configuration')
+    data = effective_header(stream)
     delay = int.from_bytes(data[10:12], 'little')
     require(delay <= 3840, 'unsupported pre-skip')
     return data[9], delay
@@ -88,7 +100,6 @@ def side_data_check(probe, source, count, delay, frame):
     # PyAV 9/11 preserve side data when copying packets, but cannot inspect it.
     # Reject interior trimming, which would invalidate the sample-clock mapping.
     args = [probe, '-v', 'error', '-select_streams', 'a:0', '-show_packets',
-            '-show_entries', 'packet=pts:packet_side_data=side_data_type,skip_samples,discard_padding',
             '-of', 'compact=p=1:nk=0', source]
     index, trimming = 0, []
     with tempfile.TemporaryFile() as errors:
@@ -170,6 +181,9 @@ def remux(av, source, output, replacements):
     with av.open(source) as src, av.open(output, 'w', format='webm') as target:
         stream = audio(src)
         out = target.add_stream_from_template(stream) if hasattr(target, 'add_stream_from_template') else target.add_stream(template=stream)
+        if not stream.codec_context.extradata:
+            # WebM muxers require CodecPrivate even when the source omits it.
+            out.codec_context.extradata = effective_header(stream)
         index = 0
         for packet in src.demux(stream):
             if not packet.size:
@@ -188,7 +202,7 @@ def remux(av, source, output, replacements):
 def validate(av, lib, source, output, replacements, count):
     with av.open(source) as src, av.open(output) as dst:
         a, b = audio(src), audio(dst)
-        require(a.codec_context.extradata == b.codec_context.extradata, 'output codec configuration changed')
+        require(effective_header(a) == b.codec_context.extradata, 'output codec configuration changed')
         packets_a = (p for p in src.demux(a) if p.size)
         packets_b = (p for p in dst.demux(b) if p.size)
         seen = 0

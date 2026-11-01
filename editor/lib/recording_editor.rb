@@ -857,7 +857,11 @@ module RecordingEditor
         effect = "aeval=exprs='if(#{expression(mask)},if(#{cue_mask},0,0.12*sin(2*PI*1000*t)*(#{envelope})),val(ch))':c=same"
         render_info = partial_opus(asset, backup, output, mask, effect)
         partial = render_info['status'] == 'partial'
-        progress.call('Opus音声を部分再エンコードし、未編集部分をコピーしました。') if partial
+        if partial
+          progress.call('Opus音声を部分再エンコードし、未編集部分をコピーしました。')
+        else
+          progress.call("音声全体を再エンコードします。部分処理を使用しない理由: #{render_info['reason']}")
+        end
         command = [rec.repo.ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', backup, '-filter_complex', "[0:a:0]#{CLOCK_RESAMPLE},#{effect}[censored]",
                    '-map', '0:v?', '-map', '[censored]', '-c:v', 'copy', '-c:a', codec]
         command += ['-ar', asset['sample_rate'].to_s] if asset['sample_rate']

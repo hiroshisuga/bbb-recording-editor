@@ -87,6 +87,7 @@
   "保存済みのプレビュー音声と波形を再利用しました。": "Reused the saved preview audio and waveforms.",
   "合図音の設定が不正です。": "Invalid transition-chime setting.",
   "繋ぎ目の選択が録画範囲と一致しません。選択を確認してください。": "The selected cuts do not match the recording intervals. Review the chime selection.",
+  "音声全体を再エンコードします。部分処理を使用しない理由: ": "Re-encoding the entire audio. Partial processing was not used because: ",
   "Opus音声を部分再エンコードし、未編集部分をコピーしました。": "Re-encoded only the edited Opus regions and copied the unedited audio.",
   "チャイムの音色が不正です。": "Invalid cut-chime sound."
 }

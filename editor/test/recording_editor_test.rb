@@ -255,9 +255,12 @@ class RecordingEditorTest < Minitest::Test
         runner.call(*args, **kwargs)
       end
     end
+    messages = []
     result = Open3.stub(:capture3, unavailable) do
-      editor.save(@id, payload(@repo.recording(@id), [{ 'start_ms' => 1200, 'end_ms' => 1600 }]))
+      editor.save(@id, payload(@repo.recording(@id), [{ 'start_ms' => 1200, 'end_ms' => 1600 }]),
+                  progress: ->(message) { messages << message })
     end
+    assert_includes messages, '音声全体を再エンコードします。部分処理を使用しない理由: accelerator unavailable'
     mic = result['outputs'].find { |o| o[:source] == 'audio/microphone.webm' }
     assert_equal 'full', mic[:audio_render]['status']
     assert_in_delta 0.12, rms(samples(File.join(@raw, mic[:relative]), 1.3)), 0.015
