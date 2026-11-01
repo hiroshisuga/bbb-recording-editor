@@ -6,6 +6,7 @@ import PreviewPanes from './PreviewPanes';
 import DetailWaveform from './DetailWaveform';
 import CutChimeControl from './CutChimeControl';
 import CutChimeMenu from './CutChimeMenu';
+import TimelineContextMenu from './TimelineContextMenu';
 import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection } from './SelectionMarkers';
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
@@ -58,7 +59,7 @@ function TimeField({ value, onChange, label, max, onFocus, optional = false }) {
     placeholder={optional ? t('endpointUnset') : undefined} aria-invalid={invalid} value={text} onFocus={onFocus} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-function RangeRows({ label, ranges, onChange, duration, seek, deleteLabel }) {
+function RangeRows({ label, ranges, onChange, duration, seek }) {
   const { t } = useEditorI18n();
   return <div className="re-range-list"><h3>{label} <small>{t('rangeCount', { count: ranges.length })}</small></h3>
     {!ranges.length && <p className="re-muted">{t('noRanges')}</p>}
@@ -73,7 +74,7 @@ function RangeRows({ label, ranges, onChange, duration, seek, deleteLabel }) {
         if (v <= r.start_ms) return false;
         onChange(ranges.map((item, index) => index === i ? { ...item, end_ms: v } : item)); return true;
       }} />
-      <button title={deleteLabel || t('deleteRange')} aria-label={t('rangeDelete', { label, number: i + 1 })} onClick={() => onChange(ranges.filter((_, index) => index !== i))}>{deleteLabel || '×'}</button>
+      <button title={t('deleteRange')} aria-label={t('rangeDelete', { label, number: i + 1 })} onClick={() => onChange(ranges.filter((_, index) => index !== i))}>×</button>
     </div>)}
   </div>;
 }
@@ -83,6 +84,15 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const ref = useRef(null);
   const scrollRef = useRef(null);
   const shiftSelection = useRef(false);
+  const [beepMenu, setBeepMenu] = useState(null);
+  const closeBeepMenu = useCallback(() => setBeepMenu(null), []);
+  useEffect(closeBeepMenu, [edit.beep_ranges, busy, closeBeepMenu]);
+  const openBeepMenu = (event, range, index, keyboard = false) => {
+    event.preventDefault(); event.stopPropagation();
+    setChimeMenu(null);
+    const anchor = event.currentTarget, bounds = anchor.getBoundingClientRect();
+    setBeepMenu({ anchor, range, index, x: keyboard ? bounds.left : event.clientX, y: keyboard ? bounds.bottom : event.clientY });
+  };
   const [chimeMenu, setChimeMenu] = useState(null);
   const closeChimeMenu = useCallback(() => setChimeMenu(null), []);
   useEffect(closeChimeMenu, [chimeGaps, busy, closeChimeMenu]);
@@ -168,6 +178,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     const openMenu = (event, keyboard = false) => {
       event.preventDefault(); event.stopPropagation();
       const anchor = event.currentTarget, bounds = anchor.getBoundingClientRect();
+      setBeepMenu(null);
       setChimeMenu({ anchor, gap, x: keyboard ? bounds.left : event.clientX, y: keyboard ? bounds.bottom : event.clientY });
     };
     return <button className={`re-handle ${start ? 'left' : 'right'}${enabled ? ' re-handle--chime' : ''}`} aria-label={description}
@@ -178,7 +189,16 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       onKeyDown={e => { if (kind === 'record_ranges' && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) openMenu(e, true); }} />;
   };
   const rangeTrack = (kind, label) => <div className={`re-track ${kind}`}><span className="re-track-label">{label}</span>
-    {edit[kind].map((r, i) => <div className="re-bar" key={i} style={{ left: pct(r.start_ms), width: pct(r.end_ms - r.start_ms) }} onPointerDown={e => e.stopPropagation()} onClick={() => setSelection(r)} data-tooltip={`${formatTime(r.start_ms)} – ${formatTime(r.end_ms)}`}>
+    {edit[kind].map((r, i) => <div className="re-bar" key={i} style={{ left: pct(r.start_ms), width: pct(r.end_ms - r.start_ms) }} onPointerDown={e => e.stopPropagation()} onClick={() => setSelection(r)}
+      role={kind === 'beep_ranges' ? 'group' : undefined} tabIndex={kind === 'beep_ranges' ? 0 : undefined}
+      aria-label={kind === 'beep_ranges' ? t('beepRibbonLabel', { number: i + 1, start: formatTime(r.start_ms), end: formatTime(r.end_ms) }) : undefined}
+      aria-haspopup={kind === 'beep_ranges' ? 'menu' : undefined}
+      onContextMenu={kind === 'beep_ranges' ? event => openBeepMenu(event, r, i) : undefined}
+      onKeyDown={kind === 'beep_ranges' ? event => {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openBeepMenu(event, r, i, true);
+        else if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); setSelection(r); }
+      } : undefined}
+      data-tooltip={`${formatTime(r.start_ms)} – ${formatTime(r.end_ms)}${kind === 'beep_ranges' ? `\n${t('beepMenuHint')}` : ''}`}>
       {rangeHandle(kind, label, r, i, 'start_ms')}<span>{i + 1}</span>{rangeHandle(kind, label, r, i, 'end_ms')}
     </div>)}
   </div>;
@@ -237,6 +257,11 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     <SelectionMarkers selection={selection} start={0} end={duration} />
     <div className="re-playhead" style={{ left: pct(time) }} />
   </div></div><SelectionOffscreen selection={selection} start={view.start} end={view.end} onShow={follow.showTime} /><TimelineTooltip key={recording.id} targetRef={scrollRef} />
+    {beepMenu && <TimelineContextMenu context={beepMenu} className="re-beep-menu" label={t('beepRanges')}
+      actionLabel={t('deleteBeep')} disabled={busy} onClose={closeBeepMenu}
+      onAction={() => change('beep_ranges', edit.beep_ranges.filter((_, index) => index !== beepMenu.index))}>
+      <p>{formatTime(beepMenu.range.start_ms)} → {formatTime(beepMenu.range.end_ms)}</p>
+    </TimelineContextMenu>}
     {chimeMenu && <CutChimeMenu context={chimeMenu} enabled={selectedChime(chimeMenu.gap)} busy={busy} onToggle={onChimeToggle} onClose={closeChimeMenu} />}</>;
 }
 
@@ -496,7 +521,7 @@ function Editor() {
           <button disabled={!validSelection || !!busy || !edit.beep_ranges.some(r => r.start_ms < selection.end_ms && r.end_ms > selection.start_ms)} title={t('removeBeepHint')} onClick={() => change('beep_ranges', removeRange(edit.beep_ranges, selection, duration))}>{t('removeBeepSelection')}</button>
         </div>
         <p className={`re-selection-status ${selectionMessage === 'selectionEqual' || selectionMessage === 'selectionReversed' ? 're-selection-invalid' : ''}`} role="status" aria-live="polite">{t(selectionMessage, { time: validSelection ? formatTime(selection.end_ms - selection.start_ms) : '' })}</p>
-        <div className="re-bottom"><section className="re-edits"><RangeRows label={t('keepRanges')} ranges={edit.record_ranges} duration={duration} seek={seek} onChange={r => change('record_ranges', r)} /><RangeRows label={t('beepRanges')} deleteLabel={t('deleteBeep')} ranges={edit.beep_ranges} duration={duration} seek={seek} onChange={r => change('beep_ranges', r)} /></section>
+        <div className="re-bottom"><section className="re-edits"><RangeRows label={t('keepRanges')} ranges={edit.record_ranges} duration={duration} seek={seek} onChange={r => change('record_ranges', r)} /></section>
           <section className="re-events"><h3>{t('events')}</h3><div>{recording.events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div></section></div>
       </>}
     </main></div>

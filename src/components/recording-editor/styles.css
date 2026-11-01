@@ -109,6 +109,7 @@
 .re-timeline-tooltip { position:fixed; z-index:10000; pointer-events:none; box-sizing:border-box; max-width:min(360px,calc(100vw - 16px)); max-height:calc(100vh - 16px); overflow:hidden; padding:7px 10px; border:1px solid #7297b7; border-radius:5px; background:#192b3d; color:#edf3fa; box-shadow:0 3px 12px #0008; font:12px/1.5 system-ui,sans-serif; white-space:pre-line; overflow-wrap:anywhere; }
 .re-wave-pending { position:absolute; inset:0; display:flex; justify-content:center; align-items:center; color:#8395a9; font-size:12px; }
 .re-bar { position:absolute; top:17px; bottom:3px; background:#34846f; border:1px solid #6fd1b1; color:#d5fff0; font-size:10px; text-align:center; min-width:2px; }
+.beep_ranges .re-bar:focus-visible { outline:2px solid #ffe4b7; outline-offset:2px; }
 .beep_ranges .re-bar { background:#98652a; border-color:#e5b261; color:#ffe9c7; }.re-bar>span { pointer-events:none; }
 .recording-editor .re-handle { position:absolute; top:-2px; height:18px; width:7px; padding:0; border-radius:2px; background:#cbf5e7; border:0; cursor:ew-resize; z-index:4; }.re-handle.left { left:-2px; }.re-handle.right { right:-2px; }.beep_ranges .re-handle { background:#ffe4b7; }
 .re-clip { position:absolute; top:15px; bottom:3px; background:#344e83; border:1px solid #6892c1; color:#cfdfef; font-size:9px; padding:0 4px; overflow:hidden; white-space:nowrap; cursor:pointer; }.deskshare .re-clip { background:#674580; border-color:#a084c1; }.re-clip.missing { background:#573039; border-style:dashed; }
