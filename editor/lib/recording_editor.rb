@@ -74,6 +74,8 @@ module RecordingEditor
 
   class Repository
     REBUILD_HELPER = '/usr/local/sbin/bbb-recording-editor-rebuild'
+    TITLE_RESTORE_HOOK = '/usr/local/bigbluebutton/core/scripts/post_process/00_recording_editor_title.rb'
+    TITLE_FINALIZE_HOOK = '/usr/local/bigbluebutton/core/scripts/post_publish/00_recording_editor_title.rb'
     attr_reader :raw_root, :state_root, :published_root, :unpublished_root, :process_root, :status_root, :prefix, :ffmpeg, :ffprobe, :detail_waveform
     def initialize(raw_root:, state_root:, published_root: '/var/bigbluebutton/published/presentation',
                    unpublished_root: '/var/bigbluebutton/unpublished/presentation', process_root: nil, status_root: nil,
@@ -161,7 +163,19 @@ module RecordingEditor
                          end
         RecordingEditor.atomic_write(path, JSON.pretty_generate(info)) if %w[completed failed].include?(info['status'])
       end
-      info.merge('available' => File.executable?(REBUILD_HELPER),
+      if info['recording_title'] && info['request_id']
+        restore_path = File.join(state_dir(id), 'title-restore-presentation.json')
+        begin
+          restored = File.file?(restore_path) ? JSON.parse(File.read(restore_path)) : {}
+          raise JSON::ParserError, 'Invalid title receipt' unless restored.is_a?(Hash)
+          info['title_restore'] = restored['request_id'] == info['request_id'] ? restored['status'] : 'pending'
+          info['title_restore'] = 'restored' if info['title_restore'] == 'published'
+        rescue JSON::ParserError, SystemCallError
+          info['title_restore'] = 'failed'
+        end
+        info['title_restore'] = 'failed' if info['status'] == 'completed' && info['title_restore'] != 'restored'
+      end
+      info.merge('available' => File.executable?(REBUILD_HELPER) && File.file?(TITLE_RESTORE_HOOK) && File.file?(TITLE_FINALIZE_HOOK),
                  'processing' => publication_info(id)[:publication_status] == 'processing')
     end
 
@@ -258,7 +272,8 @@ module RecordingEditor
           if File.file?(File.join(raw_root, id, 'events.xml'))
             rec = recording(id)
             ranges = rec.record_ranges
-            display_name = ranges.empty? ? rec.name : publication[:recording_title] || rec.name
+            pending_title = rebuild['recording_title'] if %w[requesting requested failed command_failed].include?(rebuild['status'])
+            display_name = ranges.empty? ? rec.name : publication[:recording_title] || pending_title || rec.name
             room_name = rec.name == id ? publication[:metadata_name] : rec.name
             item.merge!(name: display_name, meeting_name: room_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
                         recording_status: ranges.empty? ? 'unmarked' : 'marked',
@@ -520,7 +535,10 @@ module RecordingEditor
       events = visual_events
       history = history_data
       rebuild = repo.rebuild_info(id)
-      published = repo.publication_info(id)[:publication_status] == 'published'
+      publication = repo.publication_info(id)
+      published = publication[:publication_status] == 'published'
+      pending_title = rebuild['recording_title'] if %w[requesting requested failed command_failed].include?(rebuild['status'])
+      title = publication[:recording_title] || pending_title
       chime_gaps = history && history['revision'] == revision ? CutChime.selection(history, record_ranges, record_ranges(doc), duration) : []
       sync = if !history || history['revision'] != revision
                'unknown'
@@ -530,7 +548,8 @@ module RecordingEditor
              else
                'needs_rebuild'
              end
-      { id: id, name: name, start_utc: start_utc, origin_timestamp: origin, duration_ms: duration,
+      { id: id, name: title || name, meeting_name: name, recording_title: title,
+        start_utc: start_utc, origin_timestamp: origin, duration_ms: duration,
         revision: revision, record_ranges: record_ranges, original_record_ranges: record_ranges(doc),
         record_ranges_persisted: !record_ranges.empty?,
         playback_sync: sync, last_operation: history && history['operation'],
@@ -1134,7 +1153,11 @@ module RecordingEditor
       raise Error, '録画に残す区間を1つ以上rawへ保存してから再構築してください。' if rec.record_ranges.empty?
       repo.ensure_not_rebuilding(id)
       raise Error.new('再構築用の補助プログラムが未設置です。READMEの設置手順を確認してください。', 503) unless repo.rebuild_info(id)['available']
-      info = { 'status' => 'requesting', 'requested_at' => Time.now.utc.iso8601(6), 'revision' => rec.revision }
+      previous = repo.rebuild_info(id)
+      title = repo.publication_info(id)[:recording_title]
+      title ||= previous['recording_title'] if %w[failed command_failed].include?(previous['status'])
+      info = { 'status' => 'requesting', 'requested_at' => Time.now.utc.iso8601(6), 'revision' => rec.revision,
+               'request_id' => SecureRandom.hex(16), 'recording_title' => title }
       repo.write_rebuild_info(id, info)
       begin
         progress.call('BBBに録画の再構築を依頼しています。')

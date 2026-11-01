@@ -114,7 +114,7 @@
   "reviewAudioRestore": "Removing all beep intervals restores the original audio references in XML. Previously generated redacted files are retained.",
   "rebuildRecording": "Rebuild recording…",
   "saveBeforeRebuild": "Save changes to raw before rebuilding. Saving a draft does not apply the changes.",
-  "rebuildSetup": "Rebuild is unavailable. The server rebuild helper is missing or is not executable by the service. This is separate from raw saving and resetting.",
+  "rebuildSetup": "Rebuild is unavailable. The rebuild helper or recording-title hook is missing or is not executable. This is separate from raw saving and resetting.",
   "rebuildReviewTitle": "Confirm recording rebuild",
   "rebuildReviewDetails": "Ask BigBlueButton to rebuild this meeting using the saved raw events.xml and media. Unsaved edits and drafts are not included.",
   "rebuildWarning": "Existing published and unpublished playback files for all installed recording formats will be removed and regenerated. They will be unavailable until processing completes. Original raw files and editor backups are retained.",
@@ -140,7 +140,7 @@
   "candidateRanges": "Recording intervals need saving",
   "saveCandidateRanges": "The raw XML has no valid recording intervals. Choose the intervals to keep and save to raw before rebuilding.",
   "rebuildBlockedProcessing": "Another rebuild cannot be requested while recording processing is in progress. Wait for it to finish.",
-  "rebuildInstallHint": "In the editor installation directory on the BBB server (default: /opt/bbb-recording-editor), run the command below and reload the browser. It installs the helper and permissions; it does not rebuild recordings.",
+  "rebuildInstallHint": "In the editor installation directory on the BBB server (default: /opt/bbb-recording-editor), run the command below and reload the browser. It installs the helper, title-restoration hook and permissions; it does not rebuild recordings.",
   "resetUnmarkedCompleted": "Original state restored to raw, but its XML has no valid recording intervals. The intervals to keep are empty. To rebuild, choose the intervals you want to keep and save them to raw, adding them to the XML.",
   "externalVideoAutoPlayWarning": "If the video does not start, press play in the video.",
   "externalVideoError": "The external video could not be played (error: {code}).",
@@ -226,5 +226,7 @@
   "cutChimeSampleStop": "Stop sample",
   "cutChimeSampleError": "Could not play the chime sample.",
   "cutChimeAcceptAndSkip": "Add and don't ask again",
-  "cutChimeRestoreConfirm": "Show confirmations again"
+  "cutChimeRestoreConfirm": "Show confirmations again",
+  "rebuildTitleFailed": "Recording title restoration could not be verified. Check the published title and BBB post_process logs. This is separate from the recording rebuild result.",
+  "rebuildKeepTitle": "The current recording title “{title}” will be saved before rebuilding and restored before publication."
 }

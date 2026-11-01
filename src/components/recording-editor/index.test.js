@@ -98,6 +98,25 @@ test('published recording link is shown only when the manifest has a public play
   expect(container.querySelector('.re-title a').textContent).toBe('Published recording ↗');
 });
 
+test('editor heading uses the recording title, keeps the room name separate and reports title-only restore failures', async () => {
+  const fetch = global.fetch.getMockImplementation();
+  const title = '講義 <A> & Part 1';
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, name: title, recording_title: title, meeting_name: '会議室',
+      rebuild: { available: true, status: 'completed', title_restore: 'failed' } }) } : fetch(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-title h1').textContent).toBe(title);
+  expect(container.querySelector('.re-title-room').textContent).toBe('会議室: 会議室');
+  expect(container.querySelector('.re-title h1').innerHTML).toContain('&lt;A&gt;');
+  expect(container.textContent).toContain('録画タイトルの復元を確認できませんでした');
+  await click('録画を再構築…');
+  expect(container.querySelector('.re-rebuild-review').textContent).toContain(title);
+  expect(container.querySelector('.re-rebuild-review').textContent).toContain('公開前に復元');
+  await language('en');
+  expect(container.querySelector('.re-title-room').textContent).toBe('Room: 会議室');
+  expect(container.textContent).toContain('Recording title restoration could not be verified');
+});
+
 test('reused previews are explicitly identified in both languages', async () => {
   const fetch = global.fetch.getMockImplementation();
   global.fetch.mockImplementation(async (url, options) => url.endsWith('/preview')

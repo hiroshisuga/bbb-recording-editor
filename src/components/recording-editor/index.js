@@ -435,7 +435,7 @@ function Editor() {
     <div className="re-shell"><MeetingList meetings={meetings} selectedId={recording?.id} busy={busy} dirty={dirty} onRefresh={refreshList} onOpen={open} /><main className="re-main">
       {busy && <div className="re-notice" role="status">◌ {displayMessage(busy)}</div>}{error && <div className="re-error" role="alert">{displayMessage(error)}</div>}{message && <div className="re-success" role="status">{displayMessage(message)}</div>}
       {!recording ? <div className="re-welcome"><h1>{t('welcomeTitle')}</h1><p>{t('welcomeSelect')}</p><p>{t('welcomeEdit')}</p><p>{t('manualRebuild')}</p></div> : <>
-        <div className="re-title"><div><h1>{recording.name || recording.id}</h1><small>{recording.id} · {t('wholeMeeting', { time: formatTime(duration) })}</small></div>{recording.published_url && <a href={recording.published_url} target="_blank" rel="noreferrer">{t('publishedLink')}</a>}</div>
+        <div className="re-title"><div><h1>{recording.name || recording.id}</h1>{recording.meeting_name && recording.meeting_name !== recording.name && <div className="re-title-room"><small>{t('roomName')}: {recording.meeting_name}</small></div>}<small>{recording.id} · {t('wholeMeeting', { time: formatTime(duration) })}</small></div>{recording.published_url && <a href={recording.published_url} target="_blank" rel="noreferrer">{t('publishedLink')}</a>}</div>
         {recording.warnings.length > 0 && <details className="re-warnings" open><summary>{t('warnings', { count: recording.warnings.length })}</summary>{recording.warnings.map((w, i) => <p key={i}>{diagnostic(w)}</p>)}</details>}
         {recording.draft?.revision === recording.revision && <div className="re-draft">{t('draftAvailable')} <button disabled={!!busy} onClick={() => replaceEdit(readEditorEdit({ ...recording.draft, original_record_ranges: recording.original_record_ranges }, duration))}>{t('loadDraft')}</button></div>}
         {!busy && !dirty && !needsRangeSave && <p className="re-muted">{t('rawAlreadySaved')}</p>}
@@ -444,11 +444,12 @@ function Editor() {
         {rebuildBlock && !busy && <div id="re-rebuild-reason" className="re-warnings"><p>{rebuildBlock}</p>{!recording.rebuild?.available && <><p>{t('rebuildInstallHint')}</p><code>sudo bash editor/deploy/install-rebuild-helper.sh</code></>}</div>}
         {rebuilding && <div className="re-notice" role="status">{t(rebuildPending ? 'rebuildRequested' : 'rebuildBlockedProcessing')}</div>}
         {['failed', 'command_failed'].includes(recording.rebuild?.status) && <div className="re-error" role="alert">{t('rebuildFailed')}</div>}
+        {recording.rebuild?.title_restore === 'failed' && <div className="re-error" role="alert">{t('rebuildTitleFailed')}</div>}
         <div className="re-reset"><button disabled={!!busy || rebuilding || !recording.reset?.available} onClick={() => { setResetReview(!resetReview); setReview(false); setRebuildReview(false); }}>{t('resetOriginal')}</button>{!recording.reset?.available && <small>{t('resetUnavailable')}</small>}</div>
         {resetReview && <div className="re-review re-reset-review"><h3>{t('resetReviewTitle')}</h3><p>{t('resetReviewDetails')}</p><p className="re-warnings">{t('resetWarning')}</p><p>{t('resetPublished')}</p>
           <button disabled={!!busy || rebuilding} onClick={reset}>{t('confirmReset')}</button><button disabled={!!busy} onClick={() => setResetReview(false)}>{t('close')}</button>
         </div>}
-        {rebuildReview && <div className="re-review re-rebuild-review"><h3>{t('rebuildReviewTitle')}</h3><p>{t('rebuildReviewDetails')}</p><p className="re-warnings">{t('rebuildWarning')}</p><p>{t('rebuildPublishedWarning')}</p>
+        {rebuildReview && <div className="re-review re-rebuild-review"><h3>{t('rebuildReviewTitle')}</h3><p>{t('rebuildReviewDetails')}</p><p className="re-warnings">{t('rebuildWarning')}</p><p>{t('rebuildPublishedWarning')}</p>{recording.recording_title && <p>{t('rebuildKeepTitle', { title: recording.recording_title })}</p>}
           <button className="re-primary" disabled={!!rebuildBlock} onClick={rebuild}>{t('confirmRebuild')}</button><button disabled={!!busy} onClick={() => setRebuildReview(false)}>{t('close')}</button>
         </div>}
         {review && <div className="re-review"><h3>{t('reviewTitle')}</h3><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>

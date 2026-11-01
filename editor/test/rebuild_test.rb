@@ -2,6 +2,7 @@
 require 'minitest/autorun'
 require 'tmpdir'
 require_relative '../server'
+require_relative '../deploy/00_recording_editor_title'
 
 class RebuildTest < Minitest::Test
   def setup
@@ -45,6 +46,63 @@ class RebuildTest < Minitest::Test
     assert_equal @xml, File.read(File.join(@repo.raw_root, @id, 'events.xml'))
     assert_equal @payload['revision'], result['revision']
     assert_equal 'requested', @repo.rebuild_info(@id)['status']
+  end
+
+  def test_title_is_captured_before_deletion_and_restored_before_publishing
+    published = File.join(@repo.published_root, @id, 'metadata.xml')
+    FileUtils.mkdir_p(File.dirname(published))
+    File.write(published, '<recording><state>published</state><published>true</published><meta><name>Renamed &amp; recorded</name></meta></recording>')
+    request_id = nil
+    runner = lambda do |*args|
+      snapshot = JSON.parse(File.read(File.join(@repo.state_dir(@id), 'rebuild-request.json')))
+      assert_equal 'Renamed & recorded', snapshot['recording_title']
+      request_id = snapshot['request_id']
+      assert_match(/\A[0-9a-f]{32}\z/, request_id)
+      FileUtils.rm_rf(File.dirname(published))
+      assert_equal 'Renamed & recorded', @repo.recording(@id).to_h[:name]
+      assert_equal 'Renamed & recorded', @repo.list.find { |r| r[:id] == @id }[:name]
+      generated = File.join(@repo.process_root, @id, 'metadata.xml')
+      FileUtils.mkdir_p(File.dirname(generated))
+      File.write(generated, '<recording><state>processed</state><meta><meetingName>Original room</meetingName></meta></recording>')
+      restorer = RecordingEditorTitle::Restore.new(raw_root: @repo.raw_root, state_root: @repo.state_root, process_root: @repo.process_root)
+      assert_equal :restored, restorer.call(@id, 'presentation')
+      FileUtils.mkdir_p(File.dirname(published))
+      FileUtils.cp(generated, published)
+      ['', '', Struct.new(:success?).new(true)]
+    end
+    result = Open3.stub(:capture3, runner) { @editor.rebuild(@id, @payload) }
+    assert_equal request_id, result['request_id']
+    assert_equal 'restored', result['title_restore']
+    marker('published', 'done')
+    assert_equal 'completed', @repo.rebuild_info(@id)['status']
+    assert_equal 'restored', @repo.rebuild_info(@id)['title_restore']
+    assert_equal 'Renamed & recorded', @repo.recording(@id).to_h[:name]
+    assert_equal @xml, File.read(File.join(@repo.raw_root, @id, 'events.xml'))
+  end
+
+  def test_failed_rebuild_retry_keeps_the_snapshot_when_generated_recording_has_been_removed
+    info = { 'status' => 'failed', 'revision' => @payload['revision'], 'request_id' => '1' * 32,
+             'requested_at' => (Time.now - 10).utc.iso8601(6), 'recording_title' => 'Title before failure' }
+    @repo.write_rebuild_info(@id, info)
+    assert_equal 'Title before failure', @repo.recording(@id).to_h[:name]
+    result = rebuild
+    assert_equal 'Title before failure', result['recording_title']
+    refute_equal info['request_id'], result['request_id']
+  end
+
+  def test_missing_or_failed_title_receipt_is_reported_separately_from_successful_media_rebuild
+    result = rebuild
+    info = JSON.parse(File.read(File.join(@repo.state_dir(@id), 'rebuild-request.json')))
+    info['recording_title'] = 'Expected title'
+    @repo.write_rebuild_info(@id, info)
+    marker('published', 'done')
+    assert_equal 'completed', @repo.rebuild_info(@id)['status']
+    assert_equal 'failed', @repo.rebuild_info(@id)['title_restore']
+    receipt = File.join(@repo.state_dir(@id), 'title-restore-presentation.json')
+    File.write(receipt, JSON.generate('request_id' => 'old', 'status' => 'restored'))
+    assert_equal 'failed', @repo.rebuild_info(@id)['title_restore']
+    File.write(receipt, JSON.generate('request_id' => result['request_id'], 'status' => 'restored'))
+    assert_equal 'restored', @repo.rebuild_info(@id)['title_restore']
   end
 
   def test_manifest_distinguishes_raw_save_reset_and_matching_completed_rebuild
@@ -131,6 +189,21 @@ class RebuildTest < Minitest::Test
     assert_equal 422, error.status
     assert_includes error.message, 'no new privileges'
     assert_equal 'command_failed', @repo.rebuild_info(@id)['status']
+  end
+
+  def test_rebuild_availability_requires_both_title_hooks_as_well_as_the_existing_helper
+    hooks = [RecordingEditor::Repository::TITLE_RESTORE_HOOK, RecordingEditor::Repository::TITLE_FINALIZE_HOOK]
+    original_file = File.method(:file?)
+    installed = []
+    File.stub(:executable?, true) do
+      File.stub(:file?, ->(path) { hooks.include?(path) ? installed.include?(path) : original_file.call(path) }) do
+        refute @repo.read_rebuild_info(@id)['available']
+        installed << hooks.first
+        refute @repo.read_rebuild_info(@id)['available']
+        installed << hooks.last
+        assert @repo.read_rebuild_info(@id)['available']
+      end
+    end
   end
 
   def test_missing_helper_reports_setup_error_without_creating_request
