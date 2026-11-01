@@ -68,7 +68,23 @@ class CodecTest(unittest.TestCase):
         data = path.read_bytes()
         element = b'\x63\xa2\x93' + bytes(head)
         self.assertEqual(1, data.count(element))
-        path.write_bytes(data.replace(element, b'\xec\x94' + bytes(20)))
+        data = bytearray(data.replace(element, b'\xec\x94' + bytes(20)))
+        path.write_bytes(data)
+        with av.open(str(path)) as check:
+            first = next(p for p in check.demux(check.streams.audio[0]) if p.size)
+            negative_start = first.pts < 0
+        if not keep_delay and negative_start:
+            # Older muxers retain CodecDelay from the template codec context
+            # even after changing OpusHead. The real headerless fixture starts
+            # at zero, so explicitly clear that container delay as well.
+            pos = data.index(b'\x56\xaa') + 2
+            width = 1
+            while not data[pos] & (0x80 >> (width - 1)):
+                width += 1
+            size = int.from_bytes(data[pos:pos+width], 'big') & ((1 << (7 * width)) - 1)
+            self.assertLessEqual(size, 8)
+            data[pos+width:pos+width+size] = bytes(size)
+        path.write_bytes(data)
         self.source = path
         with av.open(str(path)) as src:
             self.assertFalse(src.streams.audio[0].codec_context.extradata)
@@ -197,7 +213,11 @@ class CodecTest(unittest.TestCase):
     def test_cli_reports_fallback_for_malformed_requests(self):
         p = subprocess.run([__import__('sys').executable, str(Path(partial.__file__))], input='{}', capture_output=True, text=True)
         self.assertEqual(0, p.returncode)
-        self.assertEqual('fallback', json.loads(p.stdout)['status'])
+        result = json.loads(p.stdout)
+        self.assertEqual('fallback', result['status'])
+        self.assertEqual('KeyError', result['error_type'])
+        self.assertIn('KeyError', result['reason'])
+        self.assertIn('Traceback', p.stderr)
 
 
 if __name__ == '__main__':

@@ -807,9 +807,10 @@ module RecordingEditor
         !asset['has_video'] && asset['sample_rate'] == 48_000 && [1, 2].include?(asset['channels'])
       config = { source: backup, output: output, masks: masks, effect: effect,
                  ffmpeg: rec.repo.ffmpeg, ffprobe: rec.repo.ffprobe }
-      stdout, _stderr, status = Open3.capture3('/usr/bin/python3', File.expand_path('partial_opus.py', __dir__),
+      stdout, stderr, status = Open3.capture3('/usr/bin/python3', File.expand_path('partial_opus.py', __dir__),
                                               stdin_data: JSON.generate(config))
       result = JSON.parse(stdout) if status.success?
+      warn "Opus partial renderer: #{stderr.byteslice(0, 4096)}" if result.is_a?(Hash) && result['error_type']
       return result if result.is_a?(Hash) && result['status'] == 'partial' && File.file?(output)
       { 'status' => 'full', 'reason' => result.is_a?(Hash) ? result['reason'] : 'accelerator unavailable' }
     rescue SystemCallError, JSON::ParserError
