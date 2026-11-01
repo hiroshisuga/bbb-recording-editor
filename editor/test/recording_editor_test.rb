@@ -206,6 +206,67 @@ class RecordingEditorTest < Minitest::Test
     assert_equal '/server/audio/microphone.wav', restored
   end
 
+  def opus_sources
+    sources
+    path = File.join(@raw, 'audio', 'microphone.webm')
+    RecordingEditor.run('ffmpeg', '-v', 'error', '-y', '-i', File.join(@raw, 'audio', 'microphone.wav'),
+                        '-ar', '48000', '-ac', '2', '-c:a', 'libopus', path)
+    FileUtils.rm_f(File.join(@raw, 'audio', 'microphone.wav'))
+    File.write(File.join(@raw, 'events.xml'), @events.gsub('microphone.wav', 'microphone.webm'))
+    path
+  end
+
+  def test_partial_opus_save_preserves_beeps_chime_masks_originals_and_reuses_the_result
+    opus_sources
+    editor = RecordingEditor::Editor.new(@repo)
+    messages = []
+    data = payload(@repo.recording(@id), [{ 'start_ms' => 1200, 'end_ms' => 1600 }]).merge('cut_chime' => true)
+    result = editor.save(@id, data, progress: ->(m) { messages << m })
+    mic = result['outputs'].find { |o| o[:source] == 'audio/microphone.webm' }
+    path = File.join(@raw, mic[:relative])
+    assert_in_delta 0.12, rms(samples(path, 1.3)), 0.015
+    assert_operator rms(samples(path, 2.55, 0.05)), :<, 0.003
+    assert_operator rms(samples(path, 3.4, 0.05)), :<, 0.003
+    assert_operator rms(samples(path, 4.5)), :>, 0.04
+    assert_equal 2, result['outputs'].count { |o| o[:cue] }
+    # Optional dependencies are not needed to run the rest of the editor suite.
+    available = system('/usr/bin/python3', '-c', 'import av', out: File::NULL, err: File::NULL)
+    if available
+      assert_equal 'partial', mic[:audio_render]['status']
+      assert_operator mic[:audio_render]['encoded_samples'], :<, 2 * 48_000
+      assert_includes messages, 'Opus音声を部分再エンコードし、未編集部分をコピーしました。'
+    else
+      assert_equal 'full', mic[:audio_render]['status']
+    end
+    assert File.file?(File.join(@raw, 'audio/microphone.webm'))
+    second = editor.save(@id, data.merge('revision' => result['revision']))
+    assert_equal result['outputs'].map { |o| o[:relative] }, second['outputs'].map { |o| o[:relative] }
+    assert_equal mic[:audio_render], second['outputs'].find { |o| o[:source] == 'audio/microphone.webm' }[:audio_render]
+  end
+
+  def test_unavailable_accelerator_and_edge_edits_fall_back_to_full_opus_rendering
+    opus_sources
+    editor = RecordingEditor::Editor.new(@repo)
+    runner = Open3.method(:capture3)
+    unavailable = lambda do |*args, **kwargs|
+      if args.first == '/usr/bin/python3'
+        ['not JSON', '', Struct.new(:success?).new(false)]
+      else
+        runner.call(*args, **kwargs)
+      end
+    end
+    result = Open3.stub(:capture3, unavailable) do
+      editor.save(@id, payload(@repo.recording(@id), [{ 'start_ms' => 1200, 'end_ms' => 1600 }]))
+    end
+    mic = result['outputs'].find { |o| o[:source] == 'audio/microphone.webm' }
+    assert_equal 'full', mic[:audio_render]['status']
+    assert_in_delta 0.12, rms(samples(File.join(@raw, mic[:relative]), 1.3)), 0.015
+    result = editor.save(@id, payload(@repo.recording(@id), [{ 'start_ms' => 0, 'end_ms' => 300 }]))
+    mic = result['outputs'].find { |o| o[:source] == 'audio/microphone.webm' }
+    assert_equal 'full', mic[:audio_render]['status']
+    assert_in_delta 0.12, rms(samples(File.join(@raw, mic[:relative]), 0.15, 0.1)), 0.015
+  end
+
   def test_preview_has_full_meeting_duration_and_waveform
     sources
     rec = @repo.recording(@id)

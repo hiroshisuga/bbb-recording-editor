@@ -94,6 +94,13 @@ class Installer:
                 raise InstallError(f'Required executable is missing: {command}')
         self.run(['runuser', '-u', 'bigbluebutton', '--', '/usr/bin/ruby', '-e',
                   'abort "Ruby 3.0+ required" if RUBY_VERSION.to_f < 3; require "nokogiri"; require "webrick"'])
+        partial_check = ['runuser', '-u', 'bigbluebutton', '--', '/usr/bin/python3', '-c',
+                         'import av; import ctypes; ctypes.CDLL("libopus.so.0")']
+        if self.run(partial_check, check=False, capture=True).returncode:
+            if not self.options.skip_dependencies:
+                self.run(['apt-get', 'install', '--yes', 'python3-av', 'libopus0'], check=False)
+            if self.run(partial_check, check=False, capture=True).returncode:
+                print('Optional Opus acceleration unavailable; audio saving will use full-file encoding.')
 
     def settings(self, templates):
         env_path = self.path(self.ENV)
