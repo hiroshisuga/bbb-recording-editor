@@ -9,7 +9,7 @@ import { recordingClock } from './recordingClock';
 import CutChimeControl from './CutChimeControl';
 import CutChimeMenu from './CutChimeMenu';
 import TimelineContextMenu from './TimelineContextMenu';
-import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection } from './SelectionMarkers';
+import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection, releaseCompleteSelection } from './SelectionMarkers';
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import useAudioPreview from './useAudioPreview';
@@ -140,8 +140,8 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     const startX = e.clientX;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
-    // Clicks only seek so Set start/end here survive navigation. A real drag
-    // replaces the selection; tolerate a few pixels of ordinary click jitter.
+    // Release only a completed range on click. Keep its start (or either
+    // incomplete endpoint) available for Set start/end here; drags replace it.
     let dragged = false;
     const move = next => {
       if (!dragged && Math.abs(next.clientX - startX) < 4) return;
@@ -149,9 +149,18 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       const end = position(next);
       setSelection({ start_ms: Math.min(start, end), end_ms: Math.max(start, end) });
     };
-    const up = next => { move(next); seek(position(next)); target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); };
-    e.currentTarget.addEventListener('pointermove', move);
-    e.currentTarget.addEventListener('pointerup', up, { once: true });
+    const cleanup = () => {
+      target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up);
+      target.removeEventListener('pointercancel', cleanup);
+    };
+    const up = next => {
+      move(next);
+      if (!dragged && isValidSelection(selection)) setSelection(releaseCompleteSelection);
+      seek(position(next)); cleanup();
+    };
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', up, { once: true });
+    target.addEventListener('pointercancel', cleanup, { once: true });
   };
   const handle = (e, kind, index, edge) => {
     e.stopPropagation();

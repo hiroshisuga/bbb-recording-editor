@@ -1,4 +1,4 @@
-import SelectionMarkers, { SelectionOffscreen, validSelection } from './SelectionMarkers';
+import SelectionMarkers, { SelectionOffscreen, validSelection, releaseCompleteSelection } from './SelectionMarkers';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { formatTime } from './model';
@@ -177,7 +177,7 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
     return Math.round(start + clamp((e.clientX - bounds.left) / bounds.width, 1) * width);
   };
   const down = e => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.ctrlKey) return;
     e.preventDefault();
     const value = position(e);
     if (e.shiftKey) {
@@ -198,7 +198,9 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   };
   const release = e => {
     if (!pointer.current) return;
-    move(e); seek(position(e)); pointer.current = null; setDragging(false);
+    move(e);
+    if (!pointer.current.moved && validSelection(selection)) setSelection(releaseCompleteSelection);
+    seek(position(e)); pointer.current = null; setDragging(false);
   };
   const cancel = () => { pointer.current = null; setDragging(false); };
   return <section className="re-detail-wave" aria-label={t('detailWave')}>
