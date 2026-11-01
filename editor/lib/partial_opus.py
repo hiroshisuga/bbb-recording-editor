@@ -17,6 +17,7 @@ import traceback
 
 RATE = 48000
 PATCH_DELAY = 312  # FFmpeg libopus, application=audio; checked against its header.
+MAX_CHUNK_SAMPLES = 30 * RATE
 
 
 class Unsupported(Exception):
@@ -147,13 +148,21 @@ def plan(masks, frame, delay, count):
     require(windows and len(windows) <= 32 and sum(b-a for a, b in windows) < count * 0.4,
             'whole-file rendering is preferable')
     result = []
-    for n, j in windows:
-        begin = (n - context) * frame + PATCH_DELAY - delay
-        end = (j + 2) * frame + PATCH_DELAY - delay
-        q0 = math.floor((begin + delay) / frame) - context
-        q1 = math.ceil((end + delay) / frame)
-        require(begin >= 0 and q0 >= 0 and q1 < count and end - begin <= 30 * RATE, 'patch context too large')
-        result.append((n, j, context, begin, end, q0, q1))
+    # Include decoder warm-up and encoder look-ahead in the limit. Splits are
+    # packet-aligned; their original-audio context may overlap, their output
+    # packet ranges never do. The 32-group limit above applies before splitting.
+    max_packets = MAX_CHUNK_SAMPLES // frame - 2 * context - 3
+    for first, last in windows:
+        for n in range(first, last, max_packets):
+            j = min(n + max_packets, last)
+            begin = (n - context) * frame + PATCH_DELAY - delay
+            end = (j + 2) * frame + PATCH_DELAY - delay
+            q0 = math.floor((begin + delay) / frame) - context
+            q1 = math.ceil((end + delay) / frame)
+            require(begin >= 0 and q0 >= 0 and q1 < count and
+                    end - begin <= MAX_CHUNK_SAMPLES and (q1 - q0) * frame <= MAX_CHUNK_SAMPLES,
+                    'patch context too large')
+            result.append((n, j, context, begin, end, q0, q1))
     return result
 
 
@@ -238,37 +247,47 @@ def render(config):
     trimming = side_data_check(config['ffprobe'], source, count, delay, frame)
     windows = plan(config['masks'], frame, delay, count)
     replacements, decoded, encoded = {}, 0, 0
+    max_decoded = max_encoded = 0
     with tempfile.TemporaryDirectory(prefix='opus-patch-', dir=str(Path(output).parent)) as directory:
         with av.open(source) as container:
             stream = audio(container)
-            wi, pcm, state = 0, array.array('f'), None
+            wi, completed, active = 0, 0, []
             buffer = (ct.c_float * (5760 * channels))()
             try:
                 for i, packet in enumerate(p for p in container.demux(stream) if p.size):
-                    if wi == len(windows):
+                    if completed == len(windows):
                         break
-                    window = windows[wi]
-                    if window[5] <= i < window[6]:
-                        if state is None:
-                            error = ct.c_int()
-                            state = lib.opus_decoder_create(RATE, channels, ct.byref(error))
-                            require(state and error.value == 0, 'decoder unavailable')
+                    # Adjacent chunks need overlapping original decoder context.
+                    # Start the next decoder before completing the previous one;
+                    # each PCM buffer is bounded, and packets are read only once.
+                    while wi < len(windows) and windows[wi][5] == i:
+                        error = ct.c_int()
+                        state = lib.opus_decoder_create(RATE, channels, ct.byref(error))
+                        require(state and error.value == 0, 'decoder unavailable')
+                        active.append({'window': windows[wi], 'pcm': array.array('f'), 'state': state})
+                        wi += 1
+                    for chunk in active[:]:
+                        window, pcm = chunk['window'], chunk['pcm']
                         data = bytes(packet)
-                        size = lib.opus_decode_float(state, data, len(data), buffer, 5760, 0)
+                        size = lib.opus_decode_float(chunk['state'], data, len(data), buffer, 5760, 0)
                         require(size == frame, 'decoder frame length changed')
                         pcm.frombytes(ct.string_at(buffer, size * channels * 4))
                         decoded += size
-                    if i + 1 == window[6]:
-                        patch, size = encode_patch(av, config, pcm, window, directory, channels, delay, frame, lib)
-                        replacements.update(patch)
-                        encoded += size
-                        lib.opus_decoder_destroy(state)
-                        state, pcm = None, array.array('f')
-                        wi += 1
-                require(wi == len(windows), 'source ended during patch rendering')
+                        if i + 1 == window[6]:
+                            patch, size = encode_patch(av, config, pcm, window, directory, channels, delay, frame, lib)
+                            replacements.update(patch)
+                            encoded += size
+                            max_decoded = max(max_decoded, len(pcm) // channels)
+                            max_encoded = max(max_encoded, size)
+                            lib.opus_decoder_destroy(chunk['state'])
+                            chunk['state'] = None
+                            active.remove(chunk)
+                            completed += 1
+                require(completed == len(windows), 'source ended during patch rendering')
             finally:
-                if state:
-                    lib.opus_decoder_destroy(state)
+                for chunk in active:
+                    if chunk['state']:
+                        lib.opus_decoder_destroy(chunk['state'])
         temp = str(Path(directory) / 'result.webm')
         remux(av, source, temp, replacements)
         validate(av, lib, source, temp, replacements, count)
@@ -277,7 +296,8 @@ def render(config):
         require((before.st_size, before.st_mtime_ns, before.st_ctime_ns) == (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'source changed')
         os.replace(temp, output)
     return {'status': 'partial', 'total_packets': count, 'reencoded_packets': len(replacements),
-            'decoded_samples': decoded, 'encoded_samples': encoded}
+            'decoded_samples': decoded, 'encoded_samples': encoded, 'encoded_chunks': len(windows),
+            'max_decoded_chunk_samples': max_decoded, 'max_encoded_chunk_samples': max_encoded}
 
 
 if __name__ == '__main__':
