@@ -126,12 +126,13 @@ class InstallEditorTest(unittest.TestCase):
         self.assertEqual((self.raw / 'events.xml').read_text(), 'raw must stay unchanged')
         self.assertFalse((self.source / 'build-editor').exists())
         self.assertIn('BBB_EDITOR_BUILD_ROOT=/opt/bbb-recording-editor/build-editor', i.path(i.ENV).read_text())
-        for name in [i.UNIT, i.AUTH, i.NGINX, i.HELPER, i.SUDOERS, i.DROPIN]:
+        for name in [i.UNIT, i.AUTH, i.NGINX, i.HELPER, i.TITLE_HOOK, i.TITLE_FINALIZER, i.SUDOERS, i.DROPIN]:
             self.assertTrue(i.path(name).is_file(), name)
         self.assertEqual(i.path(i.ENV).stat().st_mode & 0o777, 0o600)
         self.assertEqual(i.path(i.AUTH).stat().st_mode & 0o777, 0o640)
         self.assertEqual(i.path(i.SUDOERS).stat().st_mode & 0o777, 0o440)
         self.assertEqual(self.journal()['status'], 'completed')
+        self.assertEqual(i.path(i.TITLE_HOOK).stat().st_mode & 0o777, 0o755)
         build_calls = [(args, kw) for args, kw in i.commands if args[0] == 'runuser' and ('npm' in args or args[-1].endswith('build.js'))]
         self.assertEqual(len(build_calls), 2)
         self.assertTrue(all(args[:4] == ['runuser', '-u', 'builder', '--'] for args, _ in build_calls))
@@ -172,6 +173,24 @@ class InstallEditorTest(unittest.TestCase):
         self.assertLess(commands.index(['systemctl', 'daemon-reload']),
                         commands.index(['systemctl', 'stop', 'bbb-recording-editor']))
 
+    def test_title_hook_uses_custom_raw_state_and_process_paths(self):
+        i = self.installer
+        i.path(i.ENV).parent.mkdir(parents=True, exist_ok=True)
+        i.path(i.ENV).write_text("BBB_EDITOR_RAW_ROOT=/srv/raw\nBBB_EDITOR_STATE_ROOT=/srv/editor-state\nBBB_EDITOR_PROCESS_ROOT=/srv/processed/presentation\n")
+        self.install()
+        hook = i.path(i.TITLE_HOOK).read_text()
+        self.assertIn("RAW_ROOT = '/srv/raw'", hook)
+        self.assertIn("STATE_ROOT = '/srv/editor-state'", hook)
+        self.assertIn("PROCESS_ROOT = '/srv/processed/presentation'", hook)
+        original = i.path(i.TITLE_HOOK).read_bytes()
+        with (self.source / 'editor/deploy/00_recording_editor_title.rb').open('a') as f:
+            f.write('\n# updated version\n')
+        update = self.update_installer()
+        update.fail_nginx = True
+        with self.assertRaises(module.InstallError):
+            self.install(update)
+        self.assertEqual(original, i.path(i.TITLE_HOOK).read_bytes())
+
     def test_build_failure_does_not_touch_installed_app_or_configuration(self):
         self.install()
         update = self.update_installer()
@@ -187,7 +206,7 @@ class InstallEditorTest(unittest.TestCase):
     def test_nginx_validation_failure_restores_configs_before_activation(self):
         self.install()
         update = self.update_installer()
-        before = {name: update.path(name).read_bytes() for name in [update.ENV, update.UNIT, update.AUTH, update.NGINX]}
+        before = {name: update.path(name).read_bytes() for name in [update.ENV, update.UNIT, update.AUTH, update.NGINX, update.TITLE_HOOK, update.TITLE_FINALIZER]}
         update.fail_nginx = True
         with self.assertRaisesRegex(module.InstallError, 'Nginx validation'):
             self.install(update)

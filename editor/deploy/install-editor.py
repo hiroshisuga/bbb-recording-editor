@@ -35,6 +35,8 @@ class Installer:
     NGINX = '/etc/bigbluebutton/nginx/recording-editor.nginx'
     UNIT = '/etc/systemd/system/bbb-recording-editor.service'
     HELPER = '/usr/local/sbin/bbb-recording-editor-rebuild'
+    TITLE_HOOK = '/usr/local/bigbluebutton/core/scripts/post_process/00_recording_editor_title.rb'
+    TITLE_FINALIZER = '/usr/local/bigbluebutton/core/scripts/post_publish/00_recording_editor_title.rb'
     SUDOERS = '/etc/sudoers.d/bbb-recording-editor'
     DROPIN = '/etc/systemd/system/bbb-recording-editor.service.d/rebuild.conf'
 
@@ -207,7 +209,7 @@ class Installer:
         folder.mkdir(parents=True, exist_ok=True)
         self.backup = Path(tempfile.mkdtemp(prefix=time.strftime('%Y%m%dT%H%M%S-'), dir=folder))
         self.backup.chmod(0o700)
-        for name in [self.ENV, self.AUTH, self.NGINX, self.UNIT, self.HELPER, self.SUDOERS, self.DROPIN]:
+        for name in [self.ENV, self.AUTH, self.NGINX, self.UNIT, self.HELPER, self.TITLE_HOOK, self.TITLE_FINALIZER, self.SUDOERS, self.DROPIN]:
             path = self.path(name)
             self.saved_files[name] = None
             if path.exists():
@@ -260,6 +262,21 @@ class Installer:
         if expected not in helper:
             raise InstallError('Unexpected rebuild helper template.')
         self.write(self.HELPER, helper.replace(expected, f'RAW_ROOT = Path({self.raw!r})'), 0o755)
+        hook = templates['00_recording_editor_title.rb']
+        process = self.env.get('BBB_EDITOR_PROCESS_ROOT', str(Path(self.raw).parent / 'process/presentation'))
+        if not Path(process).is_absolute() or '\n' in process or '\r' in process:
+            raise InstallError('Processed recording directory must be an absolute path.')
+        # Ruby single-quoted literals keep paths containing quotes or #{...} literal.
+        ruby_string = lambda value: "'" + value.replace('\\', '\\\\').replace("'", "\\'") + "'"
+        for key, default, value in [('RAW_ROOT', '/var/bigbluebutton/recording/raw', self.raw),
+                                    ('STATE_ROOT', '/var/lib/bbb-recording-editor', self.state),
+                                    ('PROCESS_ROOT', '/var/bigbluebutton/recording/process/presentation', process)]:
+            expected = f"{key} = '{default}'"
+            if expected not in hook:
+                raise InstallError('Unexpected recording-title hook template.')
+            hook = hook.replace(expected, f'{key} = {ruby_string(value)}')
+        self.write(self.TITLE_HOOK, hook, 0o755)
+        self.write(self.TITLE_FINALIZER, hook, 0o755)
         self.write(self.SUDOERS, templates['bbb-recording-editor.sudoers'], 0o440)
         self.write(self.DROPIN, templates['rebuild.conf'], 0o644)
         state = self.path(self.state)
@@ -353,7 +370,7 @@ class Installer:
             if not (self.source / name).is_file():
                 raise InstallError(f'Source tree is incomplete: {name}')
         target = self.path(self.APP)
-        for name in [self.APP, self.ENV, self.AUTH, self.NGINX, self.UNIT, self.HELPER, self.SUDOERS, self.DROPIN]:
+        for name in [self.APP, self.ENV, self.AUTH, self.NGINX, self.UNIT, self.HELPER, self.TITLE_HOOK, self.TITLE_FINALIZER, self.SUDOERS, self.DROPIN]:
             if self.path(name).is_symlink():
                 raise InstallError(f'Managed path must not be a symbolic link: {name}')
         self.service_user = self.account('bigbluebutton')
@@ -362,7 +379,7 @@ class Installer:
         self.builder = self.account('bigbluebutton' if builder == 'root' else builder)
         templates = {name: (self.source / 'editor/deploy' / name).read_text() for name in [
             'bbb-recording-editor.env.example', 'bbb-recording-editor.service', 'nginx.conf',
-            'bbb-recording-editor-rebuild', 'bbb-recording-editor.sudoers', 'rebuild.conf']}
+            'bbb-recording-editor-rebuild', '00_recording_editor_title.rb', 'bbb-recording-editor.sudoers', 'rebuild.conf']}
         self.settings(templates)
         if not self.path(self.AUTH).exists() and not self.options.password_file and not sys.stdin.isatty():
             raise InstallError('First install needs an interactive password prompt or --password-file PATH.')

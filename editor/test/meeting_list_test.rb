@@ -85,6 +85,25 @@ class MeetingListTest < Minitest::Test
     assert_equal 'unpublished', item[:publication_status]
   end
 
+  def test_editor_heading_prefers_recording_title_and_keeps_room_name_separate
+    raw(marks)
+    rec = @repo.recording(@id)
+    key = rec.to_h[:preview_key]
+    assert_equal 'Raw meeting', rec.to_h[:name]
+    assert_equal 'Raw meeting', rec.to_h[:meeting_name]
+    assert_nil rec.to_h[:recording_title]
+    path = metadata(@repo.published_root, 'published', 'true', title: '講義 <A> & Part 1')
+    data = @repo.recording(@id).to_h
+    assert_equal '講義 <A> & Part 1', data[:name]
+    assert_equal 'Raw meeting', data[:meeting_name]
+    assert_equal data[:name], data[:recording_title]
+    assert_equal key, data[:preview_key]
+    FileUtils.rm_rf(File.dirname(path))
+    metadata(@repo.unpublished_root, 'unpublished', 'false', title: 'Unpublished title')
+    assert_equal 'Unpublished title', @repo.recording(@id).to_h[:name]
+    assert_nil @repo.recording(@id).to_h[:published_url]
+  end
+
   def test_editor_playback_link_follows_publication_changes
     raw(marks)
     raw_path = File.join(@repo.raw_root, @id, 'events.xml')

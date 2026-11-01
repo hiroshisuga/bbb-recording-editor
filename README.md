@@ -41,6 +41,16 @@ raw保存だけでは公開済み録画は変わりません。保存後、管�
 
 翻訳は `src/components/recording-editor/locales/ja.json` と `en.json` に分離しています。APIの既存の診断メッセージは `diagnostics.en.json` で画面表示時に英訳するため、サーバ側のログ・APIレスポンスは変更しません。FFmpegやOSなどが返す詳細なエラー本文は元のまま表示します。言語の追加時は同じメッセージIDのカタログと診断文の翻訳を用意し、`i18n.js` の対応言語・フォールバック処理に登録してください。このアプリの翻訳カタログだけを使用します。
 
+## 録画タイトルの表示と再構築時の保持
+
+編集画面の見出しは、生成済み録画の `metadata.xml` にある録画タイトル（`/recording/meta/name`、Greenlightの名称変更で使われる項目）を優先します。公開・非公開を問わず、名前があれば表示します。会議室名と異なる場合は元の会議室名を小さく併記し、タイトルがなければraw XMLの会議室名、取得できなければ会議IDを使います。タイトルの読み取りだけでrawや波形キャッシュを変更することはありません。
+
+エディターの「録画を再構築…」では、BBBへ依頼する直前に現在のタイトルを録画ごとの `rebuild-request.json` へ保存します。BBBの `post_process` フックが処理済みの `metadata.xml` の `meta/name` を復元し、その後に公開・Greenlightへの完了通知へ進みます。rawの `meetingName` や元素材は書き換えません。BBB共有シークレットやGreenlightへのログインは不要です。再構築中に公開ファイルが削除されても、エディターの見出しと一覧には退避したタイトルを表示します。失敗後の再依頼でも、生成済みファイルがなくなっている場合は退避したタイトルを引き継ぎます。
+
+公開後の `post_publish` フックが、依頼IDと録画形式ごとに復元済みの印を記録します。ブラウザを閉じても動作し、同じ依頼の処理失敗・再試行には対応しつつ、後日のエディター外での再構築へ古いタイトルを上書きしないようにします。次のエディターからの依頼は新しい依頼IDを使い、その時点のタイトルを改めて取得します。`presentation` 以外の形式についても、設定した処理ディレクトリの親にある同名形式のフォルダーへ適用します。タイトル以外のメタデータ・公開範囲を保存復元する機能ではありません。
+
+タイトル復元の失敗や、録画完成後に復元結果を確認できない場合は、録画本体の再構築結果と分けて画面に警告を表示します。公開録画の名前とBBBのpost_process／post_publishログを確認してください。`bbb-record` 自体に名前保持オプションを追加するものではありません。タイトル保持を有効にするには、更新版の `deploy.sh` または後述の `install-rebuild-helper.sh` で、両方のフックを設置・更新してください。フックが未設置の間は再構築ボタンを無効にします。
+
 ## プレビューの幅調整
 
 スライド・画面共有（左）とwebcam（右）の間の仕切りを左右にドラッグすると、幅の比率を変更できます。タッチ操作にも対応します。左右それぞれに全体の20%以上の幅を残し、webcam映像も幅に合わせて拡大・縮小します。カメラが複数ある場合は右ペーン内を縦にスクロールできます。仕切りにフォーカスして左右矢印キーで2ポイントずつ、Shift併用で10ポイントずつ調整でき、Home／Endで左側20%／80%、ダブルクリックで標準の75%に戻ります。
@@ -681,7 +691,7 @@ sudo systemctl restart bbb-recording-editor
 
 その後、ブラウザを再読み込みしてください。ビルドに失敗した場合は新しい画面が配信されません。手動でソースを変更していて `git pull` が拒否された場合は、変更を確認・退避してから更新してください。標準パスを使う今回の一覧表示更新では、既存のNginx設定や認証ファイルの再配置は不要です。
 
-### 再構築ボタンの有効化（初回のみ）
+### 再構築ボタンの有効化（初回・フック更新時）
 
 一括導入ではこの設定も設置・更新済みです。手動導入の場合は、コードと画面を更新した後、次を実行してください。**既存の `/etc/bbb-recording-editor.env` や認証ファイルを置き換える必要はありません。**
 
@@ -695,12 +705,14 @@ sudo bash editor/deploy/install-rebuild-helper.sh
 | 設置先 | 用途 |
 | --- | --- |
 | `/usr/local/sbin/bbb-recording-editor-rebuild` | root所有のPythonヘルパー。会議IDとXMLのSHA-256を検証し、1会議の `--rebuild` だけを実行 |
+| `/usr/local/bigbluebutton/core/scripts/post_process/00_recording_editor_title.rb` | 公開前に処理済みメタデータへ録画タイトルを復元 |
+| `/usr/local/bigbluebutton/core/scripts/post_publish/00_recording_editor_title.rb` | 公開済みの依頼・形式を記録し、古いタイトルの再適用を防止 |
 | `/etc/sudoers.d/bbb-recording-editor` | `bigbluebutton` ユーザーに上記ヘルパーだけのパスワード不要実行を許可 |
 | `/etc/systemd/system/bbb-recording-editor.service.d/rebuild.conf` | sudoが動作するよう、このサービスの `NoNewPrivileges` をfalseに変更 |
 
 アプリ本体は `bigbluebutton` ユーザーのまま実行します。標準サービス設定は `NoNewPrivileges=true` を維持し、ボタンを有効にする場合だけ専用drop-inで上書きします。ヘルパーはアプリのチェックアウトを参照せず、`/usr/local/sbin` にroot所有のコピーを設置します。引数は内部会議IDとXMLチェックサムの2つだけで、任意コマンド、`--rebuildall`、削除操作は受け付けません。Pythonは隔離モードで起動し、BBBコマンドへ渡す環境も固定します。
 
-標準の `/usr/bin/bbb-record` と `/var/bigbluebutton/recording/raw` を前提にします。保存先を独自に変更した場合は、設置前にヘルパーの `RAW_ROOT` / `BBB_RECORD` を管理者が修正し、BBBの `bigbluebutton.yml` とエディターの設定と一致させてください。Python3、sudo、visudo、bbb-recordが不足すると設置を中止します。ヘルパーを更新した場合も同じ設置スクリプトを再実行します。
+標準の `/usr/bin/bbb-record` を使います。両インストーラーは `/etc/bbb-recording-editor.env` の `BBB_EDITOR_RAW_ROOT`・`BBB_EDITOR_STATE_ROOT`・`BBB_EDITOR_PROCESS_ROOT` をヘルパーとフックへ反映します。処理パスを省略した場合はrawの親から `process/presentation` を導出します。BBB側の保存先設定とも一致させてください。Python3、Ruby・Nokogiri、sudo、visudo、bbb-recordが必要です。ヘルパーやフックを更新した場合も同じ設置スクリプトを再実行します。
 
 ブラウザを再読み込みすると「録画を再構築…」が有効になります。未設置の場合は説明付きで無効表示します。sudoやsystemdの設定が不正な場合は、実行時にエラーを表示します。
 
@@ -846,6 +858,8 @@ sudo tail -n 30 /var/log/nginx/error.log
    sudo rm -f /etc/bbb-recording-editor.env
    sudo rm -f /etc/sudoers.d/bbb-recording-editor
    sudo rm -f /usr/local/sbin/bbb-recording-editor-rebuild
+   sudo rm -f /usr/local/bigbluebutton/core/scripts/post_process/00_recording_editor_title.rb
+   sudo rm -f /usr/local/bigbluebutton/core/scripts/post_publish/00_recording_editor_title.rb
    sudo rm -f /etc/nginx/bbb-recording-editor.htpasswd
    sudo rm -f /etc/nginx/bbb-recording-editor.htpasswd.bak.*
    ```
