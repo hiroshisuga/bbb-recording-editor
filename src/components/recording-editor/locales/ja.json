@@ -231,7 +231,7 @@
   "rebuildKeepTitle": "再構築前の録画タイトル「{title}」を退避し、公開前に復元します。",
   "rebuildVisibilityCheck": "再構築後の公開度を確認してください。公開・非公開、一覧掲載、保護の設定が変わっている場合があります。Greenlightを使用している場合は、Greenlight側で設定し直してください。",
   "cutChimeSound": "チャイム音（全切れ目共通）",
-  "cutChimeSound_a": "A：やわらかい2音",
-  "cutChimeSound_c": "C：木琴風のコト・コト",
+  "cutChimeSound_a": "やわらかい2音",
+  "cutChimeSound_c": "木琴風のコト・コト",
   "cutChimeSound_tape": "早回し音声（キュルキュル）"
 }

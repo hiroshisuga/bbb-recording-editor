@@ -231,7 +231,7 @@
   "rebuildKeepTitle": "The current recording title “{title}” will be saved before rebuilding and restored before publication.",
   "rebuildVisibilityCheck": "Check recording visibility after rebuilding. Publication, listing and protection settings may have changed. If you use Greenlight, restore the desired settings in Greenlight.",
   "cutChimeSound": "Sound (all cuts)",
-  "cutChimeSound_a": "A: Soft two notes",
-  "cutChimeSound_c": "C: Wooden double tap",
+  "cutChimeSound_a": "Soft two notes",
+  "cutChimeSound_c": "Wooden double tap",
   "cutChimeSound_tape": "Fast-forward voice"
 }
