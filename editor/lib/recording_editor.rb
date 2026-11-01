@@ -800,6 +800,21 @@ module RecordingEditor
       end
     end
 
+    def partial_opus(asset, backup, output, masks, effect)
+      return { 'status' => 'full', 'reason' => 'disabled or unsupported source' } unless ENV.fetch('BBB_EDITOR_PARTIAL_OPUS', '1') == '1' &&
+        asset['audio_codec'] == 'opus' && File.extname(asset['relative']).downcase == '.webm' &&
+        !asset['has_video'] && asset['sample_rate'] == 48_000 && [1, 2].include?(asset['channels'])
+      config = { source: backup, output: output, masks: masks, effect: effect,
+                 ffmpeg: rec.repo.ffmpeg, ffprobe: rec.repo.ffprobe }
+      stdout, _stderr, status = Open3.capture3('/usr/bin/python3', File.expand_path('partial_opus.py', __dir__),
+                                              stdin_data: JSON.generate(config))
+      result = JSON.parse(stdout) if status.success?
+      return result if result.is_a?(Hash) && result['status'] == 'partial' && File.file?(output)
+      { 'status' => 'full', 'reason' => result.is_a?(Hash) ? result['reason'] : 'accelerator unavailable' }
+    rescue SystemCallError, JSON::ParserError
+      { 'status' => 'full', 'reason' => 'accelerator unavailable' }
+    end
+
     def redact(beeps, output_dir, progress: ->(_) {}, mute_ranges: [])
       sources = rec.audible_assets
       # Up to 500 beep ranges plus two cue slices for each of 499 cuts.
@@ -838,12 +853,15 @@ module RecordingEditor
         end.join('+')
         envelope = '0' if envelope.empty?
         cue_mask = expression(local_ranges(mute_ranges, asset))
-        filter = "#{CLOCK_RESAMPLE},aeval=exprs='if(#{expression(mask)},if(#{cue_mask},0,0.12*sin(2*PI*1000*t)*(#{envelope})),val(ch))':c=same"
-        command = [rec.repo.ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', backup, '-filter_complex', "[0:a:0]#{filter}[censored]",
+        effect = "aeval=exprs='if(#{expression(mask)},if(#{cue_mask},0,0.12*sin(2*PI*1000*t)*(#{envelope})),val(ch))':c=same"
+        render_info = partial_opus(asset, backup, output, mask, effect)
+        partial = render_info['status'] == 'partial'
+        progress.call('Opus音声を部分再エンコードし、未編集部分をコピーしました。') if partial
+        command = [rec.repo.ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', backup, '-filter_complex', "[0:a:0]#{CLOCK_RESAMPLE},#{effect}[censored]",
                    '-map', '0:v?', '-map', '[censored]', '-c:v', 'copy', '-c:a', codec]
         command += ['-ar', asset['sample_rate'].to_s] if asset['sample_rate']
         command += ['-f', format, output]
-        RecordingEditor.run(*command)
+        RecordingEditor.run(*command) unless partial
         check = rec.repo.probe(output)
         new_length = Float(check.dig('format', 'duration') || 0) * 1000
         expected = asset['file_duration_ms']
@@ -857,7 +875,8 @@ module RecordingEditor
           next unless File.basename(value) == File.basename(asset['filename'])
           replacements[[event['module'], event['eventname'], key, value]] = value.sub(/[^\/]+\z/, name)
         end
-        outputs << { source: asset['relative'], backup: backup, staged: output, relative: relative }
+        outputs << { source: asset['relative'], backup: backup, staged: output, relative: relative,
+                     audio_render: render_info }
         progress.call("音声加工 #{index + 1}/#{sources.size}")
       end
       [replacements, outputs]

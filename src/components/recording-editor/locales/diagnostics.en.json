@@ -86,5 +86,6 @@
   "録画の再構築・処理中はraw保存・初期化・再構築を実行できません。完了後に一覧を更新してください。": "Cannot save raw data, restore original state, or request another rebuild while recording processing is in progress. Refresh the list after it finishes.",
   "保存済みのプレビュー音声と波形を再利用しました。": "Reused the saved preview audio and waveforms.",
   "合図音の設定が不正です。": "Invalid transition-chime setting.",
-  "繋ぎ目の選択が録画範囲と一致しません。選択を確認してください。": "The selected cuts do not match the recording intervals. Review the chime selection."
+  "繋ぎ目の選択が録画範囲と一致しません。選択を確認してください。": "The selected cuts do not match the recording intervals. Review the chime selection.",
+  "Opus音声を部分再エンコードし、未編集部分をコピーしました。": "Re-encoded only the edited Opus regions and copied the unedited audio."
 }

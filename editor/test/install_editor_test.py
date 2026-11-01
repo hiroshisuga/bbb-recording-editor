@@ -22,6 +22,8 @@ class FakeInstaller(module.Installer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.commands = []
+        self.partial_available = True
+        self.fail_partial_install = False
         self.missing = set()
         self.fail_build = self.fail_health = self.fail_nginx = self.fail_stop = False
         self.fail_reload = False
@@ -52,6 +54,11 @@ class FakeInstaller(module.Installer):
             status = 1
         elif args[:2] == ['apt-get', 'install']:
             self.missing.clear()
+            if 'python3-av' in args:
+                status = 1 if self.fail_partial_install else 0
+                self.partial_available = not self.fail_partial_install
+        elif args[0] == 'runuser' and 'import av;' in args[-1]:
+            status = 0 if self.partial_available else 1
         elif args[0] == 'runuser' and args[-1] == 'node_modules/react-scripts/scripts/build.js':
             if self.fail_build:
                 raise module.InstallError('mock build failed')
@@ -118,6 +125,24 @@ class InstallEditorTest(unittest.TestCase):
 
     def journal(self, installer=None):
         return json.loads(((installer or self.installer).backup / 'installation.json').read_text())
+
+    def test_optional_audio_dependencies_are_installed_when_available(self):
+        self.installer.partial_available = False
+        self.install()
+        self.assertIn(['apt-get', 'install', '--yes', 'python3-av', 'libopus0'], [args for args, _ in self.installer.commands])
+        self.assertTrue(self.installer.partial_available)
+
+    def test_optional_audio_dependencies_do_not_break_skip_dependencies_or_failed_apt(self):
+        self.installer.partial_available = False
+        self.options.skip_dependencies = True
+        self.install()
+        self.assertFalse(any('python3-av' in args for args, _ in self.installer.commands))
+        update = self.update_installer()
+        self.options.skip_dependencies = False
+        update.partial_available = False
+        update.fail_partial_install = True
+        self.install(update)
+        self.assertEqual('completed', self.journal(update)['status'])
 
     def test_first_install_builds_without_root_and_configures_everything(self):
         self.install()

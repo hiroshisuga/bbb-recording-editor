@@ -42,7 +42,7 @@ module RecordingEditor
         raise KeyError unless k.is_a?(Array) && k.size == 4 && v.is_a?(String)
         [k, v]
       end
-      media = outputs.map { |o| o.select { |k, _| %w[source backup relative cue].include?(k) }.transform_keys(&:to_sym) }
+      media = outputs.map { |o| o.select { |k, _| %w[source backup relative cue audio_render].include?(k) }.transform_keys(&:to_sym) }
       [mapping, media, cache]
     rescue Error, SystemCallError, KeyError, TypeError, NoMethodError
       nil # Missing, changed or legacy output: regenerate from originals.
