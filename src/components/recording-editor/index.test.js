@@ -109,32 +109,53 @@ test('reused previews are explicitly identified in both languages', async () => 
   expect(container.querySelector('.re-success').textContent).toBe('Reused the saved preview audio and waveforms.');
 });
 
-test('cut chime is opt-in with a warning, supports cancellation and undo, and is saved in drafts/raw', async () => {
-  const checkbox = () => container.querySelector('.re-chime-settings input');
-  expect(checkbox().checked).toBe(false);
+test('per-cut chimes and bulk controls warn on additions and persist only selected gaps', async () => {
+  const ranges = [{ start_ms: 1000, end_ms: 10000 }, { start_ms: 20000, end_ms: 30000 }, { start_ms: 40000, end_ms: 59000 }];
+  const first = { start_ms: 10000, end_ms: 20000 }, second = { start_ms: 30000, end_ms: 40000 };
+  let saved = { ...manifest, record_ranges: ranges, original_record_ranges: ranges, cut_chime_gaps: [] };
+  const fetch = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => {
+    if (url.endsWith(`/${id}`)) return { ok: true, json: async () => saved };
+    if (url.endsWith('/save')) saved = { ...saved, ...JSON.parse(options.body) };
+    return fetch(url, options);
+  });
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const boxes = () => [...container.querySelectorAll('.re-chime-row input')];
+  expect(boxes().map(b => b.checked)).toEqual([false, false]);
   expect(container.querySelector('.re-chime-settings audio').src).toContain('/api/cut-chime.wav');
-  await act(async () => Simulate.change(checkbox(), { target: { checked: true } }));
-  expect(checkbox().checked).toBe(false);
+  await click('すべてに追加');
   expect(container.querySelector('[role="alertdialog"]').textContent).toContain('映像・スライド・チャット');
   await click('キャンセル');
-  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
-  expect(checkbox().checked).toBe(false);
+  expect(boxes().map(b => b.checked)).toEqual([false, false]);
   expect(button('rawデータへ保存…').disabled).toBe(true);
-  await act(async () => Simulate.change(checkbox(), { target: { checked: true } }));
+  await act(async () => Simulate.change(boxes()[1], { target: { checked: true } }));
+  expect(boxes()[1].checked).toBe(false);
   await click('確認して有効にする');
-  expect(checkbox().checked).toBe(true);
-  await click('↶ 元に戻す'); expect(checkbox().checked).toBe(false);
-  await click('↷ やり直す'); expect(checkbox().checked).toBe(true);
-  await language('en');
-  expect(container.querySelector('.re-chime-settings').textContent).toContain('Add a chime');
-  await language('ja');
+  expect(boxes().map(b => b.checked)).toEqual([false, true]);
+  await click('↶ 元に戻す'); expect(boxes().map(b => b.checked)).toEqual([false, false]);
+  await click('↷ やり直す'); expect(boxes().map(b => b.checked)).toEqual([false, true]);
   await click('下書きを保存');
-  expect(calls.find(c => c.url.endsWith('/draft')).payload.cut_chime).toBe(true);
+  expect(calls.find(c => c.url.endsWith('/draft')).payload.cut_chime_gaps).toEqual([second]);
+  await click('すべてに追加'); await click('確認して有効にする');
+  expect(boxes().map(b => b.checked)).toEqual([true, true]);
+  await act(async () => Simulate.change(boxes()[1], { target: { checked: false } }));
+  expect(boxes().map(b => b.checked)).toEqual([true, false]);
   await click('rawデータへ保存…');
   expect(container.querySelector('.re-review').textContent).toContain('最大0.25秒');
   await click('バックアップを作成して保存');
-  expect(calls.find(c => c.url.endsWith('/save')).payload.cut_chime).toBe(true);
-  expect(calls.find(c => c.url.endsWith('/save')).payload.record_ranges).toEqual(manifest.record_ranges);
+  expect(calls.find(c => c.url.endsWith('/save')).payload.cut_chime_gaps).toEqual([first]);
+  expect(calls.find(c => c.url.endsWith('/save')).payload.record_ranges).toEqual(ranges);
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(boxes().map(b => b.checked)).toEqual([true, false]);
+  await language('en');
+  expect(button('Remove all chimes').disabled).toBe(false);
+  await click('Remove all chimes');
+  expect(boxes().map(b => b.checked)).toEqual([false, false]);
+  expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+  await click('Save draft');
+  const latest = calls.filter(c => c.url.endsWith('/draft')).pop().payload;
+  expect(latest.cut_chime_gaps).toEqual([]); expect(latest.cut_chime).toBe(false);
+  expect(latest.record_ranges).toEqual(ranges);
 });
 
 test('opening and reopening begin unselected and allow entering the start time first', async () => {

@@ -148,8 +148,8 @@ export const audioAdapter = (audio, duration) => ({
   isDisposed: () => false,
 });
 
-// Mirror the server's cut plan for the displayed count; the server derives the
-// actual ranges again when saving. Original OFF gaps and outer trims are skipped.
+// Legacy all-or-nothing selection migration: preserve only the original
+// eligible edited cuts when opening a recording or draft saved before per-cut controls.
 export const cutChimeRanges = (ranges, original, duration) => {
   const records = normalizeRanges(ranges, duration);
   const baseline = original.length ? original : [{ start_ms: 0, end_ms: duration }];
@@ -158,4 +158,24 @@ export const cutChimeRanges = (ranges, original, duration) => {
     return to - from >= 20 && baseline.some(r => r.start_ms < to && r.end_ms > from)
       ? [{ start_ms: from, end_ms: Math.min(from + 250, to) }] : [];
   });
+};
+
+// A selection identifies the entire omitted gap, not the short cue interval.
+export const cutChimeGaps = (ranges, duration) => {
+  const records = normalizeRanges(ranges, duration);
+  return records.slice(0, -1).flatMap((left, i) => records[i + 1].start_ms - left.end_ms >= 20
+    ? [{ start_ms: left.end_ms, end_ms: records[i + 1].start_ms }] : []);
+};
+export const sameChimeGap = (a, b) => a.start_ms === b.start_ms && a.end_ms === b.end_ms;
+export const retainChimeGaps = (ranges, selected, duration) => cutChimeGaps(ranges, duration)
+  .filter(gap => selected.some(item => sameChimeGap(gap, item)));
+export const readEditorEdit = (data, duration = data.duration_ms) => {
+  const records = data.record_ranges || [];
+  let selected = data.cut_chime_gaps;
+  if (!Array.isArray(selected)) {
+    const oldCues = data.cut_chime ? cutChimeRanges(records, data.original_record_ranges || [], duration) : [];
+    selected = cutChimeGaps(records, duration).filter(gap => oldCues.some(cue => cue.start_ms === gap.start_ms));
+  }
+  return { record_ranges: records, beep_ranges: data.beep_ranges || [],
+    cut_chime_gaps: retainChimeGaps(records, selected, duration) };
 };
