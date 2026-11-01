@@ -939,9 +939,11 @@ test('rebuild requires saved edits and a separate confirmation, then reports a r
   expect(calls.some(call => call.url.endsWith('/rebuild'))).toBe(false);
   const review = container.querySelector('.re-rebuild-review');
   expect(review.textContent).toContain('削除され、作り直されます');
-  expect(review.textContent).toContain('非公開状態の維持は保証されません');
+  expect(review.textContent).toContain('公開度は自動復元されません');
+  expect(review.textContent).toContain('Greenlightのデフォルトに戻る場合');
   await language('en');
   expect(review.textContent).toContain('Unsaved edits and drafts are not included');
+  expect(review.textContent).toContain('resetting them to Greenlight defaults');
   await click('Confirm and request rebuild');
   const rebuild = calls.find(call => call.url.endsWith('/rebuild'));
   expect(rebuild.payload).toEqual({ revision: 'revision-one', confirmed: true });
@@ -970,9 +972,15 @@ test('polling a completed rebuild updates the message and unlocks raw saving', a
     const originalMock = global.fetch.getMockImplementation();
     global.fetch.mockImplementation(async (url, options) => !options?.method && url.endsWith('/rebuild')
       ? { ok: true, json: async () => ({ available: true, status: 'completed' }) }
-      : originalMock(url, options));
+      : url.endsWith(`/${id}`)
+        ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status: 'completed' } }) }
+        : originalMock(url, options));
     await act(async () => { jest.advanceTimersByTime(5000); });
     expect(container.querySelector('.re-success').textContent).toContain('録画の再構築が完了しました');
+    expect(container.querySelector('.re-visibility-check').textContent).toContain('Greenlight側で設定し直してください');
+    await language('en');
+    expect(container.querySelector('.re-visibility-check').textContent).toContain('Check recording visibility after rebuilding');
+    await language('ja');
     expect(button('rawデータへ保存…').disabled).toBe(true);
     expect(button('録画を再構築…').disabled).toBe(false);
     await selectRange();

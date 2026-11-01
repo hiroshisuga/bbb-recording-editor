@@ -118,7 +118,7 @@
   "rebuildReviewTitle": "録画再構築の確認",
   "rebuildReviewDetails": "保存済みのevents.xmlと音声素材のrawデータを使って、この会議の録画再構築をBBBに依頼します。画面上の未保存の変更や下書きは使いません。",
   "rebuildWarning": "既存の公開・非公開の再生用録画は、インストール済みの全録画形式について削除され、作り直されます。完了するまで視聴できなくなります。rawデータの元ファイルとエディターのバックアップは保持します。",
-  "rebuildPublishedWarning": "処理はBBBの通常のキューで実行されます。非公開状態の維持は保証されません。再構築後に公開状態を確認し、必要なら非公開へ戻してください。",
+  "rebuildPublishedWarning": "公開度は自動復元されません。BBBの再構築やGreenlightの録画完了通知により、公開・非公開、一覧掲載、保護の設定が変わり、Greenlightのデフォルトに戻る場合があります。完了後に公開度を確認してください。Greenlightを使用している場合は、Greenlight側で設定し直してください。",
   "confirmRebuild": "確認して再構築を依頼",
   "requestingRebuild": "録画の再構築を依頼しています…",
   "rebuildRequested": "録画の再構築を依頼済みです。まだ完了していません。BBBの処理完了を待っています。",
@@ -228,5 +228,6 @@
   "cutChimeAcceptAndSkip": "追加して今後確認しない",
   "cutChimeRestoreConfirm": "確認を再表示",
   "rebuildTitleFailed": "録画タイトルの復元を確認できませんでした。公開録画の名前とBBBのpost_processログを確認してください。録画自体の再構築結果とは別の状態です。",
-  "rebuildKeepTitle": "再構築前の録画タイトル「{title}」を退避し、公開前に復元します。"
+  "rebuildKeepTitle": "再構築前の録画タイトル「{title}」を退避し、公開前に復元します。",
+  "rebuildVisibilityCheck": "再構築後の公開度を確認してください。公開・非公開、一覧掲載、保護の設定が変わっている場合があります。Greenlightを使用している場合は、Greenlight側で設定し直してください。"
 }

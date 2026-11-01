@@ -118,7 +118,7 @@
   "rebuildReviewTitle": "Confirm recording rebuild",
   "rebuildReviewDetails": "Ask BigBlueButton to rebuild this meeting using the saved raw events.xml and media. Unsaved edits and drafts are not included.",
   "rebuildWarning": "Existing published and unpublished playback files for all installed recording formats will be removed and regenerated. They will be unavailable until processing completes. Original raw files and editor backups are retained.",
-  "rebuildPublishedWarning": "Processing runs through the normal BigBlueButton queue. Unpublished status is not guaranteed to be preserved. Check publication status afterwards and unpublish again if needed.",
+  "rebuildPublishedWarning": "Visibility is not restored automatically. BBB rebuilding or the Greenlight recording-ready callback may change publication, listing and protection settings, including resetting them to Greenlight defaults. Check visibility after completion. If you use Greenlight, restore the desired settings in Greenlight.",
   "confirmRebuild": "Confirm and request rebuild",
   "requestingRebuild": "Requesting recording rebuild…",
   "rebuildRequested": "Recording rebuild requested. It is not complete yet. Waiting for BigBlueButton to finish processing.",
@@ -228,5 +228,6 @@
   "cutChimeAcceptAndSkip": "Add and don't ask again",
   "cutChimeRestoreConfirm": "Show confirmations again",
   "rebuildTitleFailed": "Recording title restoration could not be verified. Check the published title and BBB post_process logs. This is separate from the recording rebuild result.",
-  "rebuildKeepTitle": "The current recording title “{title}” will be saved before rebuilding and restored before publication."
+  "rebuildKeepTitle": "The current recording title “{title}” will be saved before rebuilding and restored before publication.",
+  "rebuildVisibilityCheck": "Check recording visibility after rebuilding. Publication, listing and protection settings may have changed. If you use Greenlight, restore the desired settings in Greenlight."
 }
