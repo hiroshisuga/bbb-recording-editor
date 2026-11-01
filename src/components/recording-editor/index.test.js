@@ -563,13 +563,14 @@ test('reopening restores saved beep intervals without changing the beep preview 
   expect(useAudioPreview).toHaveBeenLastCalledWith(expect.anything(), beeps, false);
 });
 
-test('language, volume, mute, beep preview, speed and zoom survive reopening the editor', async () => {
+test('language, volume, mute, beep preview, speed, zoom and preview split survive reopening the editor', async () => {
   await volume(37);
   await click('ミュート');
   await act(async () => {
     Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } });
     Simulate.change(container.querySelector('.re-transport select'), { target: { value: '1.5' } });
     Simulate.change(container.querySelector('.re-tools select'), { target: { value: '8' } });
+    Simulate.keyDown(container.querySelector('[role="separator"]'), { key: 'ArrowLeft', shiftKey: true });
   });
   await language('en');
   await act(async () => root.unmount());
@@ -581,12 +582,13 @@ test('language, volume, mute, beep preview, speed and zoom survive reopening the
   expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
   expect(container.querySelector('.re-transport select').value).toBe('1.5');
   expect(container.querySelector('.re-tools select').value).toBe('8');
+  expect(container.querySelector('[role="separator"]').getAttribute('aria-valuenow')).toBe('65');
   const audio = container.querySelector('audio');
   expect(audio.volume).toBeCloseTo(0.37);
   expect(audio.muted).toBe(true);
   expect(audio.playbackRate).toBe(1.5);
   expect(audio.paused).toBe(true);
-  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: false, detailWaveSpan: 10000 });
+  expect(readPreferences()).toEqual({ volume: 0.37, muted: true, lastVolume: 0.37, beepPreview: false, rate: 1.5, zoom: 8, detailWaveOpen: false, detailWaveSpan: 10000, previewSplit: 0.65 });
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
