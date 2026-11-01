@@ -50,6 +50,13 @@ class ServerTest < Minitest::Test
     assert_equal '200', response.code
     assert_equal 'audio/wav', response['Content-Type']
     assert_equal File.binread(RecordingEditor::CutChime::SAMPLE), response.body.b
+    %w[a c tape].each do |sound|
+      response = request("cut-chime.wav?sound=#{sound}")
+      assert_equal '200', response.code
+      assert_equal File.binread(RecordingEditor::CutChime.sample(sound)), response.body.b
+    end
+    assert_equal '400', request('cut-chime.wav?sound=outside').code
+    assert_equal '401', request('cut-chime.wav?sound=c', auth: false).code
     assert_equal '206', request('cut-chime.wav', headers: { 'Range' => 'bytes=0-43' }).code
     assert_equal '405', request('cut-chime.wav', method: Net::HTTP::Post, headers: { 'X-BBB-Editor' => '1' }).code
   end

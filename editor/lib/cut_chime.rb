@@ -5,6 +5,18 @@ module RecordingEditor
     DURATION_MS = 250
     MIN_DURATION_MS = 20 # BBB's minimum Opus cut length.
     SAMPLE = File.expand_path('../assets/cut-cue-a.wav', __dir__)
+    SOUNDS = { 'a' => SAMPLE, 'c' => File.expand_path('../assets/cut-cue-c.wav', __dir__),
+               'tape' => File.expand_path('../assets/cut-cue-tape.wav', __dir__) }.freeze
+
+    def self.sound(payload)
+      value = payload.fetch('cut_chime_sound', 'a')
+      raise Error, 'チャイムの音色が不正です。' unless SOUNDS.key?(value)
+      value
+    end
+
+    def self.sample(sound = 'a')
+      SOUNDS.fetch(self.sound('cut_chime_sound' => sound))
+    end
 
     def self.enabled(payload)
       value = payload.fetch('cut_chime', false)
@@ -71,7 +83,8 @@ module RecordingEditor
       end, duration)
     end
 
-    def self.render(cues, staging, ffmpeg)
+    def self.render(cues, staging, ffmpeg, sound: 'a')
+      sample = self.sample(sound)
       templates = {}
       cues.map do |cue|
         name = "bbb-editor-cue-#{SecureRandom.hex(6)}.wav"
@@ -82,13 +95,13 @@ module RecordingEditor
         if templates[key]
           FileUtils.copy_file(templates[key], output)
         elsif seconds == 0.25 && offset.zero?
-          FileUtils.copy_file(SAMPLE, output)
+          FileUtils.copy_file(sample, output)
         else
-          # Split sound A without a fade/restart at the join. After BBB removes
+          # Split the selected sound without a fade/restart at the join. After BBB removes
           # the middle gap, these PCM slices form the original continuous cue.
           filter = "atrim=start=#{offset}:end=#{offset + seconds},asetpts=PTS-STARTPTS"
           filter += ",afade=t=out:st=#{[seconds - 0.005, 0].max}:d=0.005" if cue['fade_out']
-          RecordingEditor.run(ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', SAMPLE,
+          RecordingEditor.run(ffmpeg, '-nostdin', '-v', 'error', '-y', '-i', sample,
                               '-af', filter, '-c:a', 'pcm_s16le', output)
         end
         templates[key] = output

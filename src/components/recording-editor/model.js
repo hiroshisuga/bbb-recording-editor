@@ -169,6 +169,7 @@ export const cutChimeGaps = (ranges, duration) => {
 export const sameChimeGap = (a, b) => a.start_ms === b.start_ms && a.end_ms === b.end_ms;
 export const retainChimeGaps = (ranges, selected, duration) => cutChimeGaps(ranges, duration)
   .filter(gap => selected.some(item => sameChimeGap(gap, item)));
+export const CUT_CHIME_SOUNDS = ['a', 'c', 'tape'];
 export const readEditorEdit = (data, duration = data.duration_ms) => {
   const records = data.record_ranges || [];
   let selected = data.cut_chime_gaps;
@@ -177,5 +178,6 @@ export const readEditorEdit = (data, duration = data.duration_ms) => {
     selected = cutChimeGaps(records, duration).filter(gap => oldCues.some(cue => cue.start_ms === gap.start_ms));
   }
   return { record_ranges: records, beep_ranges: data.beep_ranges || [],
-    cut_chime_gaps: retainChimeGaps(records, selected, duration) };
+    cut_chime_gaps: retainChimeGaps(records, selected, duration),
+    cut_chime_sound: CUT_CHIME_SOUNDS.includes(data.cut_chime_sound) ? data.cut_chime_sound : 'a' };
 };

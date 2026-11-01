@@ -172,6 +172,8 @@
 /* The cut-chime toolbar stays above the waveform; the cue row shares timeline scrolling. */
 .re-chime-tools { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; padding:5px 0 9px; font-size:11px; }
 .re-chime-tools audio { display:none; }
+.re-chime-tools label { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.re-chime-tools select { max-width:100%; }
 .re-chime-confirm { margin:auto; max-width:min(620px,calc(100vw - 32px)); color:var(--re-text); }
 .re-chime-confirm::backdrop { background:#0008; }
 .re-chime-track { height:43px; }

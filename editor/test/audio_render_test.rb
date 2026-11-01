@@ -22,10 +22,10 @@ class AudioRenderTest < Minitest::Test
     FileUtils.remove_entry(@dir)
   end
 
-  def save(records: @records, beeps: @beeps, chime: true)
+  def save(records: @records, beeps: @beeps, chime: true, sound: 'a')
     RecordingEditor::Editor.new(@repo).save(@id, {
       'revision' => @repo.recording(@id).revision, 'record_ranges' => records,
-      'beep_ranges' => beeps, 'cut_chime' => chime })
+      'beep_ranges' => beeps, 'cut_chime' => chime, 'cut_chime_sound' => sound })
   end
 
   def encodes
@@ -68,6 +68,52 @@ class AudioRenderTest < Minitest::Test
     assert_empty cleared['outputs']
     assert_empty encodes { assert_empty save(beeps: [], chime: false)['outputs'] }
     assert_equal 'mic.wav', @repo.recording(@id).current_doc.at_xpath('/recording/event/filename').text
+  end
+
+  def test_changing_only_sound_reuses_long_media_and_renders_the_selected_pcm_halves
+    first = save
+    media = first['outputs'].reject { |o| o[:cue] }.map { |o| o[:relative] }
+    %w[c tape].each do |sound|
+      result = nil
+      calls = encodes { result = save(sound: sound) }
+      assert calls.all? { |args| args.include?(RecordingEditor::CutChime.sample(sound)) }
+      assert_equal media, result['outputs'].reject { |o| o[:cue] }.map { |o| o[:relative] }
+      decode = ->(path) { RecordingEditor.run('ffmpeg', '-v', 'error', '-i', path, '-f', 's16le', '-') }
+      cues = result['outputs'].select { |o| o[:cue] }.sort_by { |o| o[:cue]['start_ms'] }
+      assert_equal decode.call(RecordingEditor::CutChime.sample(sound)), cues.map { |o| decode.call(File.join(@raw, o[:relative])) }.join
+      assert_equal sound, result['cut_chime_sound']
+      assert_equal sound, @repo.recording(@id).to_h[:cut_chime_sound]
+      assert_empty encodes { save(sound: sound) }
+    end
+    editor = RecordingEditor::Editor.new(@repo)
+    input = { 'revision' => @repo.recording(@id).revision, 'record_ranges' => @records,
+              'beep_ranges' => @beeps, 'cut_chime' => true, 'cut_chime_sound' => 'c' }
+    assert_equal 'c', editor.draft(@id, input)[:cut_chime_sound]
+    editor.reset(@id, { 'revision' => @repo.recording(@id).revision, 'confirmed' => true })
+    assert_equal 'a', @repo.recording(@id).to_h[:cut_chime_sound]
+  end
+
+  def test_previous_single_sound_cache_can_reuse_media_when_a_new_sound_is_selected
+    first = save
+    history_path = File.join(@repo.state_dir(@id), 'saved.json')
+    history = JSON.parse(File.read(history_path))
+    renderer = RecordingEditor::AudioRender.new(@repo.recording(@id))
+    cues = RecordingEditor::CutChime.cues(RecordingEditor::CutChime.gaps(@records))
+    history['audio_render']['key'] = renderer.fingerprint(@beeps, cues, legacy: true)
+    history['audio_render'].delete('media_key')
+    history.delete('cut_chime_sound')
+    File.write(history_path, JSON.generate(history))
+    second = nil
+    calls = encodes { second = save(sound: 'c') }
+    assert calls.all? { |args| args.include?(RecordingEditor::CutChime.sample('c')) }
+    assert_equal first['outputs'].first[:relative], second['outputs'].first[:relative]
+  end
+
+  def test_invalid_sound_does_not_change_raw_or_create_a_save
+    bytes = File.binread(File.join(@raw, 'events.xml'))
+    assert_raises(RecordingEditor::Error) { save(sound: '../outside') }
+    assert_equal bytes, File.binread(File.join(@raw, 'events.xml'))
+    assert_empty Dir.glob(File.join(@repo.state_dir(@id), 'edit-*.json'))
   end
 
   def test_changed_beep_or_chime_regenerates_from_original_and_preserves_old_files

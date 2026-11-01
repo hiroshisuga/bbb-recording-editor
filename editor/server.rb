@@ -70,7 +70,7 @@ module RecordingEditor
       case path
       when '/api/cut-chime.wav'
         require_method(req, 'GET', 'HEAD')
-        serve_file(req, res, CutChime::SAMPLE)
+        serve_file(req, res, CutChime.sample(req.query.fetch('sound', 'a')))
       when '/api/recordings'
         require_method(req, 'GET')
         json(res, @repo.list)
