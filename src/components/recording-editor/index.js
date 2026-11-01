@@ -260,6 +260,7 @@ function Editor() {
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
+  const [requestedRebuildId, setRequestedRebuildId] = useState(null);
   const [error, setError] = useState('');
   const [review, setReview] = useState(false);
   const [rebuildReview, setRebuildReview] = useState(false);
@@ -367,6 +368,7 @@ function Editor() {
   };
   const open = async id => {
     setBusy({ id: 'loadingMedia' }); setError(''); setMessage(''); setReview(false); setRebuildReview(false); setResetReview(false);
+    setRequestedRebuildId(null);
     audio?.pause(); setRecording(null); setPreview(null); setTime(0); setPlaying(false);
     try {
       const data = await request(`/recordings/${id}`);
@@ -397,9 +399,11 @@ function Editor() {
   };
   const rebuild = async () => {
     if (rebuildBlock) return;
+    setRequestedRebuildId(null);
     setBusy({ id: 'requestingRebuild' }); setError(''); audio?.pause();
     try {
       const result = await runJob(`/recordings/${recording.id}/rebuild`, { revision: recording.revision, confirmed: true });
+      setRequestedRebuildId(recording.id);
       setRecording(current => ({ ...current, rebuild: result })); setRebuildReview(false);
       setMessage({ id: result.status === 'completed' ? 'rebuildCompleted' : 'rebuildRequested' });
       await refreshList();
@@ -443,7 +447,7 @@ function Editor() {
         {recording.playback_sync === 'reflected' && !rebuilding && <p className="re-muted">{t('rawReflected')}</p>}
         {rebuildBlock && !busy && <div id="re-rebuild-reason" className="re-warnings"><p>{rebuildBlock}</p>{!recording.rebuild?.available && <><p>{t('rebuildInstallHint')}</p><code>sudo bash editor/deploy/install-rebuild-helper.sh</code></>}</div>}
         {rebuilding && <div className="re-notice" role="status">{t(rebuildPending ? 'rebuildRequested' : 'rebuildBlockedProcessing')}</div>}
-        {recording.rebuild?.status === 'completed' && !rebuilding && <div className="re-warnings re-visibility-check" role="note">{t('rebuildVisibilityCheck')}</div>}
+        {message?.id === 'rebuildCompleted' && requestedRebuildId === recording.id && !rebuilding && <div className="re-warnings re-visibility-check" role="note">{t('rebuildVisibilityCheck')}</div>}
         {['failed', 'command_failed'].includes(recording.rebuild?.status) && <div className="re-error" role="alert">{t('rebuildFailed')}</div>}
         {recording.rebuild?.title_restore === 'failed' && <div className="re-error" role="alert">{t('rebuildTitleFailed')}</div>}
         <div className="re-reset"><button disabled={!!busy || rebuilding || !recording.reset?.available} onClick={() => { setResetReview(!resetReview); setReview(false); setRebuildReview(false); }}>{t('resetOriginal')}</button>{!recording.reset?.available && <small>{t('resetUnavailable')}</small>}</div>
