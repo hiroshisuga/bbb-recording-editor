@@ -62,6 +62,17 @@ function TimeField({ value, onChange, label, max, onFocus, optional = false }) {
     placeholder={optional ? t('endpointUnset') : undefined} aria-invalid={invalid} value={text} onFocus={onFocus} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
+function RecordingEvents({ events, time, seek }) {
+  const { t } = useEditorI18n();
+  const [open, setOpen] = useState(false);
+  return <section className="re-events">
+    <h3><button aria-expanded={open} aria-controls="re-event-list" onClick={() => setOpen(value => !value)}>
+      <span aria-hidden="true">{open ? '▾' : '▸'}</span> {t('events')}
+    </button></h3>
+    {open && <div id="re-event-list">{events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div>}
+  </section>;
+}
+
 function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, busy, clock, detail }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
@@ -537,7 +548,7 @@ function Editor() {
           {toggle => <>
           <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} busy={!!busy || rebuilding}
             detail={detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />} />
-          <section className="re-events"><h3>{t('events')}</h3><div>{recording.events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div></section>
+
         <section className="re-audio-settings" aria-label={t('audioSettings')}><h3>{t('audioSettings')}</h3><div>
           <span className="re-volume"><button disabled={!audio} aria-pressed={silent} onClick={toggleMute}>{t(silent ? 'unmute' : 'mute')}</button>
             <label>{t('volume')} <input type="range" aria-label={t('volume')} min="0" max="100" step="1" value={Math.round(volume * 100)} disabled={!audio} onChange={changeVolume} /></label><output>{Math.round(volume * 100)}%</output>
@@ -547,6 +558,7 @@ function Editor() {
         </div></section>
           </>}
         </CutChimeControl>
+        <RecordingEvents key={`events:${recording.id}`} events={recording.events} time={time} seek={seek} />
       </>}
     </main></div>
   </div>;

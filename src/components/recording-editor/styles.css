@@ -229,3 +229,5 @@
   .re-volume { flex-wrap:wrap; max-width:100%; }
   .re-volume label,.re-detail-tools label { flex-wrap:wrap; }
 }
+
+.recording-editor .re-events>h3>button { display:flex; align-items:center; gap:6px; padding:0; border:0; font:inherit; }
