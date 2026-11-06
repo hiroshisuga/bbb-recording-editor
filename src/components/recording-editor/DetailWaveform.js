@@ -207,7 +207,7 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
   return <section className="re-detail-wave" aria-label={t('detailWave')}>
     <div className="re-detail-tools"><strong>{t('detailWave')}</strong><label>{t('detailSpan')} <select aria-label={t('detailSpan')} value={span} onChange={e => setSpan(Number(e.target.value))}>
       {[5000, 10000, 30000].map(ms => <option key={ms} value={ms}>{t('detailSeconds', { seconds: ms / 1000 })}</option>)}
-    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-detail-record-legend">{t('keep')}</span><span className="re-muted">{t('detailHint')}</span></div>
+    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-detail-record-legend">{t('keep')}</span></div>
     {(!following || time < start || time > start + width) && <div className="re-detail-view-state" role="status">
       {!following && <span>{t('detailFollowPaused')}</span>}
       {time < start ? <span>{t('detailPlayheadBefore')}</span> : time > start + width ? <span>{t('detailPlayheadAfter')}</span> : null}

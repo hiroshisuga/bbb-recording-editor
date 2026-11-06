@@ -178,7 +178,7 @@ test('timeline cut chimes warn on additions and persist only selected gaps throu
   expect(cues()).toHaveLength(0);
   expect(container.querySelector('.re-chime-tools audio').src).toContain('/api/cut-chime.wav');
   expect(container.querySelector('.re-chime-track').previousElementSibling.classList.contains('record_ranges')).toBe(true);
-  expect(container.querySelector('.re-chime-settings')).toBeNull();
+  expect(container.querySelector('.re-chime-editor').lastElementChild.classList.contains('re-chime-settings')).toBe(true);
   await click('すべての切れ目にチャイム');
   expect(container.querySelector('[role="alertdialog"]').textContent).toContain('映像・スライド・チャット');
   await click('キャンセル'); expect(cues()).toHaveLength(0);
@@ -343,7 +343,7 @@ test('shift-click selects from the playhead to the beginning before excluding th
   expect(button('↶ 元に戻す').disabled).toBe(true);
   expect(button('rawデータへ保存…').disabled).toBe(true);
   await click('録画から除外');
-  expect(container.querySelector('[aria-label="録画に残す区間1 開始"]').value).toBe('00:00:15.000');
+  expect(container.querySelector('.record_ranges .re-bar').dataset.tooltip).toBe('00:00:15.000 – 00:00:59.000');
   expect(button('↶ 元に戻す').disabled).toBe(false);
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
@@ -419,8 +419,7 @@ test('shift-click uses the zoomed and scrolled timeline coordinates before addin
   expect(audio.currentTime).toBe(5);
   expect(container.querySelector('.re-bar')).toBeNull();
   await click('録画に残す');
-  expect(container.querySelector('[aria-label="録画に残す区間1 開始"]').value).toBe('00:00:05.000');
-  expect(container.querySelector('[aria-label="録画に残す区間1 終了"]').value).toBe('00:00:35.000');
+  expect(container.querySelector('.record_ranges .re-bar').dataset.tooltip).toBe('00:00:05.000 – 00:00:35.000');
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
@@ -459,8 +458,7 @@ test.each([
   expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
   expect(button('rawデータへ保存…').disabled).toBe(true);
   await click('録画から除外');
-  expect(container.querySelector('[aria-label="録画に残す区間1 終了"]').value).toBe('00:00:10.000');
-  expect(container.querySelector('[aria-label="録画に残す区間2 開始"]').value).toBe('00:00:20.000');
+  expect([...container.querySelectorAll('.record_ranges .re-bar')].map(bar => bar.dataset.tooltip)).toEqual(['00:00:01.000 – 00:00:10.000', '00:00:20.000 – 00:00:59.000']);
   expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
 });
 
@@ -566,7 +564,7 @@ test('beep removal can split an interval, undo, delete an entire ribbon and save
   expect(draft.record_ranges).toEqual(manifest.record_ranges);
   await act(async () => Simulate.click(beepBars()[0]));
   await click('選択範囲のピー音を除去'); expect(beepBars()).toHaveLength(1);
-  expect(container.querySelectorAll('.re-range-list')).toHaveLength(1);
+  expect(container.querySelectorAll('.re-range-list')).toHaveLength(0);
   await act(async () => Simulate.contextMenu(beepBars()[0], { clientX: 200, clientY: 200 }));
   await act(async () => Simulate.click(document.querySelector('.re-beep-menu [role="menuitem"]')));
   expect(beepBars()).toHaveLength(0);
@@ -809,13 +807,13 @@ test('clicking a later time during playback continues timeline paging without pa
 
 test('reopening restores saved beep intervals without changing the beep preview preference', async () => {
   const beeps = [{ start_ms: 6500, end_ms: 9500 }];
-  const checkbox = container.querySelector('.re-transport input[type="checkbox"]');
+  const checkbox = container.querySelector('.re-audio-settings input[type="checkbox"]');
   await act(async () => { Simulate.change(checkbox, { target: { checked: false } }); });
   global.fetch.mockImplementation(async url => ({ ok: true, json: async () => url.endsWith('/preview')
     ? { status: 'done', result: { audio_url: '/demo.webm', peaks: [] } } : { ...manifest, beep_ranges: beeps } }));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
   expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:06.500 – 00:00:09.500');
-  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(container.querySelector('.re-audio-settings input[type="checkbox"]').checked).toBe(false);
   expect(useAudioPreview).toHaveBeenLastCalledWith(expect.anything(), beeps, false);
 });
 
@@ -823,7 +821,7 @@ test('language, volume, mute, beep preview, speed, zoom and preview split surviv
   await volume(37);
   await click('ミュート');
   await act(async () => {
-    Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } });
+    Simulate.change(container.querySelector('.re-audio-settings input[type="checkbox"]'), { target: { checked: false } });
     Simulate.change(container.querySelector('.re-transport select'), { target: { value: '1.5' } });
     Simulate.change(container.querySelector('.re-tools select'), { target: { value: '8' } });
     Simulate.keyDown(container.querySelector('[role="separator"]'), { key: 'ArrowLeft', shiftKey: true });
@@ -835,7 +833,7 @@ test('language, volume, mute, beep preview, speed, zoom and preview split surviv
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   expect(container.querySelector('.re-language select').value).toBe('en');
   expect(container.querySelector('.re-volume input').value).toBe('37');
-  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(container.querySelector('.re-audio-settings input[type="checkbox"]').checked).toBe(false);
   expect(container.querySelector('.re-transport select').value).toBe('1.5');
   expect(container.querySelector('.re-tools select').value).toBe('8');
   expect(container.querySelector('[role="separator"]').getAttribute('aria-valuenow')).toBe('65');
@@ -863,12 +861,12 @@ test('unmuting from zero after reopening restores the remembered nonzero volume'
 test('resetting a recording preserves listening preferences', async () => {
   await volume(25);
   await click('ミュート');
-  await act(async () => Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } }));
+  await act(async () => Simulate.change(container.querySelector('.re-audio-settings input[type="checkbox"]'), { target: { checked: false } }));
   await click('初期状態に戻す…');
   await click('確認して初期状態に戻す');
   expect(container.querySelector('audio').volume).toBeCloseTo(0.25);
   expect(container.querySelector('audio').muted).toBe(true);
-  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(container.querySelector('.re-audio-settings input[type="checkbox"]').checked).toBe(false);
 });
 
 test('preferences remain editable when browser storage is blocked', async () => {
@@ -879,9 +877,9 @@ test('preferences remain editable when browser storage is blocked', async () => 
   await act(async () => root.render(<RecordingEditor />));
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   await volume(20);
-  await act(async () => Simulate.change(container.querySelector('.re-transport input[type="checkbox"]'), { target: { checked: false } }));
+  await act(async () => Simulate.change(container.querySelector('.re-audio-settings input[type="checkbox"]'), { target: { checked: false } }));
   expect(container.querySelector('audio').volume).toBeCloseTo(0.2);
-  expect(container.querySelector('.re-transport input[type="checkbox"]').checked).toBe(false);
+  expect(container.querySelector('.re-audio-settings input[type="checkbox"]').checked).toBe(false);
   expect(container.querySelector('[role="alert"]')).toBeNull();
 });
 
@@ -976,8 +974,8 @@ test('record-off splits the range and bad time input cannot edit it', async () =
   await time('選択開始', '00:00:06.500');
   await time('選択終了', '00:00:09.500');
   await click('録画から除外');
-  await time('録画に残す区間1 開始', '00:61:00');
-  expect(container.querySelector('[aria-label="録画に残す区間1 開始"]').classList.contains('invalid')).toBe(true);
+  await time('選択開始', '00:61:00');
+  expect(container.querySelector('[aria-label="選択開始"]').classList.contains('invalid')).toBe(true);
   await click('下書きを保存');
   expect(calls.find(c => c.url.endsWith('/draft')).payload.record_ranges).toEqual([
     { start_ms: 1000, end_ms: 6500 }, { start_ms: 9500, end_ms: 59000 },
@@ -1263,8 +1261,9 @@ test('overview clock responds to unsaved keep/chime edits and keeps original-tim
   expect(container.querySelector('.re-transport .re-edited-position').textContent).toBe('00:00:15.250');
   expect(container.querySelector('.re-transport').textContent).toContain('編集後（現在の設定）');
   const requestsBefore = calls.length;
-  const startLabel = container.querySelector('.re-range-row input').getAttribute('aria-label');
-  await time(startLabel, '00:00:11.000');
+  await time('選択開始', '00:00:10.000');
+  await time('選択終了', '00:00:11.000');
+  await click('録画から除外');
   expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:14.250');
   await act(async () => Simulate.click(container.querySelectorAll('.re-chime-tools button')[1]));
   expect(container.querySelector('.re-edited-position').textContent).toBe('00:00:14.000');
@@ -1276,4 +1275,64 @@ test('overview clock responds to unsaved keep/chime edits and keeps original-tim
   await language('en');
   expect(container.querySelector('.re-transport').textContent).toContain('Edited time (current settings)');
   expect(container.querySelector('.re-edited-position').textContent).toContain('Not in recording');
+});
+
+
+test('editing controls precede adjacent audio views, with audio and chime settings below the tracks', async () => {
+  await click('詳細波形を表示');
+  const before = (first, second) => expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const panel = container.querySelector('.re-selection-panel');
+  expect(panel.contains(button('▶ 再生'))).toBe(true);
+  expect(panel.contains(container.querySelector('.re-transport select'))).toBe(true);
+  before(panel, container.querySelector('.re-audio-waveforms'));
+  const waveforms = container.querySelector('.re-audio-waveforms');
+  expect(waveforms.firstElementChild.className).toBe('re-timeline-scroll');
+  expect(waveforms.firstElementChild.nextElementSibling.className).toBe('re-detail-wave');
+  before(waveforms, container.querySelector('.re-track-scroll'));
+  before(container.querySelector('.re-track-scroll'), container.querySelector('.re-audio-settings'));
+  before(container.querySelector('.re-audio-settings'), container.querySelector('.re-chime-settings'));
+  expect(container.querySelector('.re-range-list')).toBeNull();
+  expect(container.querySelector('.re-detail-tools').textContent).not.toContain('ドラッグ');
+  expect(container.querySelector('audio')).toBe(container.querySelector('.re-audio-settings audio'));
+});
+
+test('overview and track scrolls stay aligned in either direction and after zoom centering', async () => {
+  const overview = container.querySelector('.re-timeline-scroll');
+  const tracks = container.querySelector('.re-track-scroll');
+  const timeline = container.querySelector('.re-timeline');
+  Object.defineProperty(overview, 'clientWidth', { value: 300 });
+  Object.defineProperty(timeline, 'offsetWidth', { get: () => parseFloat(timeline.style.width) * 3 });
+  Object.defineProperty(overview, 'scrollWidth', { get: () => timeline.offsetWidth });
+  const audio = container.querySelector('audio');
+  audio.currentTime = 30;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  await act(async () => Simulate.change(container.querySelector('.re-tools select'), { target: { value: '4' } }));
+  expect(overview.scrollLeft).toBe(450);
+  expect(tracks.scrollLeft).toBe(450);
+  await act(async () => { overview.scrollLeft = 600; overview.dispatchEvent(new Event('scroll')); });
+  expect(tracks.scrollLeft).toBe(600);
+  await act(async () => { tracks.scrollLeft = 200; tracks.dispatchEvent(new Event('scroll')); });
+  expect(overview.scrollLeft).toBe(200);
+  expect(audio.currentTime).toBe(30);
+  expect(calls.some(call => /\/(save|draft|reset)$/.test(call.url))).toBe(false);
+});
+
+test('click and drag selection work in the separate track pane', async () => {
+  const overview = container.querySelector('.re-timeline');
+  const tracks = container.querySelector('.re-track-timeline');
+  overview.getBoundingClientRect = () => ({ left: 100, width: 600 });
+  tracks.setPointerCapture = jest.fn();
+  await selectRange();
+  await timelineClick(tracks, 115, { shiftKey: false });
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:03.000');
+  expect(container.querySelector('audio').currentTime).toBe(1.5);
+  await act(async () => {
+    for (const [type, clientX] of [['pointerdown', 200], ['pointermove', 300], ['pointerup', 300]]) {
+      const event = new MouseEvent(type, { bubbles: true, clientX, button: 0 });
+      Object.assign(event, { pointerId: 1 }); tracks.dispatchEvent(event);
+    }
+  });
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:20.000');
 });
