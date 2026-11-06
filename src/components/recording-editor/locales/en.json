@@ -40,6 +40,7 @@
   "redo": "↷ Redo",
   "zoom": "Zoom",
   "dragHint": "Click the waveform to seek; a complete selection releases the nearer endpoint and keeps the farther one. Incomplete endpoints are kept. Drag to select, or Shift-click to select from the playhead. Drag interval edges to adjust them.",
+  "audioSettings": "Audio settings",
   "selection": "Selection",
   "selectionStart": "Selection start",
   "selectionEnd": "Selection end",

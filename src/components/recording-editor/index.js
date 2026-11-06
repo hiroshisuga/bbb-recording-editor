@@ -14,6 +14,7 @@ import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
+import useTimelineScrollSync from './useTimelineScrollSync';
 import TimelineTooltip from './TimelineTooltip';
 import useEditorPreferences, { PLAYBACK_RATES, TIMELINE_ZOOMS } from './preferences';
 import useExternalVideoTitles from './useExternalVideoTitles';
@@ -61,30 +62,11 @@ function TimeField({ value, onChange, label, max, onFocus, optional = false }) {
     placeholder={optional ? t('endpointUnset') : undefined} aria-invalid={invalid} value={text} onFocus={onFocus} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-function RangeRows({ label, ranges, onChange, duration, seek }) {
-  const { t } = useEditorI18n();
-  return <div className="re-range-list"><h3>{label} <small>{t('rangeCount', { count: ranges.length })}</small></h3>
-    {!ranges.length && <p className="re-muted">{t('noRanges')}</p>}
-    {ranges.map((r, i) => <div className="re-range-row" key={i}>
-      <button title={t('seekStart')} onClick={() => seek(r.start_ms)}>{i + 1}</button>
-      <TimeField label={t('rangeStart', { label, number: i + 1 })} value={r.start_ms} max={duration} onChange={v => {
-        if (v >= r.end_ms) return false;
-        onChange(ranges.map((item, index) => index === i ? { ...item, start_ms: v } : item)); return true;
-      }} />
-      <span>–</span>
-      <TimeField label={t('rangeEnd', { label, number: i + 1 })} value={r.end_ms} max={duration} onChange={v => {
-        if (v <= r.start_ms) return false;
-        onChange(ranges.map((item, index) => index === i ? { ...item, end_ms: v } : item)); return true;
-      }} />
-      <button title={t('deleteRange')} aria-label={t('rangeDelete', { label, number: i + 1 })} onClick={() => onChange(ranges.filter((_, index) => index !== i))}>×</button>
-    </div>)}
-  </div>;
-}
-
-function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, busy, clock }) {
+function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, busy, clock, detail }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
   const scrollRef = useRef(null);
+  const tracksRef = useRef(null);
   const shiftSelection = useRef(false);
   const [beepMenu, setBeepMenu] = useState(null);
   const closeBeepMenu = useCallback(() => setBeepMenu(null), []);
@@ -115,6 +97,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const duration = recording.duration_ms || 1;
   const presentations = useMemo(() => presentationRanges(recording.events, duration), [recording.events, duration]);
   const follow = useTimelineFollow(scrollRef, ref, { time, duration, playing, zoom, recordingId: recording.id });
+  useTimelineScrollSync(scrollRef, tracksRef, zoom);
   const pct = ms => `${ms / duration * 100}%`;
   const position = e => {
     const bounds = ref.current.getBoundingClientRect();
@@ -214,12 +197,33 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       {rangeHandle(kind, label, r, i, 'start_ms')}<span>{i + 1}</span>{rangeHandle(kind, label, r, i, 'end_ms')}
     </div>)}
   </div>;
-  return <><div className="re-timeline-scroll" ref={scrollRef} onPointerDownCapture={follow.onPointerDownCapture} onWheelCapture={follow.onWheelCapture} onKeyDownCapture={follow.onKeyDownCapture} onScroll={follow.onScroll}><div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} onPointerDownCapture={selectFromPlayhead} onClickCapture={suppressShiftClick} onPointerCancelCapture={() => { shiftSelection.current = false; }} onPointerDown={select}>
+  const pointerHandlers = {
+    onPointerDownCapture: selectFromPlayhead, onClickCapture: suppressShiftClick,
+    onPointerCancelCapture: () => { shiftSelection.current = false; }, onPointerDown: select,
+  };
+  const navigationHandlers = {
+    onPointerDownCapture: follow.onPointerDownCapture, onWheelCapture: follow.onWheelCapture,
+    onKeyDownCapture: follow.onKeyDownCapture,
+  };
+  const overlays = <>
+    {isValidSelection(selection) && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
+    <div className="re-playhead" style={{ left: pct(time) }} />
+  </>;
+  return <><div className="re-audio-waveforms">
+    <div className="re-timeline-scroll" ref={scrollRef} {...navigationHandlers} onScroll={follow.onScroll}>
+      <div className="re-timeline" ref={ref} style={{ width: `${zoom * 100}%` }} {...pointerHandlers}>
     <div className="re-ruler" aria-label={t('sourceClock')}>{Array.from({ length: 11 }, (_, i) => <span key={i} style={{ left: `${i * 10}%` }}>{formatTime(duration * i / 10).slice(0, 8)}</span>)}</div>
     <EditedRuler clock={clock} positions={Array.from({ length: 11 }, (_, i) => duration * i / 10)} overview />
     <div className="re-wave"><span className="re-track-label">{t('meetingAudio')}</span><svg viewBox="0 0 2048 64" preserveAspectRatio="none" aria-label={t('waveform')}>
       {(peaks || []).map((p, i) => <line key={i} x1={i} x2={i} y1={32 - Math.min(1, p) * 30} y2={32 + Math.min(1, p) * 30} />)}
     </svg>{!peaks && <span className="re-wave-pending">{t('wavePending')}</span>}</div>
+    {overlays}<SelectionMarkers selection={selection} start={0} end={duration} />
+    </div></div>
+    {detail}
+    <SelectionOffscreen selection={selection} start={view.start} end={view.end} onShow={follow.showTime} />
+  </div>
+  <div className="re-track-scroll" ref={tracksRef} {...navigationHandlers}>
+    <div className="re-track-timeline" style={{ width: `${zoom * 100}%` }} {...pointerHandlers}>
     {rangeTrack('record_ranges', t('keep'))}
     <div className="re-track re-chime-track" role="group" aria-label={t('cutChime')}>
       <span className="re-track-label">{t('cutChimeTrack')}</span>
@@ -266,10 +270,11 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
         </React.Fragment>;
       })}
     </div>
-    {isValidSelection(selection) && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
-    <SelectionMarkers selection={selection} start={0} end={duration} />
-    <div className="re-playhead" style={{ left: pct(time) }} />
-  </div></div><SelectionOffscreen selection={selection} start={view.start} end={view.end} onShow={follow.showTime} /><TimelineTooltip key={recording.id} targetRef={scrollRef} />
+    {overlays}
+    <div className="re-track-endpoints" aria-hidden="true">{['start_ms', 'end_ms'].map(edge => Number.isFinite(selection[edge]) && <span key={edge} className={`re-track-endpoint re-track-${edge}`} style={{ left: pct(selection[edge]) }} />)}</div>
+  </div></div>
+  <TimelineTooltip key={recording.id} targetRef={scrollRef} />
+  <TimelineTooltip key={`${recording.id}:tracks`} targetRef={tracksRef} />
     {beepMenu && <TimelineContextMenu context={beepMenu} className="re-beep-menu" label={t('beepRanges')}
       actionLabel={t('deleteBeep')} disabled={busy} onClose={closeBeepMenu}
       onAction={() => change('beep_ranges', edit.beep_ranges.filter((_, index) => index !== beepMenu.index))}>
@@ -507,36 +512,41 @@ function Editor() {
           content={external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} />}
           cameras={<>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</>} />
         {external && <p className="re-warnings">{t('externalAudio')}</p>}
+        <section className="re-selection-panel" aria-label={t('selection')}>
         <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
-          <RecordingTime clock={clock} time={time} duration={duration} sourceControl={<TimeField label={t('position')} value={Math.round(time)} max={duration} onChange={seek} onFocus={() => audio?.pause()} />} />
           <select aria-label={t('speed')} value={rate} onChange={e => updatePreferences({ rate: Number(e.target.value) })}>{PLAYBACK_RATES.map(r => <option key={r} value={r}>{r}×</option>)}</select>
-          <span className="re-volume"><button disabled={!audio} aria-pressed={silent} onClick={toggleMute}>{t(silent ? 'unmute' : 'mute')}</button>
-            <label>{t('volume')} <input type="range" aria-label={t('volume')} min="0" max="100" step="1" value={Math.round(volume * 100)} disabled={!audio} onChange={changeVolume} /></label><output>{Math.round(volume * 100)}%</output>
-          </span>
-          <label><input type="checkbox" checked={beepPreview} onChange={e => updatePreferences({ beepPreview: e.target.checked })} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
-          {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
+          <RecordingTime clock={clock} time={time} duration={duration} sourceControl={<TimeField label={t('position')} value={Math.round(time)} max={duration} onChange={seek} onFocus={() => audio?.pause()} />} />
         </div>
-        <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button><span className="re-muted">{t('dragHint')}</span></div>
-        <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sound={edit.cut_chime_sound} onSoundChange={value => replaceEdit({ ...edit, cut_chime_sound: value })} sampleUrl={`${API}/cut-chime.wav?sound=${edit.cut_chime_sound}`}
-          skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
-          onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
-          {toggle => <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} busy={!!busy || rebuilding} />}
-        </CutChimeControl>
-        {detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />}
         <div className="re-selection"><strong>{t('selection')}</strong>
           {['start_ms', 'end_ms'].map((edge, i) => <div className="re-selection-field" key={edge}>
             <span>{t(i ? 'endpointEnd' : 'endpointStart')}</span>
             <TimeField optional label={t(i ? 'selectionEnd' : 'selectionStart')} value={selection[edge]} max={duration} onChange={value => { setSelection(current => ({ ...current, [edge]: value })); return true; }} />
             <span className="re-muted">{t(selection[edge] == null ? 'endpointUnset' : 'endpointSet')}</span>
+            <button onClick={() => setSelection(current => ({ ...current, [edge]: Math.round(time) }))}>{t(i ? 'endHere' : 'startHere')}</button>
             <button disabled={selection[edge] == null} aria-label={t(i ? 'clearSelectionEnd' : 'clearSelectionStart')} onClick={() => setSelection(current => ({ ...current, [edge]: null }))}>{t('clearEndpoint')}</button>
           </div>)}
-          <button onClick={() => setSelection(current => ({ ...current, start_ms: Math.round(time) }))}>{t('startHere')}</button><button onClick={() => setSelection(current => ({ ...current, end_ms: Math.round(time) }))}>{t('endHere')}</button>
           <button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', [...edit.record_ranges, selection])}>{t('keep')}</button><button disabled={!validSelection || !!busy} onClick={() => change('record_ranges', removeRange(edit.record_ranges, selection, duration))}>{t('exclude')}</button><button className="re-beep-button" disabled={!validSelection || !!busy} onClick={() => change('beep_ranges', [...edit.beep_ranges, selection])}>{t('addBeep')}</button>
           <button disabled={!validSelection || !!busy || !edit.beep_ranges.some(r => r.start_ms < selection.end_ms && r.end_ms > selection.start_ms)} title={t('removeBeepHint')} onClick={() => change('beep_ranges', removeRange(edit.beep_ranges, selection, duration))}>{t('removeBeepSelection')}</button>
         </div>
         <p className={`re-selection-status ${selectionMessage === 'selectionEqual' || selectionMessage === 'selectionReversed' ? 're-selection-invalid' : ''}`} role="status" aria-live="polite">{t(selectionMessage, { time: validSelection ? formatTime(selection.end_ms - selection.start_ms) : '' })}</p>
-        <div className="re-bottom"><section className="re-edits"><RangeRows label={t('keepRanges')} ranges={edit.record_ranges} duration={duration} seek={seek} onChange={r => change('record_ranges', r)} /></section>
-          <section className="re-events"><h3>{t('events')}</h3><div>{recording.events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div></section></div>
+        <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button></div>
+        </section>
+        <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sound={edit.cut_chime_sound} onSoundChange={value => replaceEdit({ ...edit, cut_chime_sound: value })} sampleUrl={`${API}/cut-chime.wav?sound=${edit.cut_chime_sound}`}
+          skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
+          onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
+          {toggle => <>
+          <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} busy={!!busy || rebuilding}
+            detail={detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />} />
+          <section className="re-events"><h3>{t('events')}</h3><div>{recording.events.filter(e => e.time_ms <= time && e.type !== 'AddTldrawShapeEvent').slice(-30).reverse().map((e, i) => <button key={i} onClick={() => seek(e.time_ms)}><time>{formatTime(e.time_ms)}</time><span>{['SendPublicChatEvent', 'PublicChatEvent'].includes(e.type) ? `${e.name || ''}: ${e.message || ''}` : e.type}</span></button>)}</div></section>
+        <section className="re-audio-settings" aria-label={t('audioSettings')}><h3>{t('audioSettings')}</h3><div>
+          <span className="re-volume"><button disabled={!audio} aria-pressed={silent} onClick={toggleMute}>{t(silent ? 'unmute' : 'mute')}</button>
+            <label>{t('volume')} <input type="range" aria-label={t('volume')} min="0" max="100" step="1" value={Math.round(volume * 100)} disabled={!audio} onChange={changeVolume} /></label><output>{Math.round(volume * 100)}%</output>
+          </span>
+          <label><input type="checkbox" checked={beepPreview} onChange={e => updatePreferences({ beepPreview: e.target.checked })} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
+          {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
+        </div></section>
+          </>}
+        </CutChimeControl>
       </>}
     </main></div>
   </div>;

@@ -46,8 +46,9 @@ export default function CutChimeControl({ gaps, selected, onChange, busy, sample
       });
     }
   };
-  return <section className="re-chime-editor" aria-label={t('cutChime')}>
-    <div className="re-chime-tools">
+  return <div className="re-chime-editor">
+    {children(toggle)}
+    <section className="re-chime-settings" aria-label={t('cutChime')}><h3>{t('cutChime')}</h3><div className="re-chime-tools">
       <label>{t('cutChimeSound')} <select aria-label={t('cutChimeSound')} disabled={busy} value={sound} onChange={event => {
         playVersion.current += 1;
         sample.current?.pause();
@@ -60,8 +61,7 @@ export default function CutChimeControl({ gaps, selected, onChange, busy, sample
       <span className="re-muted" role="status" title={t('cutChimeHint')}>{t('cutChimeCount', { count: selected.length })}</span>
       {skipConfirm && <button onClick={() => onSkipConfirmChange(false)}>{t('cutChimeRestoreConfirm')}</button>}
       {sampleError && <span role="alert">{t('cutChimeSampleError')}</span>}
-    </div>
-    {children(toggle)}
+    </div></section>
     {pending && <dialog ref={dialogRef} className="re-review re-chime-confirm" role="alertdialog" aria-modal="true" aria-labelledby="re-chime-title" aria-describedby="re-chime-warning"
       onCancel={() => setPending(null)}>
       <h3 id="re-chime-title">{t('cutChimeConfirmTitle')}</h3>
@@ -70,5 +70,5 @@ export default function CutChimeControl({ gaps, selected, onChange, busy, sample
       <button disabled={busy} onClick={() => confirm(false)}>{t('cutChimeAccept')}</button>
       <button disabled={busy} onClick={() => confirm(true)}>{t('cutChimeAcceptAndSkip')}</button>
     </dialog>}
-  </section>;
+  </div>;
 }
