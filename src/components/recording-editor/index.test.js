@@ -1031,6 +1031,7 @@ test('warnings, save review, errors and completed messages follow the selected l
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
   await language('en');
   expect(container.querySelector('.re-warnings').textContent).toContain('Raw data is missing.');
+  await act(async () => Simulate.click(container.querySelector('.re-events h3 button')));
   // User content is kept exactly as recorded, even when it resembles a diagnostic.
   expect(container.querySelector('.re-events').textContent).toContain('参加者: rawデータがありません。');
   await selectRange();
@@ -1335,4 +1336,31 @@ test('click and drag selection work in the separate track pane', async () => {
   });
   expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:10.000');
   expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:20.000');
+});
+
+
+test('events start collapsed at the bottom, toggle and seek, and reset on reopening a recording', async () => {
+  const previous = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, events: [{ type: 'PublicChatEvent', time_ms: 1000, name: 'Speaker', message: 'Event test' }] }) }
+    : previous(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const section = container.querySelector('.re-events');
+  const toggle = section.querySelector('h3 button');
+  expect(section.parentElement.lastElementChild).toBe(section);
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  expect(section.querySelector('#re-event-list')).toBeNull();
+  await time('再生位置', '00:00:05.000');
+  await act(async () => Simulate.click(toggle));
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  expect(section.textContent).toContain('Speaker: Event test');
+  const before = calls.length;
+  await act(async () => Simulate.click(section.querySelector('#re-event-list button')));
+  expect(container.querySelector('audio').currentTime).toBe(1);
+  expect(calls).toHaveLength(before);
+  await act(async () => Simulate.click(toggle));
+  expect(section.querySelector('#re-event-list')).toBeNull();
+  await act(async () => Simulate.click(toggle));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-events h3 button').getAttribute('aria-expanded')).toBe('false');
 });
