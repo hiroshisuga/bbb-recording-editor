@@ -8,12 +8,12 @@ const publicationLabels = {
 const recordingLabels = { marked: 'marked', unmarked: 'unmarked', unknown: 'rangesUnknown' };
 const filters = [
   ['all', 'all'], ['published', 'published'], ['unpublished', 'unpublished'],
-  ['not_generated', 'not_generated'], ['processing', 'processing'], ['unmarked', 'unmarked'],
+  ['not_generated', 'not_generated'], ['processing', 'processing'], ['marked', 'marked'], ['unmarked', 'unmarked'],
   ['raw_missing', 'rawMissing'], ['unknown', 'statusUnknown'],
 ];
 const matches = (meeting, filter) => {
   if (filter === 'all') return true;
-  if (filter === 'unmarked') return meeting.recording_status === 'unmarked';
+  if (filter === 'marked' || filter === 'unmarked') return meeting.recording_status === filter;
   if (filter === 'raw_missing') return meeting.raw_available === false;
   return (meeting.publication_status || 'unknown') === filter;
 };

@@ -63,7 +63,7 @@ test('renamed public and private recordings also show room names without duplica
 
 test('all status filters include correct meetings and counts without changing selection', async () => {
   const expectations = { published: ['Public'], unpublished: ['Private', 'Missing raw'],
-    not_generated: ['No marks'], processing: ['Working'], unmarked: ['No marks'],
+    not_generated: ['No marks'], processing: ['Working'], marked: ['Public', 'Private', 'Working', 'Unknown'], unmarked: ['No marks'],
     raw_missing: ['Missing raw'], unknown: ['Unknown'] };
   for (const [value, names] of Object.entries(expectations)) {
     await filter(value);
