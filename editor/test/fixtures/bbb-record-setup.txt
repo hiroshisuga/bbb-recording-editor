@@ -1,0 +1,36 @@
+/usr/local/bigbluebutton/core/scripts/bigbluebutton.yml
+
+# $1: Desired property
+# Only returns 'PRODUCTION' values
+get_yml_value(){
+   yq e ".\"$1\"" "$BBB_YML" --prettyPrint
+}
+
+PLAYBACK_PROTOCOL=$(get_yml_value playback_protocol)
+readonly PLAYBACK_PROTOCOL
+
+RECORDING_DIR=$(get_yml_value recording_dir)
+readonly RECORDING_DIR
+
+LOG_DIR=$(get_yml_value log_dir)
+readonly LOG_DIR
+
+PUBLISHED_DIR=$(get_yml_value published_dir)
+readonly PUBLISHED_DIR
+
+RAW_AUDIO_SRC=$(get_yml_value raw_audio_src)
+readonly RAW_AUDIO_SRC
+
+RAW_VIDEO_SRC=$(get_yml_value raw_video_src)
+readonly RAW_VIDEO_SRC
+
+RAW_SCREENSHARE_SRC=$(get_yml_value raw_screenshare_src)
+readonly RAW_SCREENSHARE_SRC
+
+RAW_PRESENTATION_SRC=$(get_yml_value raw_presentation_src)
+readonly RAW_PRESENTATION_SRC
+
+declare -r BASE=$RAW_PRESENTATION_SRC/recording
+declare -r STATUS=$BASE/status
+
+TYPES=$(cd /usr/local/bigbluebutton/core/scripts/process || exit; find -- *.rb | sed s/.rb//g)

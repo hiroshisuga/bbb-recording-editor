@@ -132,3 +132,16 @@ test('all dates is the default and period filters combine with status counts wit
   expect(rows().map(row => row.querySelector('strong').textContent)).toContain('Retained old raw');
   expect(onOpen).not.toHaveBeenCalled(); expect(onRefresh).not.toHaveBeenCalled();
 });
+
+test('only missing-raw ungenerated unknown-interval candidates offer deletion without opening the editor', async () => {
+  const orphan = meeting('Orphan', 'not_generated', 'unknown', false);
+  const onDelete = jest.fn();
+  await act(async () => root.render(localized(<MeetingList meetings={[...meetings, orphan]} onOpen={onOpen} onRefresh={onRefresh} onDelete={onDelete} />)));
+  const buttons = container.querySelectorAll('.re-delete-candidate');
+  expect(buttons).toHaveLength(1);
+  await act(async () => Simulate.click(buttons[0]));
+  expect(onDelete).toHaveBeenCalledWith(orphan);
+  expect(onOpen).not.toHaveBeenCalled();
+  await act(async () => root.render(localized(<MeetingList meetings={[orphan]} dirty onOpen={onOpen} onDelete={onDelete} />)));
+  expect(container.querySelector('.re-delete-candidate').disabled).toBe(true);
+});

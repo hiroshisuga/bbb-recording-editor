@@ -1364,3 +1364,30 @@ test('events start collapsed at the bottom, toggle and seek, and reset on reopen
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   expect(container.querySelector('.re-events h3 button').getAttribute('aria-expanded')).toBe('false');
 });
+
+test('deleting an orphan from the list refreshes results and releases the shared busy state', async () => {
+  const orphanId = `${'b'.repeat(40)}-1700000000000`;
+  const original = global.fetch.getMockImplementation();
+  let deleted = false;
+  global.fetch.mockImplementation(async (url, options) => {
+    if (url.endsWith('/recordings')) return { ok: true, json: async () => deleted ? [] : [{ id: orphanId, name: 'Orphan',
+      publication_status: 'not_generated', recording_status: 'unknown', raw_available: false }] };
+    if (url.endsWith(`/${orphanId}/deletion`)) return { ok: true, json: async () => options?.method === 'POST'
+      ? { status: 'queued', id: 'f'.repeat(24) } : { revision: 'a'.repeat(64), file_count: 0, bytes: 0, entries: [], command: `bbb-record --delete ${orphanId}`, retained: '/editor/history' } };
+    if (url.includes('/jobs/')) { deleted = true; return { ok: true, json: async () => ({ status: 'done', result: { deleted: true } }) }; }
+    return original(url, options);
+  });
+  await act(async () => Simulate.click(container.querySelector('.re-sidebar-title button')));
+  await act(async () => Simulate.click(container.querySelector('.re-delete-candidate')));
+  const dialog = document.querySelector('.re-delete-dialog');
+  await act(async () => Simulate.change(dialog.querySelector('input'), { target: { value: orphanId } }));
+  await act(async () => {
+    Simulate.click(dialog.querySelectorAll('button')[1]);
+    await new Promise(resolve => setTimeout(resolve, 800));
+  });
+  expect(document.querySelector('.re-delete-dialog')).toBeNull();
+  expect(container.querySelector('.re-delete-candidate')).toBeNull();
+  expect(container.querySelector('.re-success').textContent).toContain('BBB');
+  expect(container.querySelector('.re-sidebar-title button').disabled).toBe(false);
+  expect(container.querySelector('.re-notice')).toBeNull();
+});

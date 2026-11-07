@@ -231,3 +231,20 @@
 }
 
 .recording-editor .re-events>h3>button { display:flex; align-items:center; gap:6px; padding:0; border:0; font:inherit; }
+
+.re-meeting-entry { margin-bottom:8px; }
+.recording-editor .re-delete-candidate { color:#ffc8bd; font-size:11px; margin-bottom:6px; }
+.re-delete-dialog { width:min(850px,95vw); max-height:90vh; overflow:auto; border:1px solid #9f5c52; border-radius:8px; padding:20px; background:#18222e; color:#edf3fa; font:14px/1.5 system-ui,sans-serif; }
+.re-delete-dialog::backdrop { background:#0009; }
+.re-delete-dialog code,.re-delete-dialog pre { overflow-wrap:anywhere; white-space:pre-wrap; }
+.re-delete-dialog .re-delete-files { max-height:35vh; overflow:auto; background:#10161e; padding:8px; }
+.re-delete-dialog label { display:block; margin-top:12px; }
+.re-delete-dialog input { display:block; box-sizing:border-box; width:100%; margin-top:6px; padding:8px; }
+.re-delete-dialog button { padding:8px 12px; cursor:pointer; }
+.re-delete-dialog button:disabled { cursor:default; }
+.re-delete-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+.re-delete-dialog { box-sizing:border-box; }
+.re-delete-dialog p,.re-delete-dialog pre { margin:8px 0; }
+.re-delete-dialog .re-delete-files { max-height:30vh; }
+.re-delete-dialog button,.re-delete-dialog input { font:inherit; }
+.re-delete-actions { position:sticky; bottom:0; padding:8px 0; background:#18222e; }

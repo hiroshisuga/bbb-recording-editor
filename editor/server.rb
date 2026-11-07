@@ -5,6 +5,7 @@ require 'webrick'
 require 'base64'
 require_relative 'lib/recording_editor'
 require_relative 'lib/external_video_title'
+require_relative 'lib/orphan_deletion'
 
 module RecordingEditor
   # A single queue serializes media processing; this is not a retention lock.
@@ -129,6 +130,16 @@ module RecordingEditor
         draft = File.join(@repo.state_dir(id), 'draft.json')
         data[:draft] = JSON.parse(File.read(draft)) if File.file?(draft)
         json(res, data)
+      when '/deletion'
+        require_method(req, 'GET', 'POST')
+        deletion = OrphanDeletion.new(@repo)
+        if req.request_method == 'GET'
+          json(res, deletion.plan(id))
+        else
+          data = payload(req)
+          raise Error, '削除対象と録画IDを確認してください。' unless data['confirmed'] == true && data['meeting_id'] == id
+          json(res, @jobs.add('delete', key: id) { |_progress| deletion.delete(id, data) }, 202)
+        end
       when '/draft'
         require_method(req, 'POST')
         json(res, @editor.draft(id, payload(req)))
