@@ -12,6 +12,7 @@ import TimelineContextMenu from './TimelineContextMenu';
 import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection, releaseCompleteSelection } from './SelectionMarkers';
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
+import OrphanDeleteDialog from './OrphanDeleteDialog';
 import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
 import useTimelineScrollSync from './useTimelineScrollSync';
@@ -23,6 +24,7 @@ import './styles.css';
 
 const PREFIX = process.env.REACT_APP_EDITOR_PREFIX || '/recording-editor';
 const API = `${PREFIX}/api`;
+const reviewDeletion = id => request(`/recordings/${id}/deletion`);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function request(path, data) {
   const response = await fetch(`${API}${path}`, data === undefined ? {} : {
@@ -301,6 +303,7 @@ export default function RecordingEditor() {
 function Editor() {
   const { locale, setLocale, t, diagnostic, message: displayMessage } = useEditorI18n();
   const [meetings, setMeetings] = useState([]);
+  const [deleteMeeting, setDeleteMeeting] = useState(null);
   const [recording, setRecording] = useState(null);
   const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [], cut_chime_gaps: [], cut_chime_sound: 'a' });
   const [history, setHistory] = useState({ past: [], future: [] });
@@ -488,10 +491,18 @@ function Editor() {
       : selection.start_ms > selection.end_ms ? 'selectionReversed' : 'selectionReady';
 
   return <div className="recording-editor">
+    {deleteMeeting && <OrphanDeleteDialog key={deleteMeeting.id} meeting={deleteMeeting} review={reviewDeletion} remove={async (id, data) => {
+      setBusy({ id: 'working' });
+      try { return await runJob(`/recordings/${id}/deletion`, data); } finally { setBusy(''); }
+    }} onClose={() => setDeleteMeeting(null)} onDeleted={id => {
+      setDeleteMeeting(null); setMeetings(items => items.filter(item => item.id !== id));
+      if (recording?.id === id) { audio?.pause(); setRecording(null); setPreview(null); }
+      setError(''); setMessage({ id: 'deleteCompleted' }); refreshList();
+    }} />}
     <header className="re-header"><div><span className="re-brand">BigBlueButton</span><strong>{t('title')}</strong></div>
       <div className="re-header-actions"><label className="re-language">{t('language')} <select aria-label={t('language')} value={locale} onChange={e => setLocale(e.target.value)}>{languages.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select></label>{recording && <><span className="re-dirty">{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('saved')}</span><button disabled={!!busy} onClick={draft}>{t('saveDraft')}</button><button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw} title={!edit.record_ranges.length ? t('needRange') : !canSaveRaw ? t('rawAlreadySaved') : ''} onClick={() => { setReview(!review); setRebuildReview(false); setResetReview(false); }}>{t('saveRaw')}</button><button disabled={!!rebuildBlock} title={rebuildBlock} aria-describedby={rebuildBlock ? 're-rebuild-reason' : undefined} onClick={() => { setRebuildReview(!rebuildReview); setReview(false); setResetReview(false); }}>{t('rebuildRecording')}</button></>}</div>
     </header>
-    <div className="re-shell"><MeetingList meetings={meetings} selectedId={recording?.id} busy={busy} dirty={dirty} onRefresh={refreshList} onOpen={open} /><main className="re-main">
+    <div className="re-shell"><MeetingList meetings={meetings} selectedId={recording?.id} busy={busy} dirty={dirty} onRefresh={refreshList} onOpen={open} onDelete={setDeleteMeeting} /><main className="re-main">
       {busy && <div className="re-notice" role="status">◌ {displayMessage(busy)}</div>}{error && <div className="re-error" role="alert">{displayMessage(error)}</div>}{message && <div className="re-success" role="status">{displayMessage(message)}</div>}
       {!recording ? <div className="re-welcome"><h1>{t('welcomeTitle')}</h1><p>{t('welcomeSelect')}</p><p>{t('welcomeEdit')}</p><p>{t('manualRebuild')}</p></div> : <>
         <div className="re-title"><div><h1>{recording.name || recording.id}</h1>{recording.meeting_name && recording.meeting_name !== recording.name && <div className="re-title-room"><small>{t('roomName')}: {recording.meeting_name}</small></div>}<small>{recording.id} · {t('wholeMeeting', { time: formatTime(duration) })}</small></div>{recording.published_url && <a href={recording.published_url} target="_blank" rel="noreferrer">{t('publishedLink')}</a>}</div>

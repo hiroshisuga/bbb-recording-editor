@@ -1,4 +1,11 @@
 {
+  "deleteRecording": "Delete…",
+  "deleteWarning": "Permanently delete these BBB files. This cannot be undone. Related generated or processing recordings block deletion. Editor backups and history will be retained.",
+  "deleteSummary": "{count} files · {bytes} bytes",
+  "deleteRetained": "Retained editor backups, history and cache:",
+  "deleteTypeId": "Enter the complete recording ID to confirm:",
+  "deleteConfirm": "Permanently delete",
+  "deleteCompleted": "BBB recording files were deleted. Editor backups and history were retained.",
   "sourceClock": "Original time",
   "editedClock": "Edited time (current settings)",
   "editedDuration": "Edited duration",

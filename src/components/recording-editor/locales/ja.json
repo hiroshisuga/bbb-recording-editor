@@ -1,4 +1,11 @@
 {
+  "deleteRecording": "削除…",
+  "deleteWarning": "以下のBBBファイルを完全に削除します。元に戻せません。関連する生成済み・処理中の録画がある場合は削除できません。エディターのバックアップと編集履歴は残します。",
+  "deleteSummary": "{count}ファイル・{bytes}バイト",
+  "deleteRetained": "削除しないエディターのバックアップ・履歴・キャッシュ：",
+  "deleteTypeId": "確認のため録画ID全体を入力してください：",
+  "deleteConfirm": "完全に削除する",
+  "deleteCompleted": "BBBの録画ファイルを削除しました。エディターのバックアップと編集履歴は残しています。",
   "sourceClock": "元の時刻",
   "editedClock": "編集後（現在の設定）",
   "editedDuration": "編集後の録画時間",

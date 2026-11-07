@@ -25,7 +25,7 @@ const durationText = ms => {
   return ms < 3600000 ? text.slice(3) : text;
 };
 
-export default function MeetingList({ meetings, selectedId, busy, dirty, onRefresh, onOpen }) {
+export default function MeetingList({ meetings, selectedId, busy, dirty, onRefresh, onOpen, onDelete }) {
   const { locale, t, diagnostic } = useEditorI18n();
   const [filter, setFilter] = useState('all');
   const [period, setPeriod] = useState('all');
@@ -54,7 +54,7 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
       const publication = publicationLabels[meeting.publication_status] ? meeting.publication_status : 'unknown';
       const recording = recordingLabels[meeting.recording_status] ? meeting.recording_status : 'unknown';
       const roomName = typeof meeting.meeting_name === 'string' ? meeting.meeting_name.trim() : '';
-      return <button className={`re-meeting ${selectedId === meeting.id ? 'active' : ''}`} key={meeting.id} disabled={!!busy} onClick={() => onOpen(meeting.id)}>
+      return <div className="re-meeting-entry" key={meeting.id}><button className={`re-meeting ${selectedId === meeting.id ? 'active' : ''}`} key={meeting.id} disabled={!!busy} onClick={() => onOpen(meeting.id)}>
         <strong>{meeting.name || meeting.id.slice(0, 8)}</strong>
         {roomName && roomName !== meeting.name?.trim() && <small className="re-meeting-room">{t('roomName')}: {roomName}</small>}
         <span>{new Date(meetingTime(meeting)).toLocaleString(locale)}</span>
@@ -65,7 +65,9 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
           {meeting.raw_available === false && <span className="re-status re-status-missing">{t('rawMissing')}</span>}
         </span>
         {meeting.warnings?.length > 0 && <small className="re-meeting-warning">{meeting.warnings.map(diagnostic).join(' / ')}</small>}
-      </button>;
+      </button>
+      {onDelete && publication === 'not_generated' && recording === 'unknown' && meeting.raw_available === false && <button className="re-delete-candidate" disabled={!!busy || !!dirty} onClick={() => onDelete(meeting)}>{t('deleteRecording')}</button>}
+      </div>;
     })}
     {!visible.length && <p className="re-muted">{t(meetings.length ? 'noMatches' : 'noMeetings')}</p>}
     {selectedHidden && <p className="re-muted">{t('selectionHidden')}</p>}

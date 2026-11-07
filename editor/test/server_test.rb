@@ -219,4 +219,15 @@ class ServerTest < Minitest::Test
       assert_equal xml, File.read(File.join(@raw, 'events.xml'))
     end
   end
+  def test_orphan_deletion_requires_authentication_editor_header_and_confirmation
+    path = "recordings/#{@id}/deletion"
+    assert_equal '401', request(path, auth: false).code
+    assert_equal '405', request(path, method: Net::HTTP::Delete, headers: { 'X-BBB-Editor' => '1' }).code
+    assert_equal '403', request(path, method: Net::HTTP::Post, body: '{}').code
+    assert_equal '400', request(path, method: Net::HTTP::Post, headers: { 'X-BBB-Editor' => '1' }, body: '{}').code
+    # A valid raw recording is never a deletion candidate, even if unpublished.
+    assert_equal '409', request(path).code
+    assert File.file?(File.join(@raw, 'events.xml'))
+  end
+
 end

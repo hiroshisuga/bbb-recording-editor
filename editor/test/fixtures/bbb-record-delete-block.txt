@@ -1,0 +1,28 @@
+if [[ -z $MEETING_ID ]]; then
+echo "No meeting id given"
+exit 1
+fi
+echo "deleting: $MEETING_ID"
+rm -f "$STATUS"/ended/"$MEETING_ID"*
+rm -f "$STATUS"/recorded/"$MEETING_ID"*
+rm -f "$STATUS"/archived/"$MEETING_ID"*
+rm -f "$STATUS"/sanity/"$MEETING_ID"*
+rm -f "$STATUS"/processed/"$MEETING_ID"*
+rm -f "$STATUS"/published/"$MEETING_ID"*
+for type in $TYPES; do
+rm -rf "${PUBLISHED_DIR:?}"/"$type"/"$MEETING_ID"*
+rm -rf "$RAW_PRESENTATION_SRC"/unpublished/"$type"/"$MEETING_ID"*
+rm -rf "$RAW_PRESENTATION_SRC"/deleted/"$type"/"$MEETING_ID"*
+rm -rf "$RECORDING_DIR"/process/"$type"/"$MEETING_ID"*
+rm -rf "$RECORDING_DIR"/publish/"$type"/"$MEETING_ID"*
+rm -rf "${LOG_DIR:?}"/"$type"/*"$MEETING_ID"*
+done
+rm -rf "$RAW_PRESENTATION_SRC"/captions/"$MEETING_ID"*
+rm -f "$RAW_PRESENTATION_SRC"/inbox/"$MEETING_ID"*.json
+rm -f "$RAW_PRESENTATION_SRC"/inbox/"$MEETING_ID"*.txt
+rm -rf "$RECORDING_DIR"/raw/"$MEETING_ID"*
+rm -f "$RAW_PRESENTATION_SRC"/screenshare/"$MEETING_ID"*.flv
+rm -f "$RAW_AUDIO_SRC"/"$MEETING_ID"*.wav
+rm -f "$RAW_AUDIO_SRC"/"$MEETING_ID"*.opus
+rm -rf "${RAW_PRESENTATION_SRC:?}"/"$MEETING_ID"
+fi
