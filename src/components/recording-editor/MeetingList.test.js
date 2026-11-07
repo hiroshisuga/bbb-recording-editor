@@ -83,8 +83,13 @@ test('hierarchical parent and child filters include correct rows and counts', as
   expect(container.textContent).toContain('選択中の会議は絞り込み結果に含まれません');
   await filter('all', 'raw');
   expect(rows()[0].classList.contains('active')).toBe(true);
-  expect(select('raw').querySelector('optgroup').label).toBe('rawデータあり');
-  expect(select('publication').querySelector('optgroup').label).toBe('生成済み');
+  expect(select('raw').querySelector('optgroup')).toBeNull();
+  expect(select('publication').querySelector('optgroup')).toBeNull();
+  expect(select('raw').querySelector('[value="present"]').textContent).toBe('rawあり (5)');
+  expect(select('publication').querySelector('[value="generated"]').textContent).toBe('生成済み (3)');
+  expect(select('raw').querySelector('[value="marked"]').textContent).toBe('\u2003↳ 録画区間あり (4)');
+  expect(select('publication').querySelector('[value="published"]').textContent).toBe('\u2003↳ 公開 (1)');
+  expect(select('raw').querySelector('[value="marked"]').getAttribute('aria-label')).toContain('rawデータあり');
 });
 
 test('opening meetings and refreshing still call the supplied actions', async () => {

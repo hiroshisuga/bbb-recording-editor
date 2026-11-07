@@ -1,12 +1,11 @@
 {
   "rawFilter": "rawデータの状態",
   "rawPresent": "rawデータあり",
-  "rawPresentAll": "rawあり（すべて）",
+  "rawPresentParent": "rawあり",
   "rawUnknown": "rawデータの状態を確認できない",
   "rawPresenceHint": "rawファイルの存在を示します。XMLや音声・動画がすべて正常であることは保証しません。",
   "publicationFilter": "録画の生成・公開状態",
   "generated": "生成済み",
-  "generatedAll": "生成済み（すべて）",
   "publicationUnknown": "公開状態不明",
   "generationUnknown": "生成状態不明",
   "deleteRecording": "削除…",

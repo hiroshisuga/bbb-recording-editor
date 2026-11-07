@@ -1,12 +1,11 @@
 {
   "rawFilter": "Raw data status",
   "rawPresent": "Raw data present",
-  "rawPresentAll": "Raw present (all intervals)",
+  "rawPresentParent": "Raw present",
   "rawUnknown": "Raw data status unavailable",
   "rawPresenceHint": "Raw files are present. This does not guarantee that XML, audio and video are complete or readable.",
   "publicationFilter": "Generation / publication status",
   "generated": "Generated",
-  "generatedAll": "Generated (all visibility states)",
   "publicationUnknown": "Publication status unknown",
   "generationUnknown": "Generation status unknown",
   "deleteRecording": "Delete…",
