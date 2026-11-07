@@ -24,7 +24,10 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
   const visible = dated.filter(meeting => matchesRaw(meeting, rawFilter) && matchesPublication(meeting, publicationFilter));
   const rawCount = value => dated.filter(meeting => matchesPublication(meeting, publicationFilter) && matchesRaw(meeting, value)).length;
   const publicationCount = value => dated.filter(meeting => matchesRaw(meeting, rawFilter) && matchesPublication(meeting, value)).length;
-  const option = (value, label, count) => <option key={value} value={value}>{t(label)} ({count(value)})</option>;
+  const option = (value, label, count, parent) => {
+    const text = `${t(label)} (${count(value)})`;
+    return <option key={value} value={value} aria-label={parent ? `${t(parent)}: ${text}` : undefined}>{parent ? '\u2003↳ ' : ''}{text}</option>;
+  };
   const selectedHidden = selectedId && !visible.some(meeting => meeting.id === selectedId);
   return <aside className="re-meetings">
     <div className="re-sidebar-title"><h2>{t('recordingList')}</h2><button disabled={!!busy} onClick={onRefresh} title={t('refreshList')}>↻</button></div>
@@ -32,12 +35,10 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
     <label className="re-meeting-filter re-meeting-filter-hierarchy">{t('rawFilter')}
       <select aria-label={t('rawFilter')} value={rawFilter} disabled={!!busy} onChange={event => setRawFilter(event.target.value)}>
         {option('all', 'all', rawCount)}
-        <optgroup label={t('rawPresent')}>
-          {option('present', 'rawPresentAll', rawCount)}
-          {option('marked', 'marked', rawCount)}
-          {option('unmarked', 'unmarked', rawCount)}
-          {option('ranges_unknown', 'rangesUnknown', rawCount)}
-        </optgroup>
+        {option('present', 'rawPresentParent', rawCount)}
+        {option('marked', 'marked', rawCount, 'rawPresent')}
+        {option('unmarked', 'unmarked', rawCount, 'rawPresent')}
+        {option('ranges_unknown', 'rangesUnknown', rawCount, 'rawPresent')}
         {option('missing', 'rawMissing', rawCount)}
         {option('raw_unknown', 'rawUnknown', rawCount)}
       </select>
@@ -45,12 +46,10 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
     <label className="re-meeting-filter re-meeting-filter-hierarchy">{t('publicationFilter')}
       <select aria-label={t('publicationFilter')} value={publicationFilter} disabled={!!busy} onChange={event => setPublicationFilter(event.target.value)}>
         {option('all', 'all', publicationCount)}
-        <optgroup label={t('generated')}>
-          {option('generated', 'generatedAll', publicationCount)}
-          {option('published', 'published', publicationCount)}
-          {option('unpublished', 'unpublished', publicationCount)}
-          {option('publication_unknown', 'publicationUnknown', publicationCount)}
-        </optgroup>
+        {option('generated', 'generated', publicationCount)}
+        {option('published', 'published', publicationCount, 'generated')}
+        {option('unpublished', 'unpublished', publicationCount, 'generated')}
+        {option('publication_unknown', 'publicationUnknown', publicationCount, 'generated')}
         {option('processing', 'processing', publicationCount)}
         {option('not_generated', 'not_generated', publicationCount)}
         {option('generation_unknown', 'generationUnknown', publicationCount)}
