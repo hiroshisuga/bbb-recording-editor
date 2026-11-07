@@ -84,7 +84,7 @@ module RecordingEditor
       @repo.ensure_not_rebuilding(id)
       raise Error, '削除には正しい内部会議IDが必要です。' unless id.match?(/\A[0-9a-f]{40}-[0-9]{13}\z/)
       candidate = @repo.list.find { |item| item[:id] == id }
-      raise Error.new('ここで削除できるのは「未生成・区間不明・rawデータなし」の項目だけです。', 409) unless candidate && candidate.values_at(:publication_status, :recording_status, :raw_available) == ['not_generated', 'unknown', false]
+      raise Error.new('ここで削除できるのは「未生成」で、rawファイルが残っていない項目だけです。', 409) unless candidate && candidate.values_at(:generation_status, :publication_status, :recording_status, :raw_available, :raw_data_status) == ['not_generated', 'not_generated', 'unknown', false, 'missing']
       raise Error.new('events.xmlが存在するため削除できません。', 409) if File.exist?(File.join(@repo.raw_root, id, 'events.xml'))
       roots, workflows, configuration_hash = configuration
       ensure_not_live(id)

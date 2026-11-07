@@ -1,4 +1,7 @@
 {
+  "録画の生成・公開状態を確認できません: ": "Cannot determine recording generation/publication status: ",
+  "rawファイルはありますがevents.xmlがありません。録画区間を確認できません。": "Raw files are present but events.xml is missing. Recording intervals cannot be determined.",
+  "rawデータの有無を確認できません。": "Raw data presence could not be determined.",
   "bbb-recordの設定処理が確認済みの形式と異なります。削除できません。": "Unsupported bbb-record configuration setup.",
   "bbb-recordの削除処理が確認済みの形式と異なります。削除は行っていません。": "Unsupported bbb-record deletion script; no files were deleted.",
   "bbb-recordはroot所有で、グループや他ユーザーから書き換えできない必要があります。": "bbb-record must be root-owned and not group/world writable.",
@@ -14,7 +17,7 @@
   "この会議は開催中のため削除できません。": "This meeting is still running. Deletion is blocked.",
   "開催中の会議をBBBに確認できません。削除は行っていません。": "Cannot verify active BBB meetings. No files were deleted.",
   "削除には正しい内部会議IDが必要です。": "Deletion requires an internal hexadecimal meeting ID.",
-  "ここで削除できるのは「未生成・区間不明・rawデータなし」の項目だけです。": "Only ungenerated recordings with unknown intervals and missing raw XML can be deleted here.",
+  "ここで削除できるのは「未生成」で、rawファイルが残っていない項目だけです。": "Only ungenerated recordings with no remaining raw files can be deleted here.",
   "events.xmlが存在するため削除できません。": "An events.xml file is present. Deletion is blocked.",
   "関連する生成済み・処理中の録画があるため削除できません。": "Generated or processing recording files exist. Deletion is blocked.",
   "BBBの削除対象は残っていません。": "No BBB deletion targets remain.",
