@@ -248,3 +248,8 @@
 .re-delete-dialog .re-delete-files { max-height:30vh; }
 .re-delete-dialog button,.re-delete-dialog input { font:inherit; }
 .re-delete-actions { position:sticky; bottom:0; padding:8px 0; background:#18222e; }
+
+.re-meeting-filter.re-meeting-filter-hierarchy { display:block; }
+.re-meeting-filter-hierarchy select { display:block; margin-top:4px; }
+.re-meeting-raw-status { flex-direction:column; align-items:flex-start; }
+.re-meeting-raw-status .re-status+ .re-status { margin-left:10px; }

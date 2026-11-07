@@ -988,7 +988,7 @@ test('saving refreshes meeting summaries and keeps the current publication badge
   await click('rawデータへ保存…');
   await click('バックアップを作成して保存');
   expect(calls.filter(call => call.url.endsWith('/recordings'))).toHaveLength(2);
-  expect(container.querySelector('.re-meeting .re-status-unpublished').textContent).toBe('非公開');
+  expect(container.querySelector('.re-meeting .re-status-unpublished').textContent).toBe('生成済み · 非公開');
   expect(container.textContent).toContain('XMLバックアップ: /backup/events.xml');
 });
 
@@ -996,7 +996,8 @@ test('switching language preserves edits, selection, filter, undo history and me
   await time('選択開始', '00:00:06.500');
   await time('選択終了', '00:00:09.500');
   await click('ピー音を追加');
-  await act(async () => { Simulate.change(container.querySelector('[aria-label="会議の絞り込み"]'), { target: { value: 'unpublished' } }); });
+  await act(async () => { Simulate.change(container.querySelector('[aria-label="録画の生成・公開状態"]'), { target: { value: 'unpublished' } }); });
+  await act(async () => Simulate.change(container.querySelector('[aria-label="rawデータの状態"]'), { target: { value: 'present' } }));
   const requests = calls.length;
   const audio = container.querySelector('audio');
   await language('en');
@@ -1006,8 +1007,9 @@ test('switching language preserves edits, selection, filter, undo history and me
   expect(container.querySelector('.re-header strong').textContent).toBe('Recording editor');
   expect(container.querySelector('[aria-label="Selection start"]').value).toBe('00:00:06.500');
   expect(container.querySelector('.beep_ranges .re-bar').getAttribute('data-tooltip')).toContain('00:00:06.500');
-  expect(container.querySelector('[aria-label="Filter meetings"]').value).toBe('unpublished');
-  expect(container.querySelector('.re-status-unpublished').textContent).toBe('Unpublished');
+  expect(container.querySelector('[aria-label="Generation / publication status"]').value).toBe('unpublished');
+  expect(container.querySelector('[aria-label="Raw data status"]').value).toBe('present');
+  expect(container.querySelector('.re-status-unpublished').textContent).toBe('Generated · Unpublished');
   expect(container.querySelector('.re-dirty').textContent).toBe('Unsaved changes');
   expect(container.querySelector('audio')).toBe(audio);
   expect(calls).toHaveLength(requests);
@@ -1371,7 +1373,7 @@ test('deleting an orphan from the list refreshes results and releases the shared
   let deleted = false;
   global.fetch.mockImplementation(async (url, options) => {
     if (url.endsWith('/recordings')) return { ok: true, json: async () => deleted ? [] : [{ id: orphanId, name: 'Orphan',
-      publication_status: 'not_generated', recording_status: 'unknown', raw_available: false }] };
+      publication_status: 'not_generated', generation_status: 'not_generated', raw_data_status: 'missing', recording_status: 'unknown', raw_available: false }] };
     if (url.endsWith(`/${orphanId}/deletion`)) return { ok: true, json: async () => options?.method === 'POST'
       ? { status: 'queued', id: 'f'.repeat(24) } : { revision: 'a'.repeat(64), file_count: 0, bytes: 0, entries: [], command: `bbb-record --delete ${orphanId}`, retained: '/editor/history' } };
     if (url.includes('/jobs/')) { deleted = true; return { ok: true, json: async () => ({ status: 'done', result: { deleted: true } }) }; }

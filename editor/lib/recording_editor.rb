@@ -211,12 +211,27 @@ module RecordingEditor
       nil
     end
 
+    # File.directory?/file? hide access errors; absence and inability to inspect
+    # must remain different states in the recording list.
+    def entry_type?(path, type)
+      File.stat(path).ftype == type
+    rescue Errno::ENOENT
+      false
+    end
+
     def publication_info(id)
       check_id(id)
       warnings = []
-      ready_roots = [published_root, unpublished_root].select { |root| File.directory?(File.join(root, id)) }
+      ready_roots = [published_root, unpublished_root].select { |root| entry_type?(File.join(root, id), 'directory') }
       info = ready_roots.filter_map { |root| metadata_info(root, id, warnings) }.first
       status = 'not_generated'
+      generation = 'not_generated'
+      if ready_roots.any?
+        # A valid ready-recording snapshot can establish generation even when
+        # its publication fields conflict. A bare/broken directory cannot.
+        generation = info && (%w[published unpublished].include?(info[:state]) ||
+          %w[true false].include?(info[:published]) || !info[:playback_duration_ms].nil?) ? 'generated' : 'unknown'
+      end
       if ready_roots.size > 1
         warnings << '公開・非公開の両方に録画が存在します。公開状態を確認してください。'
         status = 'unknown'
@@ -230,21 +245,79 @@ module RecordingEditor
                  end
         warnings << '録画メタデータの公開状態が不明または矛盾しています。' if status == 'unknown' && warnings.empty?
       else
-        failed = %w[processed published].any? { |step| File.file?(File.join(status_root, step, "#{id}-presentation.fail")) }
-        processing = File.directory?(File.join(process_root, id))
+        failed = %w[processed published].any? { |step| entry_type?(File.join(status_root, step, "#{id}-presentation.fail"), 'file') }
+        processing = entry_type?(File.join(process_root, id), 'directory')
         info = metadata_info(process_root, id, warnings) if processing
         if failed
           warnings << '録画処理の失敗マーカーがあります。BBBの処理ログを確認してください。'
           status = 'unknown'
+          generation = 'unknown'
         elsif processing
           # "processed" is waiting for publish; neither state means a ready
           # playback exists. Metadata is a snapshot, not a live Redis job check.
           status = %w[processing processed].include?(info&.[](:state)) ? 'processing' : 'unknown'
+          generation = status
           warnings << '処理中の録画メタデータの状態を確認できません。' if status == 'unknown' && warnings.empty?
         end
       end
-      { publication_status: status, recording_title: info&.[](:recording_title), metadata_name: info&.[](:name), metadata_duration_ms: info&.[](:duration_ms),
+      generation = 'generated' if %w[published unpublished].include?(status)
+      { generation_status: generation, publication_status: status, recording_title: info&.[](:recording_title), metadata_name: info&.[](:name), metadata_duration_ms: info&.[](:duration_ms),
         playback_duration_ms: info&.[](:playback_duration_ms), warnings: warnings }
+    rescue SystemCallError => e
+      { generation_status: 'unknown', publication_status: 'unknown',
+        warnings: ["録画の生成・公開状態を確認できません: #{e.message}"] }
+    end
+
+    # Presence is independent of XML readability or recording marks. Empty
+    # directory trees count as missing; unreadable paths are never guessed absent.
+    def raw_data_status(id)
+      check_id(id)
+      root = File.join(raw_root, id)
+      stat = File.lstat(root)
+      return 'unknown' unless stat.directory? && !stat.symlink?
+      xml = File.join(root, 'events.xml')
+      begin
+        return 'present' if File.lstat(xml).file?
+      rescue Errno::ENOENT
+        # Other raw files can survive without events.xml.
+      rescue SystemCallError
+        return 'unknown'
+      end
+      uncertain = false
+      visited = 0
+      has_file = lambda do |directory, depth = 0|
+        visited += 1
+        if visited > 10_000 || depth > 64
+          uncertain = true
+          next false
+        end
+        Dir.children(directory).any? do |name|
+          path = File.join(directory, name)
+          begin
+            entry = File.lstat(path)
+            if entry.file?
+              true
+            elsif entry.directory?
+              has_file.call(path, depth + 1)
+            else
+              uncertain = true
+              false
+            end
+          rescue SystemCallError
+            uncertain = true
+            false
+          end
+        end
+      rescue SystemCallError
+        uncertain = true
+        false
+      end
+      return 'present' if has_file.call(root)
+      uncertain ? 'unknown' : 'missing'
+    rescue Errno::ENOENT
+      'missing'
+    rescue SystemCallError
+      'unknown'
     end
 
     def list(now: Time.now)
@@ -258,14 +331,19 @@ module RecordingEditor
         next if time > now
         publication = publication_info(id)
         rebuild = rebuild_info(id)
-        publication[:publication_status] = 'processing' if %w[requesting requested].include?(rebuild['status'])
+        if %w[requesting requested].include?(rebuild['status'])
+          publication[:publication_status] = 'processing'
+          publication[:generation_status] = 'processing'
+        end
         if %w[failed command_failed].include?(rebuild['status'])
           publication[:publication_status] = 'unknown'
+          publication[:generation_status] = 'unknown' unless publication[:generation_status] == 'generated'
           publication[:warnings] << '録画の再構築に失敗しました。BBBの処理ログを確認してください。'
         end
         item = { id: id, name: publication[:recording_title] || publication[:metadata_name] || id,
                  meeting_name: publication[:metadata_name], date: time.iso8601,
                  duration_ms: publication[:metadata_duration_ms], raw_available: false,
+                 raw_data_status: raw_data_status(id), generation_status: publication[:generation_status],
                  recording_status: 'unknown', recorded_duration_ms: nil,
                  publication_status: publication[:publication_status], playback_duration_ms: publication[:playback_duration_ms],
                  warnings: publication[:warnings] }
@@ -276,12 +354,16 @@ module RecordingEditor
             pending_title = rebuild['recording_title'] if %w[requesting requested failed command_failed].include?(rebuild['status'])
             display_name = ranges.empty? ? rec.name : publication[:recording_title] || pending_title || rec.name
             room_name = rec.name == id ? publication[:metadata_name] : rec.name
-            item.merge!(name: display_name, meeting_name: room_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true,
+            item.merge!(name: display_name, meeting_name: room_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true, raw_data_status: 'present',
                         recording_status: ranges.empty? ? 'unmarked' : 'marked',
                         recorded_duration_ms: ranges.sum { |r| r['end_ms'] - r['start_ms'] })
             item[:warnings].concat(rec.warnings)
           else
-            item[:warnings] << 'rawデータがありません。'
+            item[:warnings] << case item[:raw_data_status]
+                               when 'present' then 'rawファイルはありますがevents.xmlがありません。録画区間を確認できません。'
+                               when 'missing' then 'rawデータがありません。'
+                               else 'rawデータの有無を確認できません。'
+                               end
           end
         rescue Error, SystemCallError, ArgumentError, JSON::ParserError => e
           item[:warnings] << "rawデータを読み込めません: #{e.message}"

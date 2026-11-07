@@ -12,7 +12,9 @@ class OrphanDeletionTest < Minitest::Test
                'published_dir' => "#{@dir}/published", 'raw_audio_src' => "#{@dir}/audio", 'log_dir' => "#{@dir}/logs" }
     @repo = RecordingEditor::Repository.new(raw_root: "#{@dir}/recording/raw", state_root: "#{@dir}/state",
       published_root: "#{@dir}/published/presentation", unpublished_root: "#{@dir}/unpublished/presentation")
-    @raw = File.join(@repo.raw_root, @id)
+    @raw_dir = File.join(@repo.raw_root, @id)
+    FileUtils.mkdir_p(@raw_dir)
+    @raw = File.join(@dir, 'captions', @id)
     FileUtils.mkdir_p(@raw)
     File.write(File.join(@raw, 'leftover.txt'), 'leftover')
     @service = RecordingEditor::OrphanDeletion.new(@repo)
@@ -98,9 +100,9 @@ class OrphanDeletionTest < Minitest::Test
 
   def test_related_xml_symlinks_and_configuration_changes_block_deletion
     inactive do
-      File.write("#{@raw}/events.xml", 'broken XML')
+      File.write("#{@raw_dir}/events.xml", 'broken XML')
       assert_raises(RecordingEditor::Error) { @service.plan(@id) }
-      File.unlink("#{@raw}/events.xml")
+      File.unlink("#{@raw_dir}/events.xml")
       File.symlink('/etc/passwd', "#{@raw}/unsafe")
       assert_raises(RecordingEditor::Error) { @service.plan(@id) }
       File.unlink("#{@raw}/unsafe")
@@ -122,6 +124,7 @@ class OrphanDeletionTest < Minitest::Test
         assert_equal '/', options[:chdir]
         refute env.key?('RUBYOPT')
         assert_equal Etc.getpwuid(Process.euid).name, env['USER']
+        FileUtils.remove_entry(@raw_dir)
         FileUtils.remove_entry(@raw) # Only the fake BBB command removes fixture data.
         ['', '', Struct.new(:success?).new(true)]
       end
@@ -175,6 +178,11 @@ class OrphanDeletionTest < Minitest::Test
     inactive { assert @service.plan(@id)[:revision] }
     config = RecordingEditor::OrphanDeletion::CONFIG
     File.write(config, YAML.dump(@roots.merge('recording_dir' => @dir + '/other')))
+    inactive { assert_raises(RecordingEditor::Error) { @service.plan(@id) } }
+  end
+
+  def test_remaining_raw_media_without_xml_is_not_a_missing_raw_deletion_candidate
+    File.write(File.join(@raw_dir, 'audio.webm'), 'raw media')
     inactive { assert_raises(RecordingEditor::Error) { @service.plan(@id) } }
   end
 

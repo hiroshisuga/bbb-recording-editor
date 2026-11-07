@@ -7,7 +7,8 @@ import { IntlProvider } from 'react-intl';
 const meeting = (name, publication, recording = 'marked', raw = true) => ({
   id: `${name}-1700000000000`, name, date: '2026-10-10T08:00:00Z',
   duration_ms: 851185, recorded_duration_ms: recording === 'unmarked' ? 0 : 229257,
-  publication_status: publication, recording_status: recording, raw_available: raw, warnings: [],
+  publication_status: publication, generation_status: ['published', 'unpublished'].includes(publication) ? 'generated' : publication,
+  recording_status: recording, raw_available: raw, raw_data_status: raw ? 'present' : 'missing', warnings: [],
 });
 const meetings = [meeting('Public', 'published'), meeting('Private', 'unpublished'),
   meeting('No marks', 'not_generated', 'unmarked'), meeting('Working', 'processing'),
@@ -19,8 +20,9 @@ let onOpen;
 let onRefresh;
 const localized = component => <IntlProvider locale="ja" defaultLocale="ja" messages={{}}>{component}</IntlProvider>;
 const rows = () => [...container.querySelectorAll('.re-meeting')];
-async function filter(value) {
-  await act(async () => { Simulate.change(container.querySelector('select'), { target: { value } }); });
+const select = axis => container.querySelector(`[aria-label="${axis === 'raw' ? 'rawデータの状態' : '録画の生成・公開状態'}"]`);
+async function filter(value, axis = 'publication') {
+  await act(async () => { Simulate.change(select(axis), { target: { value } }); });
 }
 
 beforeEach(async () => {
@@ -34,9 +36,9 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 test('shows independent badges, meeting length, marked duration and missing raw', () => {
   expect(rows()).toHaveLength(6);
   expect(rows()[0].textContent).toContain('会議 14:11 · 録画区間 03:49');
-  expect(rows()[0].querySelector('.re-status-published').textContent).toBe('公開');
+  expect(rows()[0].querySelector('.re-status-published').textContent).toBe('生成済み · 公開');
   expect(rows()[2].textContent).toContain('録画区間 00:00');
-  expect(rows()[2].querySelector('.re-status-unmarked').textContent).toBe('録画区間なし');
+  expect(rows()[2].querySelector('.re-status-unmarked').textContent).toContain('録画区間なし');
   expect(rows()[4].textContent).toContain('録画区間 —');
   expect(rows()[4].querySelector('.re-status-missing').textContent).toBe('rawデータなし');
 });
@@ -61,20 +63,28 @@ test('renamed public and private recordings also show room names without duplica
   expect(onOpen).toHaveBeenCalledWith(entries[1].id);
 });
 
-test('all status filters include correct meetings and counts without changing selection', async () => {
-  const expectations = { published: ['Public'], unpublished: ['Private', 'Missing raw'],
-    not_generated: ['No marks'], processing: ['Working'], marked: ['Public', 'Private', 'Working', 'Unknown'], unmarked: ['No marks'],
-    raw_missing: ['Missing raw'], unknown: ['Unknown'] };
+test('hierarchical parent and child filters include correct rows and counts', async () => {
+  const expectations = { generated: ['Public', 'Private', 'Missing raw'], published: ['Public'], unpublished: ['Private', 'Missing raw'],
+    not_generated: ['No marks'], processing: ['Working'], generation_unknown: ['Unknown'], publication_unknown: [] };
   for (const [value, names] of Object.entries(expectations)) {
     await filter(value);
     expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(names);
-    const option = container.querySelector(`option[value="${value}"]`);
-    expect(option.textContent).toContain(`(${names.length})`);
+    expect(select('publication').querySelector(`option[value="${value}"]`).textContent).toContain(`(${names.length})`);
+  }
+  await filter('all');
+  const rawExpectations = { present: ['Public', 'Private', 'No marks', 'Working', 'Unknown'],
+    marked: ['Public', 'Private', 'Working', 'Unknown'], unmarked: ['No marks'], missing: ['Missing raw'], ranges_unknown: [], raw_unknown: [] };
+  for (const [value, names] of Object.entries(rawExpectations)) {
+    await filter(value, 'raw');
+    expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(names);
+    expect(select('raw').querySelector(`option[value="${value}"]`).textContent).toContain(`(${names.length})`);
   }
   expect(onOpen).not.toHaveBeenCalled();
   expect(container.textContent).toContain('選択中の会議は絞り込み結果に含まれません');
-  await filter('all');
+  await filter('all', 'raw');
   expect(rows()[0].classList.contains('active')).toBe(true);
+  expect(select('raw').querySelector('optgroup').label).toBe('rawデータあり');
+  expect(select('publication').querySelector('optgroup').label).toBe('生成済み');
 });
 
 test('opening meetings and refreshing still call the supplied actions', async () => {
@@ -87,7 +97,7 @@ test('opening meetings and refreshing still call the supplied actions', async ()
 test('new meeting data keeps the filter and gives a clear empty result', async () => {
   await filter('published');
   await act(async () => { root.render(localized(<MeetingList meetings={[meetings[1]]} selectedId={meetings[1].id} onOpen={onOpen} onRefresh={onRefresh} />)); });
-  expect(container.querySelector('select').value).toBe('published');
+  expect(select('publication').value).toBe('published');
   expect(rows()).toHaveLength(0);
   expect(container.textContent).toContain('条件に一致する会議がありません');
 });
@@ -95,9 +105,11 @@ test('new meeting data keeps the filter and gives a clear empty result', async (
 test('unknown metadata is not guessed to be published or unmarked', async () => {
   await act(async () => { root.render(localized(<MeetingList meetings={[{ id: 'fallback-1700000000000', warnings: ['Metadata unavailable'] }]} onOpen={onOpen} onRefresh={onRefresh} />)); });
   expect(rows()[0].textContent).toContain('会議 — · 録画区間 —');
-  expect(rows()[0].querySelector('.re-status-unknown').textContent).toBe('区間不明');
+  expect(rows()[0].textContent).toContain('rawデータの状態を確認できない');
+  expect(rows()[0].textContent).toContain('生成状態不明');
+  expect(rows()[0].textContent).not.toContain('録画区間不明');
   expect(rows()[0].textContent).toContain('Metadata unavailable');
-  await filter('unmarked');
+  await filter('unmarked', 'raw');
   expect(rows()).toHaveLength(0);
 });
 
@@ -113,22 +125,22 @@ test('all dates is the default and period filters combine with status counts wit
     { ...dated('ID fallback', 30), id: `fallback-${now - 30 * 86400000}`, date: null }];
   const renderList = () => root.render(localized(<MeetingList meetings={entries} selectedId={entries[3].id} dirty onOpen={onOpen} onRefresh={onRefresh} />));
   await act(async () => renderList());
-  const select = () => container.querySelector('[aria-label="会議の期間"]');
-  expect(select().value).toBe('all');
+  const periodSelect = () => container.querySelector('[aria-label="会議の期間"]');
+  expect(periodSelect().value).toBe('all');
   expect(rows()).toHaveLength(5);
   expect(container.querySelector('h2').textContent).toBe('録画データ');
-  await act(async () => Simulate.change(select(), { target: { value: '14' } }));
+  await act(async () => Simulate.change(periodSelect(), { target: { value: '14' } }));
   expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(['Recent missing', 'Boundary']);
   expect(container.querySelector('option[value="published"]').textContent).toContain('(1)');
   expect(container.textContent).toContain('選択中の会議は絞り込み結果に含まれません');
   await filter('published');
   expect(rows()).toHaveLength(1);
-  await act(async () => Simulate.change(select(), { target: { value: '30' } }));
+  await act(async () => Simulate.change(periodSelect(), { target: { value: '30' } }));
   expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(['Boundary', 'Just older', 'ID fallback']);
   await act(async () => renderList());
-  expect(select().value).toBe('30');
-  expect(container.querySelector('select').value).toBe('published');
-  await act(async () => Simulate.change(select(), { target: { value: 'all' } }));
+  expect(periodSelect().value).toBe('30');
+  expect(select('publication').value).toBe('published');
+  await act(async () => Simulate.change(periodSelect(), { target: { value: 'all' } }));
   expect(rows().map(row => row.querySelector('strong').textContent)).toContain('Retained old raw');
   expect(onOpen).not.toHaveBeenCalled(); expect(onRefresh).not.toHaveBeenCalled();
 });
@@ -144,4 +156,53 @@ test('only missing-raw ungenerated unknown-interval candidates offer deletion wi
   expect(onOpen).not.toHaveBeenCalled();
   await act(async () => root.render(localized(<MeetingList meetings={[orphan]} dirty onOpen={onOpen} onDelete={onDelete} />)));
   expect(container.querySelector('.re-delete-candidate').disabled).toBe(true);
+});
+
+test('missing XML, missing raw files and unavailable presence occupy different raw branches', async () => {
+  const entries = [meeting('XML unavailable', 'not_generated', 'unknown'), meeting('Empty raw', 'not_generated', 'unknown', false),
+    { ...meeting('Cannot inspect', 'not_generated', 'unknown', false), raw_data_status: 'unknown' }];
+  const onDelete = jest.fn();
+  await act(async () => root.render(localized(<MeetingList meetings={entries} onOpen={onOpen} onDelete={onDelete} />)));
+  expect(rows()[0].textContent).toContain('rawデータあり');
+  expect(rows()[0].textContent).toContain('録画区間不明');
+  expect(rows()[1].textContent).toContain('rawデータなし');
+  expect(rows()[1].textContent).not.toContain('録画区間不明');
+  expect(rows()[2].textContent).toContain('rawデータの状態を確認できない');
+  expect(container.querySelectorAll('.re-delete-candidate')).toHaveLength(1);
+  await filter('ranges_unknown', 'raw');expect(rows()[0].querySelector('strong').textContent).toBe('XML unavailable');
+  await filter('missing', 'raw');expect(rows()[0].querySelector('strong').textContent).toBe('Empty raw');
+  await filter('raw_unknown', 'raw');expect(rows()[0].querySelector('strong').textContent).toBe('Cannot inspect');
+});
+
+test('known generated output with unknown publication is separate from unknown generation', async () => {
+  const entries = [{ ...meeting('Visibility unknown', 'unknown'), generation_status: 'generated' }, meeting('Generation unknown', 'unknown')];
+  await act(async () => root.render(localized(<MeetingList meetings={entries} onOpen={onOpen} />)));
+  expect(rows()[0].textContent).toContain('生成済み · 公開状態不明');
+  expect(rows()[1].textContent).toContain('生成状態不明');
+  await filter('generated');expect(rows()).toHaveLength(1);
+  await filter('publication_unknown');expect(rows()[0].querySelector('strong').textContent).toBe('Visibility unknown');
+  await filter('generation_unknown');expect(rows()[0].querySelector('strong').textContent).toBe('Generation unknown');
+});
+
+test('raw and generation filters intersect, and counts reflect the other selected axis', async () => {
+  await filter('unpublished');
+  expect(select('raw').querySelector('[value="present"]').textContent).toContain('(1)');
+  expect(select('raw').querySelector('[value="missing"]').textContent).toContain('(1)');
+  await filter('marked', 'raw');
+  expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(['Private']);
+  expect(select('publication').querySelector('[value="unpublished"]').textContent).toContain('(1)');
+  await filter('not_generated');expect(rows()).toHaveLength(0);
+  expect(select('raw').value).toBe('marked'); // Do not silently reset an empty combination.
+  expect(select('raw').querySelector('[value="unmarked"]').textContent).toContain('(1)');
+  await filter('unmarked', 'raw');expect(rows().map(row => row.querySelector('strong').textContent)).toEqual(['No marks']);
+  expect(onOpen).not.toHaveBeenCalled();expect(onRefresh).not.toHaveBeenCalled();
+});
+
+test('an older server reporting raw XML unavailable does not establish raw absence', async () => {
+  const legacy = { ...meeting('Legacy', 'not_generated', 'unknown', false) };
+  delete legacy.raw_data_status;
+  await act(async () => root.render(localized(<MeetingList meetings={[legacy]} onOpen={onOpen} onDelete={jest.fn()} />)));
+  expect(rows()[0].textContent).toContain('rawデータの状態を確認できない');
+  expect(container.querySelector('.re-delete-candidate')).toBeNull();
+  await filter('missing', 'raw');expect(rows()).toHaveLength(0);
 });

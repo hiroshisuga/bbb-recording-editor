@@ -1,22 +1,8 @@
 import React, { useState } from 'react';
 import { formatTime } from './model';
+import { rawState, rangeState, generationState, publicationState, matchesRaw, matchesPublication, deletionCandidate } from './meetingListStatus';
 import { useEditorI18n } from './i18n';
 
-const publicationLabels = {
-  published: 'published', unpublished: 'unpublished', not_generated: 'not_generated', processing: 'processing', unknown: 'unknown',
-};
-const recordingLabels = { marked: 'marked', unmarked: 'unmarked', unknown: 'rangesUnknown' };
-const filters = [
-  ['all', 'all'], ['published', 'published'], ['unpublished', 'unpublished'],
-  ['not_generated', 'not_generated'], ['processing', 'processing'], ['marked', 'marked'], ['unmarked', 'unmarked'],
-  ['raw_missing', 'rawMissing'], ['unknown', 'statusUnknown'],
-];
-const matches = (meeting, filter) => {
-  if (filter === 'all') return true;
-  if (filter === 'marked' || filter === 'unmarked') return meeting.recording_status === filter;
-  if (filter === 'raw_missing') return meeting.raw_available === false;
-  return (meeting.publication_status || 'unknown') === filter;
-};
 const meetingTime = meeting => new Date(meeting.date || Number(meeting.id.split('-').pop())).getTime();
 const dateRanges = [14, 30, 90, 365];
 const durationText = ms => {
@@ -27,21 +13,47 @@ const durationText = ms => {
 
 export default function MeetingList({ meetings, selectedId, busy, dirty, onRefresh, onOpen, onDelete }) {
   const { locale, t, diagnostic } = useEditorI18n();
-  const [filter, setFilter] = useState('all');
+  const [rawFilter, setRawFilter] = useState('all');
+  const [publicationFilter, setPublicationFilter] = useState('all');
   const [period, setPeriod] = useState('all');
   const now = Date.now();
   const dated = period === 'all' ? meetings : meetings.filter(meeting => {
     const time = meetingTime(meeting);
     return time >= now - Number(period) * 86400000 && time <= now;
   });
-  const visible = dated.filter(meeting => matches(meeting, filter));
+  const visible = dated.filter(meeting => matchesRaw(meeting, rawFilter) && matchesPublication(meeting, publicationFilter));
+  const rawCount = value => dated.filter(meeting => matchesPublication(meeting, publicationFilter) && matchesRaw(meeting, value)).length;
+  const publicationCount = value => dated.filter(meeting => matchesRaw(meeting, rawFilter) && matchesPublication(meeting, value)).length;
+  const option = (value, label, count) => <option key={value} value={value}>{t(label)} ({count(value)})</option>;
   const selectedHidden = selectedId && !visible.some(meeting => meeting.id === selectedId);
   return <aside className="re-meetings">
     <div className="re-sidebar-title"><h2>{t('recordingList')}</h2><button disabled={!!busy} onClick={onRefresh} title={t('refreshList')}>↻</button></div>
     <p className="re-muted">{t('recordingListHint')}</p>
-    <label className="re-meeting-filter">{t('show')}
-      <select aria-label={t('filter')} value={filter} disabled={!!busy} onChange={event => setFilter(event.target.value)}>
-        {filters.map(([value, label]) => <option key={value} value={value}>{t(label)} ({dated.filter(meeting => matches(meeting, value)).length})</option>)}
+    <label className="re-meeting-filter re-meeting-filter-hierarchy">{t('rawFilter')}
+      <select aria-label={t('rawFilter')} value={rawFilter} disabled={!!busy} onChange={event => setRawFilter(event.target.value)}>
+        {option('all', 'all', rawCount)}
+        <optgroup label={t('rawPresent')}>
+          {option('present', 'rawPresentAll', rawCount)}
+          {option('marked', 'marked', rawCount)}
+          {option('unmarked', 'unmarked', rawCount)}
+          {option('ranges_unknown', 'rangesUnknown', rawCount)}
+        </optgroup>
+        {option('missing', 'rawMissing', rawCount)}
+        {option('raw_unknown', 'rawUnknown', rawCount)}
+      </select>
+    </label>
+    <label className="re-meeting-filter re-meeting-filter-hierarchy">{t('publicationFilter')}
+      <select aria-label={t('publicationFilter')} value={publicationFilter} disabled={!!busy} onChange={event => setPublicationFilter(event.target.value)}>
+        {option('all', 'all', publicationCount)}
+        <optgroup label={t('generated')}>
+          {option('generated', 'generatedAll', publicationCount)}
+          {option('published', 'published', publicationCount)}
+          {option('unpublished', 'unpublished', publicationCount)}
+          {option('publication_unknown', 'publicationUnknown', publicationCount)}
+        </optgroup>
+        {option('processing', 'processing', publicationCount)}
+        {option('not_generated', 'not_generated', publicationCount)}
+        {option('generation_unknown', 'generationUnknown', publicationCount)}
       </select>
     </label>
     <label className="re-meeting-filter re-meeting-period">{t('meetingPeriod')}
@@ -51,22 +63,22 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
       </select>
     </label>
     {visible.map(meeting => {
-      const publication = publicationLabels[meeting.publication_status] ? meeting.publication_status : 'unknown';
-      const recording = recordingLabels[meeting.recording_status] ? meeting.recording_status : 'unknown';
+      const raw = rawState(meeting), recording = rangeState(meeting), generation = generationState(meeting), publication = publicationState(meeting);
+      const publicationLabel = generation === 'generated' ? publication === 'unknown' ? 'publicationUnknown' : publication : generation === 'unknown' ? 'generationUnknown' : generation;
       const roomName = typeof meeting.meeting_name === 'string' ? meeting.meeting_name.trim() : '';
-      return <div className="re-meeting-entry" key={meeting.id}><button className={`re-meeting ${selectedId === meeting.id ? 'active' : ''}`} key={meeting.id} disabled={!!busy} onClick={() => onOpen(meeting.id)}>
+      return <div className="re-meeting-entry" key={meeting.id}><button className={`re-meeting ${selectedId === meeting.id ? 'active' : ''}`} disabled={!!busy} onClick={() => onOpen(meeting.id)}>
         <strong>{meeting.name || meeting.id.slice(0, 8)}</strong>
         {roomName && roomName !== meeting.name?.trim() && <small className="re-meeting-room">{t('roomName')}: {roomName}</small>}
         <span>{new Date(meetingTime(meeting)).toLocaleString(locale)}</span>
         <span>{t('durations', { meeting: durationText(meeting.duration_ms), recorded: durationText(meeting.recorded_duration_ms) })}</span>
-        <span className="re-meeting-status">
-          <span className={`re-status re-status-${recording}`}>{t(recordingLabels[recording])}</span>
-          <span className={`re-status re-status-${publication}`}>{t(publicationLabels[publication])}</span>
-          {meeting.raw_available === false && <span className="re-status re-status-missing">{t('rawMissing')}</span>}
+        <span className="re-meeting-status re-meeting-raw-status">
+          <span className={`re-status re-status-${raw === 'missing' ? 'missing' : raw}`} title={t('rawPresenceHint')}>{t(raw === 'present' ? 'rawPresent' : raw === 'missing' ? 'rawMissing' : 'rawUnknown')}</span>
+          {raw === 'present' && <span className={`re-status re-status-${recording}`}>↳ {t(recording === 'unknown' ? 'rangesUnknown' : recording)}</span>}
         </span>
+        <span className="re-meeting-status"><span className={`re-status re-status-${generation === 'generated' ? publication : generation}`}>{generation === 'generated' ? `${t('generated')} · ` : ''}{t(publicationLabel)}</span></span>
         {meeting.warnings?.length > 0 && <small className="re-meeting-warning">{meeting.warnings.map(diagnostic).join(' / ')}</small>}
       </button>
-      {onDelete && publication === 'not_generated' && recording === 'unknown' && meeting.raw_available === false && <button className="re-delete-candidate" disabled={!!busy || !!dirty} onClick={() => onDelete(meeting)}>{t('deleteRecording')}</button>}
+      {onDelete && deletionCandidate(meeting) && <button className="re-delete-candidate" disabled={!!busy || !!dirty} onClick={() => onDelete(meeting)}>{t('deleteRecording')}</button>}
       </div>;
     })}
     {!visible.length && <p className="re-muted">{t(meetings.length ? 'noMatches' : 'noMeetings')}</p>}

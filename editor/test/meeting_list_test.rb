@@ -2,6 +2,7 @@
 
 require 'minitest/autorun'
 require 'tmpdir'
+require 'minitest/mock'
 require 'cgi'
 require_relative '../lib/recording_editor'
 
@@ -270,4 +271,81 @@ class MeetingListTest < Minitest::Test
     assert @repo.recording(published).duration.positive?
     before.each { |file, bytes| assert_equal bytes, File.binread(file) }
   end
+  def test_raw_presence_is_independent_of_recording_xml_and_marks
+    raw
+    assert_equal 'present', item[:raw_data_status]
+    assert_equal 'unmarked', item[:recording_status]
+    File.write(File.join(@repo.raw_root, @id, 'events.xml'), 'invalid XML')
+    assert_equal 'present', item[:raw_data_status]
+    assert_equal 'unknown', item[:recording_status]
+    refute item[:raw_available] # Retained compatibility field means XML loadability.
+    File.unlink(File.join(@repo.raw_root, @id, 'events.xml'))
+    FileUtils.mkdir_p(File.join(@repo.raw_root, @id, 'audio'))
+    assert_equal 'missing', item[:raw_data_status]
+    File.binwrite(File.join(@repo.raw_root, @id, 'audio', 'microphone.webm'), 'audio')
+    assert_equal 'present', item[:raw_data_status]
+    assert_equal 'unknown', item[:recording_status]
+    assert item[:warnings].any? { |warning| warning.include?('events.xmlがありません') }
+  end
+
+  def test_missing_and_uninspectable_raw_are_not_conflated
+    metadata(@repo.published_root, 'published', 'true')
+    assert_equal 'missing', item[:raw_data_status]
+    FileUtils.mkdir_p(File.join(@repo.raw_root, @id))
+    assert_equal 'missing', item[:raw_data_status]
+    lstat = File.method(:lstat)
+    File.stub(:lstat, lambda { |path| raise Errno::EACCES if path == File.join(@repo.raw_root, @id); lstat.call(path) }) do
+      assert_equal 'unknown', item[:raw_data_status]
+      assert item[:warnings].any? { |warning| warning.include?('有無を確認できません') }
+    end
+    File.symlink('/etc/passwd', File.join(@repo.raw_root, @id, 'link'))
+    assert_equal 'unknown', item[:raw_data_status]
+  end
+
+  def test_generation_and_publication_uncertainty_are_separate
+    raw
+    assert_equal 'not_generated', item[:generation_status]
+    FileUtils.mkdir_p(File.join(@repo.published_root, @id))
+    assert_equal 'unknown', item[:generation_status]
+    path = metadata(@repo.published_root, 'published', 'false')
+    assert_equal 'generated', item[:generation_status]
+    assert_equal 'unknown', item[:publication_status]
+    File.write(path, 'invalid XML')
+    assert_equal 'unknown', item[:generation_status]
+    metadata(@repo.published_root, 'published', 'true')
+    metadata(@repo.unpublished_root, 'unpublished', 'false')
+    assert_equal 'generated', item[:generation_status]
+    assert_equal 'unknown', item[:publication_status]
+  end
+
+  def test_processing_and_rebuild_requests_set_generation_status
+    raw
+    metadata(@repo.process_root, 'processed', 'false')
+    assert_equal 'processing', item[:generation_status]
+    FileUtils.rm_rf(File.join(@repo.process_root, @id))
+    @repo.write_rebuild_info(@id, { 'status' => 'requested', 'requested_at' => @now.iso8601 })
+    assert_equal 'processing', item[:generation_status]
+    @repo.write_rebuild_info(@id, { 'status' => 'command_failed' })
+    assert_equal 'unknown', item[:generation_status]
+  end
+
+  def test_inaccessible_publication_paths_are_unknown_not_ungenerated
+    raw
+    stat = File.method(:stat)
+    File.stub(:stat, lambda { |path| raise Errno::EACCES if path == File.join(@repo.published_root, @id); stat.call(path) }) do
+      assert_equal 'unknown', item[:generation_status]
+      assert_equal 'unknown', item[:publication_status]
+      assert_equal 'present', item[:raw_data_status]
+      assert item[:warnings].any? { |warning| warning.include?('生成・公開状態を確認できません') }
+    end
+  end
+
+  def test_failed_rebuild_does_not_hide_known_generated_output
+    metadata(@repo.published_root, 'published', 'true')
+    @repo.write_rebuild_info(@id, { 'status' => 'command_failed' })
+    assert_equal 'generated', item[:generation_status]
+    assert_equal 'unknown', item[:publication_status]
+    assert_equal 'missing', item[:raw_data_status]
+  end
+
 end
