@@ -1,0 +1,73 @@
+{
+  "before": "6f76c3255d8360595f0abe301a6b3ff91741d535",
+  "at": "2026-11-14T01:38:07.483Z",
+  "browser": "156.0.8078.79",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "scope": "Synthetic React/Tldraw synchronous commits; excludes paint, media playback and BBB server. Non-minified production-mode harness.",
+  "cases": [
+    {
+      "variant": "before",
+      "events": 10000,
+      "visibleShapes": 100,
+      "samples": 16,
+      "medianCommitMs": 126.10000000009313,
+      "maxCommitMs": 182.1999999997206,
+      "drawing": {
+        "deleteShapes": 16,
+        "createShapes": 1616
+      },
+      "unrelatedDrawing": {
+        "deleteShapes": 1,
+        "createShapes": 101
+      }
+    },
+    {
+      "variant": "after",
+      "events": 10000,
+      "visibleShapes": 100,
+      "samples": 16,
+      "medianCommitMs": 4.7000000001862645,
+      "maxCommitMs": 7.600000000093132,
+      "drawing": {
+        "createShapes": 0,
+        "updateShapes": 16
+      },
+      "unrelatedDrawing": {
+        "createShapes": 0,
+        "updateShapes": 0
+      }
+    },
+    {
+      "variant": "before",
+      "events": 50000,
+      "visibleShapes": 100,
+      "samples": 16,
+      "medianCommitMs": 149.40000000037253,
+      "maxCommitMs": 213.5,
+      "drawing": {
+        "deleteShapes": 16,
+        "createShapes": 1616
+      },
+      "unrelatedDrawing": {
+        "deleteShapes": 1,
+        "createShapes": 101
+      }
+    },
+    {
+      "variant": "after",
+      "events": 50000,
+      "visibleShapes": 100,
+      "samples": 16,
+      "medianCommitMs": 4.2000000001862645,
+      "maxCommitMs": 8.700000000186265,
+      "drawing": {
+        "createShapes": 0,
+        "updateShapes": 16
+      },
+      "unrelatedDrawing": {
+        "createShapes": 0,
+        "updateShapes": 0
+      }
+    }
+  ]
+}
