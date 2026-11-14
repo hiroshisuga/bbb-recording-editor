@@ -239,7 +239,7 @@
   "cutChimeWarning": "To play the chime, up to 0.125 seconds at each end of the excluded section (up to 0.25 seconds total per cut) will be included in the recording. Gaps of 0.25 seconds or less are included in full. Original microphone and screenshare audio in those intervals will be silenced and replaced by the chime, but video, slides, chat, and other events may remain visible. Audio from externally shared videos is not modified.",
   "cutChimeAccept": "Confirm and enable",
   "cutChimeCancel": "Cancel",
-  "cutChimeHint": "The paired notes and dashed line represent one chime. Click either mark or the line to remove it. Save to raw and rebuild recording to apply changes.",
+  "cutChimeHint": "♪ marks an enabled chime; + marks an available cut. Click to toggle. Save raw and rebuild to apply.",
   "cutChimeAll": "Add chimes to all cuts",
   "cutChimeClear": "Remove all chimes",
   "previewResize": "Resize slides or screen sharing and webcams",
@@ -261,5 +261,7 @@
   "cutChimeSound": "Sound (all cuts)",
   "cutChimeSound_a": "Soft two notes",
   "cutChimeSound_c": "Wooden double tap",
-  "cutChimeSound_tape": "Fast-forward voice"
+  "cutChimeSound_tape": "Fast-forward voice",
+  "cutChimeSettings": "Chime settings",
+  "cutChimeGroup": "{count} nearby cuts ({selected} chimes enabled)"
 }

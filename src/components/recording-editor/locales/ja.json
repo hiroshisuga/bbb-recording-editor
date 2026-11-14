@@ -239,7 +239,7 @@
   "cutChimeWarning": "合図音のため、対象の除外区間の両端を最大0.125秒ずつ、合計最大0.25秒録画に含めます。0.25秒以下の省略では区間全体を含めます。この間の元のマイク音声・画面共有内の音声は合図音に置き換えますが、映像・スライド・チャットなどは録画に含まれることがあります。外部共有動画の音声は加工しません。",
   "cutChimeAccept": "確認して有効にする",
   "cutChimeCancel": "キャンセル",
-  "cutChimeHint": "両端の音符と破線は一つのチャイム設定です。マークまたは線のクリックで削除できます。反映にはraw保存と録画の再構築が必要です。",
+  "cutChimeHint": "録画区間の間の♪はチャイムあり、＋は追加できる切れ目です。マークのクリックで切り替えます。反映にはraw保存と録画の再構築が必要です。",
   "cutChimeAll": "すべての切れ目にチャイム",
   "cutChimeClear": "チャイムを全消去",
   "previewResize": "スライド・画面共有とwebcamの幅を調整",
@@ -261,5 +261,7 @@
   "cutChimeSound": "チャイム音（全切れ目共通）",
   "cutChimeSound_a": "やわらかい2音",
   "cutChimeSound_c": "木琴風のコト・コト",
-  "cutChimeSound_tape": "早回し音声（キュルキュル）"
+  "cutChimeSound_tape": "早回し音声（キュルキュル）",
+  "cutChimeSettings": "チャイム設定",
+  "cutChimeGroup": "近接する{count}か所の切れ目（チャイム{selected}か所）"
 }

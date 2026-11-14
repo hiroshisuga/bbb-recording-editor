@@ -168,22 +168,15 @@
 .re-selection-status { margin:6px 0 12px; color:var(--re-muted); font-size:12px; }
 .re-selection-status.re-selection-invalid { color:#ffc17d; }
 
-/* Chime settings are below the workbench; cues share timeline scrolling. */
+/* Chime controls belong to the recording track; settings open above clipping. */
 .re-chime-tools { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; padding:9px 0 0; font-size:11px; }
-.re-chime-tools audio { display:none; }
+.re-chime-sample { display:none; }
 .re-chime-tools label { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
 .re-chime-tools select { max-width:100%; }
 .re-chime-confirm { margin:auto; max-width:min(620px,calc(100vw - 32px)); color:var(--re-text); }
 .re-chime-confirm::backdrop { background:#0008; }
-.re-chime-track { height:43px; }
 .recording-editor .re-handle--chime { background:#d7b4ff; box-shadow:0 0 0 1px #9f73d0; }
-.recording-editor .re-chime-cue { position:absolute; top:17px; height:23px; min-width:0; padding:0; border:0; border-radius:0; background:transparent; color:#cba4ef; z-index:4; }
-.recording-editor .re-chime-cue:hover:not(:disabled),.recording-editor .re-chime-cue:focus-visible { background:transparent; color:#f1dcff; }
-.re-chime-link { position:absolute; left:0; right:0; top:11px; border-top:2px dashed currentColor; pointer-events:none; }
-.re-chime-end { position:absolute; top:4px; width:15px; height:15px; border:1px solid currentColor; border-radius:50%; background:#30223f; color:inherit; font:12px/13px system-ui,sans-serif; }
-.re-chime-start { left:0; transform:translateX(-50%); }
-.re-chime-finish { right:0; transform:translateX(50%); }
-.re-chime-menu { position:fixed; z-index:10001; width:270px; max-width:calc(100vw - 16px); padding:8px; border:1px solid #9575b4; border-radius:5px; background:#221b2d; color:#edf3fa; box-shadow:0 4px 16px #0009; font:12px/1.5 system-ui,sans-serif; }
+.re-chime-menu { max-height:calc(100vh - 16px); overflow:auto; position:fixed; z-index:10001; width:270px; max-width:calc(100vw - 16px); padding:8px; border:1px solid #9575b4; border-radius:5px; background:#221b2d; color:#edf3fa; box-shadow:0 4px 16px #0009; font:12px/1.5 system-ui,sans-serif; }
 .re-chime-menu p { margin:0 0 7px; overflow-wrap:anywhere; }
 .re-chime-menu button { display:block; width:100%; padding:7px; border:1px solid #6e527e; border-radius:3px; background:#3b2c4b; color:inherit; font:inherit; text-align:left; cursor:pointer; }
 .re-chime-menu button:hover:not(:disabled) { background:#523c68; }
@@ -271,3 +264,30 @@
 }
 
 .re-detail-error { position:static; display:flex; flex-wrap:wrap; align-items:center; gap:3px 8px; padding:3px 7px; border-top:1px solid var(--re-line); }
+
+/* Recording decisions share the overview's exact scroll and time coordinates. */
+.record_ranges { height:46px; }
+.record_ranges.re-has-cuts { height:70px; }
+.record_ranges .re-bar { top:25px; height:16px; bottom:auto; }
+.re-recording-track-heading { position:sticky; left:0; z-index:9; display:inline-flex; align-items:center; gap:8px; max-width:100%; padding:1px 6px; background:#102130; }
+.re-recording-track-heading .re-track-label { position:static; margin:0; padding:0; font-size:11px; }
+.recording-editor .re-chime-settings-toggle { min-height:22px; padding:1px 7px; font-size:11px; line-height:18px; }
+.re-chime-controls { position:absolute; inset:0; pointer-events:none; }
+.re-cut-link { position:absolute; top:55px; height:1px; border-top:1px dashed #cba4ec; }
+.recording-editor .re-chime-toggle { position:absolute; top:43px; width:24px; height:24px; transform:translateX(-50%); padding:0; border-radius:50%; border:1px solid #658097; background:#203447; color:#cbdbe8; font-size:15px; line-height:22px; z-index:8; pointer-events:auto; }
+.recording-editor .re-chime-toggle.re-chime-cue { border-color:#f1cf83; background:#f1cf83; color:#23303b; }
+.recording-editor .re-chime-toggle small { color:inherit; font-size:9px; }
+.recording-editor .re-chime-cluster { width:38px; border-radius:5px; }
+.recording-editor .re-chime-toggle:focus-visible { outline:2px solid #74c4ff; outline-offset:1px; }
+.re-chime-settings-popover { position:fixed; z-index:10002; width:350px; max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); overflow:auto; box-sizing:border-box; padding:10px; border:1px solid #7297b7; border-radius:6px; background:#18222e; color:#edf3fa; box-shadow:0 4px 16px #0009; font:13px/1.5 system-ui,sans-serif; }
+.re-chime-settings-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.re-chime-settings-popover button,.re-chime-settings-popover select { box-sizing:border-box; max-width:100%; font:inherit; color:inherit; background:#243344; border:1px solid #415269; border-radius:4px; padding:5px 7px; cursor:pointer; }
+.re-chime-settings-popover button:disabled,.re-chime-settings-popover select:disabled { opacity:.4; cursor:default; }
+.re-chime-settings-popover button:focus-visible,.re-chime-settings-popover select:focus-visible { outline:2px solid #74c4ff; outline-offset:2px; }
+.re-chime-settings-popover .re-chime-tools { display:flex; align-items:stretch; }
+.re-chime-settings-popover .re-chime-tools label { width:100%; }
+.re-chime-settings-popover .re-chime-tools select { width:100%; }
+@media(pointer:coarse) {
+  .record_ranges.re-has-cuts { height:90px; }
+  .recording-editor .re-chime-toggle { width:44px; height:44px; line-height:42px; }
+}

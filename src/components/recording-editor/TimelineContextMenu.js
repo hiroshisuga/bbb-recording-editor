@@ -14,13 +14,14 @@ export default function TimelineContextMenu({ context, label, actionLabel, disab
   useEffect(() => {
     const outside = event => { if (!ref.current?.contains(event.target)) onClose(); };
     const close = () => onClose();
+    const scroll = event => { if (!ref.current?.contains(event.target)) onClose(); };
     document.addEventListener('pointerdown', outside, true);
-    document.addEventListener('scroll', close, true);
+    document.addEventListener('scroll', scroll, true);
     window.addEventListener('resize', close);
     window.addEventListener('blur', close);
     return () => {
       document.removeEventListener('pointerdown', outside, true);
-      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('scroll', scroll, true);
       window.removeEventListener('resize', close);
       window.removeEventListener('blur', close);
     };
@@ -32,10 +33,15 @@ export default function TimelineContextMenu({ context, label, actionLabel, disab
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeToHandle(); }
       else if (e.key === 'Tab') closeToHandle();
       else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
-        e.preventDefault(); e.stopPropagation(); ref.current.querySelector('button:not(:disabled)')?.focus();
+        e.preventDefault(); e.stopPropagation();
+        const buttons = [...ref.current.querySelectorAll('button:not(:disabled)')];
+        const index = buttons.indexOf(document.activeElement);
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1
+          : (index + (e.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
       }
     }}>
     {children}
-    <button role="menuitem" disabled={disabled} onClick={() => { closeToHandle(); onAction(); }}>{actionLabel}</button>
+    {actionLabel && <button role="menuitem" disabled={disabled} onClick={() => { closeToHandle(); onAction(); }}>{actionLabel}</button>}
   </div>, document.body);
 }
