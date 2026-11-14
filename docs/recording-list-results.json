@@ -1,0 +1,63 @@
+{
+  "at": "2026-11-14T04:46:33Z",
+  "ruby": "ruby 3.3.8 (2025-04-09 revision b200bad6cd) [x86_64-linux-gnu]",
+  "platform": "x86_64-linux-gnu",
+  "scope": "Synthetic local list assembly, XML parsing and filesystem checks; bypass vs cold/warm process-local cache. Excludes HTTP, browser, media processing and production BBB data.",
+  "meetings": 300,
+  "events_per_meeting": 1001,
+  "raw_xml_bytes": 35712600,
+  "uncached": {
+    "samples_ms": [
+      2618.7522760010324,
+      2547.288830999605,
+      2540.3296660006163,
+      2487.5676770006976,
+      2624.434905999806
+    ],
+    "median_ms": 2547.288830999605,
+    "xml_parses": [
+      600,
+      600,
+      600,
+      600,
+      600
+    ]
+  },
+  "cold": {
+    "samples_ms": [
+      2922.8956980005023
+    ],
+    "median_ms": 2922.8956980005023,
+    "xml_parses": [
+      600
+    ]
+  },
+  "warm": {
+    "samples_ms": [
+      55.39110700010497,
+      69.40797200149973,
+      82.68086700081767,
+      40.51946800063888,
+      47.612730999389896
+    ],
+    "median_ms": 55.39110700010497,
+    "xml_parses": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "one_raw_changed": {
+    "samples_ms": [
+      58.97161699977005
+    ],
+    "median_ms": 58.97161699977005,
+    "xml_parses": [
+      1
+    ]
+  },
+  "retained_entries": 600,
+  "retained_entry_graph_bytes": 640792
+}
