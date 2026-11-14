@@ -416,15 +416,15 @@ function Editor() {
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   }, [audio, busy, undo]);
 
-  const runJob = async (path, payload) => {
+  const runJob = useCallback(async (path, payload) => {
     let job = await request(path, payload);
     while (!['done', 'failed'].includes(job.status)) {
       setBusy(job.message || { id: 'working' }); await sleep(700); job = await request(`/jobs/${job.id}`);
     }
     if (job.status === 'failed') throw new Error(job.message);
     return job.result;
-  };
-  const open = async id => {
+  }, []);
+  const open = useCallback(async id => {
     setBusy({ id: 'loadingMedia' }); setError(''); setMessage(''); setReview(false); setRebuildReview(false); setResetReview(false);
     setRequestedRebuildId(null);
     audio?.pause(); setRecording(null); setPreview(null); setTime(0); setPlaying(false);
@@ -437,7 +437,7 @@ function Editor() {
       setPreview(generated);
       if (generated.cache_reused) setMessage({ id: 'previewReused' });
     } catch (e) { setError(e.message); } finally { setBusy(''); }
-  };
+  }, [audio, runJob]);
   const draft = async () => {
     setBusy({ id: 'savingDraft' }); setError('');
     try { await request(`/recordings/${recording.id}/draft`, { ...edit, cut_chime: edit.cut_chime_gaps.length > 0, revision: recording.revision }); setMessage({ id: 'draftSaved' }); }

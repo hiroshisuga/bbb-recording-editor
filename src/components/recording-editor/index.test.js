@@ -1393,3 +1393,37 @@ test('deleting an orphan from the list refreshes results and releases the shared
   expect(container.querySelector('.re-sidebar-title button').disabled).toBe(false);
   expect(container.querySelector('.re-notice')).toBeNull();
 });
+
+test('playback clock updates skip meeting-list calculations while the playhead still advances', async () => {
+  const formatDate = jest.spyOn(Date.prototype, 'toLocaleString');
+  const audio = container.querySelector('audio');
+  const requests = calls.length;
+  // Use the native media listener that shares the 100 ms clock's tick handler.
+  // Separate commits ensure React cannot hide list renders by batching ticks.
+  for (let i = 1; i <= 100; i += 1) {
+    await act(async () => {
+      audio.currentTime = i / 10;
+      audio.dispatchEvent(new Event('seeked'));
+    });
+  }
+  expect(parseFloat(container.querySelector('.re-playhead').style.left)).toBeCloseTo(100 / 6);
+  expect(container.querySelector('.re-meeting.active')).not.toBeNull();
+  expect(formatDate).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(requests);
+
+  // A real data refresh must still recalculate rows and keep actions usable.
+  await act(async () => Simulate.click(container.querySelector('[title="一覧を更新"]')));
+  expect(formatDate).toHaveBeenCalled();
+  expect(calls.filter(call => call.url.endsWith('/recordings'))).toHaveLength(2);
+});
+
+test('memoized meeting actions pause the current audio after it has been replaced', async () => {
+  const previous = container.querySelector('audio');
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  const current = container.querySelector('audio');
+  expect(current).not.toBe(previous);
+  HTMLMediaElement.prototype.pause.mockClear();
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(HTMLMediaElement.prototype.pause.mock.instances).toContain(current);
+  expect(HTMLMediaElement.prototype.pause.mock.instances).not.toContain(previous);
+});
