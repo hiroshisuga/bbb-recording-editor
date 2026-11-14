@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { formatTime } from './model';
 import { rawState, rangeState, generationState, publicationState, matchesRaw, matchesPublication, deletionCandidate } from './meetingListStatus';
 import { useEditorI18n } from './i18n';
@@ -11,7 +11,7 @@ const durationText = ms => {
   return ms < 3600000 ? text.slice(3) : text;
 };
 
-export default function MeetingList({ meetings, selectedId, busy, dirty, onRefresh, onOpen, onDelete }) {
+function MeetingList({ meetings, selectedId, busy, dirty, onRefresh, onOpen, onDelete }) {
   const { locale, t, diagnostic } = useEditorI18n();
   const [rawFilter, setRawFilter] = useState('all');
   const [publicationFilter, setPublicationFilter] = useState('all');
@@ -85,3 +85,7 @@ export default function MeetingList({ meetings, selectedId, busy, dirty, onRefre
     {dirty && <p className="re-muted">{t('saveBeforeSwitch')}</p>}
   </aside>;
 }
+
+// Playback time lives in the parent. Only list props, filters and locale should
+// rerun row formatting and counts; use the default comparison for every prop.
+export default memo(MeetingList);

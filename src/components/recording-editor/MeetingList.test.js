@@ -211,3 +211,46 @@ test('an older server reporting raw XML unavailable does not establish raw absen
   expect(container.querySelector('.re-delete-candidate')).toBeNull();
   await filter('missing', 'raw');expect(rows()).toHaveLength(0);
 });
+
+test('selection, busy and dirty changes still update highlights, controls and reminders', async () => {
+  const orphan = meeting('Orphan', 'not_generated', 'unknown', false);
+  const entries = [...meetings, orphan];
+  const props = { meetings: entries, selectedId: meetings[0].id, onOpen, onRefresh, onDelete: jest.fn(), busy: '', dirty: false };
+  const render = overrides => act(async () => root.render(localized(<MeetingList {...props} {...overrides} />)));
+  await render({});
+  expect(rows()[0].classList.contains('active')).toBe(true);
+  expect(container.querySelector('.re-delete-candidate').disabled).toBe(false);
+  await render({ selectedId: meetings[1].id, busy: 'Saving' });
+  expect(rows()[0].classList.contains('active')).toBe(false);
+  expect(rows()[1].classList.contains('active')).toBe(true);
+  expect(rows().every(row => row.disabled)).toBe(true);
+  expect(select('raw').disabled).toBe(true);
+  expect(container.querySelector('[title="一覧を更新"]').disabled).toBe(true);
+  expect(container.querySelector('.re-delete-candidate').disabled).toBe(true);
+  await render({ dirty: true });
+  expect(rows().every(row => !row.disabled)).toBe(true);
+  expect(select('raw').disabled).toBe(false);
+  expect(container.querySelector('.re-delete-candidate').disabled).toBe(true);
+  expect(container.textContent).toContain('会議を切り替える前に下書きかrawデータへ保存してください');
+  await render({});
+  expect(container.querySelector('.re-delete-candidate').disabled).toBe(false);
+  expect(container.textContent).not.toContain('会議を切り替える前に下書きかrawデータへ保存してください');
+});
+
+test('replacing action callbacks uses the latest handlers', async () => {
+  const orphan = meeting('Orphan', 'not_generated', 'unknown', false);
+  const first = { onOpen: jest.fn(), onRefresh: jest.fn(), onDelete: jest.fn() };
+  const latest = { onOpen: jest.fn(), onRefresh: jest.fn(), onDelete: jest.fn() };
+  const entries = [meetings[0], orphan];
+  await act(async () => root.render(localized(<MeetingList meetings={entries} {...first} />)));
+  await act(async () => root.render(localized(<MeetingList meetings={entries} {...latest} />)));
+  await act(async () => {
+    Simulate.click(rows()[0]);
+    Simulate.click(container.querySelector('[title="一覧を更新"]'));
+    Simulate.click(container.querySelector('.re-delete-candidate'));
+  });
+  expect(latest.onOpen).toHaveBeenCalledWith(entries[0].id);
+  expect(latest.onRefresh).toHaveBeenCalledTimes(1);
+  expect(latest.onDelete).toHaveBeenCalledWith(orphan);
+  Object.values(first).forEach(handler => expect(handler).not.toHaveBeenCalled());
+});
