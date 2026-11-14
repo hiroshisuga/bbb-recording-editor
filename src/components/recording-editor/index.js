@@ -7,6 +7,7 @@ import DetailWaveform from './DetailWaveform';
 import RecordingTime, { EditedRuler } from './RecordingTime';
 import { recordingClock } from './recordingClock';
 import CutChimeControl from './CutChimeControl';
+import ChimeGapControls from './ChimeGapControls';
 import CutChimeMenu from './CutChimeMenu';
 import TimelineContextMenu from './TimelineContextMenu';
 import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelection, releaseCompleteSelection } from './SelectionMarkers';
@@ -75,7 +76,7 @@ function RecordingEvents({ events, time, seek }) {
   </section>;
 }
 
-function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, busy, clock, detail }) {
+function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, chimeSettings, busy, clock, detail }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
   const scrollRef = useRef(null);
@@ -94,10 +95,12 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   const closeChimeMenu = useCallback(() => setChimeMenu(null), []);
   useEffect(closeChimeMenu, [chimeGaps, busy, closeChimeMenu]);
   const [view, setView] = useState({ start: 0, end: recording.duration_ms });
+  const [trackWidth, setTrackWidth] = useState(650);
   useLayoutEffect(() => {
     const scroll = scrollRef.current, timeline = ref.current;
     const measure = () => {
       const width = timeline.offsetWidth;
+      setTrackWidth(width || 650);
       const start = width ? scroll.scrollLeft / width * recording.duration_ms : 0;
       const end = width ? Math.min(recording.duration_ms, (scroll.scrollLeft + scroll.clientWidth) / width * recording.duration_ms) : recording.duration_ms;
       setView(previous => previous.start === start && previous.end === end ? previous : { start, end });
@@ -119,7 +122,8 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     return Math.round(Math.max(0, Math.min(duration, (e.clientX - bounds.left) / bounds.width * duration)));
   };
   const selectFromPlayhead = e => {
-    shiftSelection.current = e.button === 0 && !e.ctrlKey && e.shiftKey && !e.target.closest('.re-handle,.re-chime-track');
+    if (!e.currentTarget.contains(e.target)) return; // Ignore portal menus.
+    shiftSelection.current = e.button === 0 && !e.ctrlKey && e.shiftKey && !e.target.closest('.re-handle,.re-chime-toggle,.re-keep-chime-controls');
     if (!shiftSelection.current) return;
     e.preventDefault(); e.stopPropagation();
     const anchor = Math.round(time);
@@ -127,12 +131,14 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     setSelection({ start_ms: Math.min(anchor, end), end_ms: Math.max(anchor, end) });
   };
   const suppressShiftClick = e => {
+    if (!e.currentTarget.contains(e.target)) return;
     if (!shiftSelection.current) return;
     shiftSelection.current = false;
     if (e.detail === 0) return; // Keep keyboard activation of timeline buttons.
     e.preventDefault(); e.stopPropagation();
   };
   const select = e => {
+    if (!e.currentTarget.contains(e.target)) return;
     if (e.button !== 0 || e.ctrlKey) return;
     const start = position(e);
     const startX = e.clientX;
@@ -198,7 +204,9 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       onContextMenu={kind === 'record_ranges' ? e => openMenu(e) : undefined}
       onKeyDown={e => { if (kind === 'record_ranges' && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) openMenu(e, true); }} />;
   };
-  const rangeTrack = (kind, label) => <div className={`re-track ${kind}`}><span className="re-track-label">{label}</span>
+  const rangeTrack = (kind, label) => <div className={`re-track ${kind}${kind === 'record_ranges' && chimeGaps.length ? ' re-has-cuts' : ''}`}>
+    {kind === 'record_ranges' ? <div className="re-recording-track-heading"><span className="re-track-label">{label}</span>{chimeSettings}</div>
+      : <span className="re-track-label">{label}</span>}
     {edit[kind].map((r, i) => <div className="re-bar" key={i} style={{ left: pct(r.start_ms), width: pct(r.end_ms - r.start_ms) }} onPointerDown={e => e.stopPropagation()} onClick={() => setSelection(r)}
       role={kind === 'beep_ranges' ? 'group' : undefined} tabIndex={kind === 'beep_ranges' ? 0 : undefined}
       aria-label={kind === 'beep_ranges' ? t('beepRibbonLabel', { number: i + 1, start: formatTime(r.start_ms), end: formatTime(r.end_ms) }) : undefined}
@@ -211,14 +219,16 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       data-tooltip={`${formatTime(r.start_ms)} – ${formatTime(r.end_ms)}${kind === 'beep_ranges' ? `\n${t('beepMenuHint')}` : ''}`}>
       {rangeHandle(kind, label, r, i, 'start_ms')}<span>{i + 1}</span>{rangeHandle(kind, label, r, i, 'end_ms')}
     </div>)}
+    {kind === 'record_ranges' && <ChimeGapControls gaps={chimeGaps} selected={edit.cut_chime_gaps} duration={duration} width={trackWidth} busy={busy} onToggle={onChimeToggle} />}
   </div>;
   const pointerHandlers = {
     onPointerDownCapture: selectFromPlayhead, onClickCapture: suppressShiftClick,
     onPointerCancelCapture: () => { shiftSelection.current = false; }, onPointerDown: select,
   };
   const navigationHandlers = {
-    onPointerDownCapture: follow.onPointerDownCapture, onWheelCapture: follow.onWheelCapture,
-    onKeyDownCapture: follow.onKeyDownCapture,
+    onPointerDownCapture: event => { if (event.currentTarget.contains(event.target)) follow.onPointerDownCapture(event); },
+    onWheelCapture: event => { if (event.currentTarget.contains(event.target)) follow.onWheelCapture(event); },
+    onKeyDownCapture: event => { if (event.currentTarget.contains(event.target)) follow.onKeyDownCapture(event); },
   };
   const overlays = <>
     {isValidSelection(selection) && <div className="re-selection-overlay" style={{ left: pct(selection.start_ms), width: pct(selection.end_ms - selection.start_ms) }} />}
@@ -232,6 +242,10 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
     <div className="re-wave"><span className="re-track-label">{t('meetingAudio')}</span><svg viewBox="0 0 2048 64" preserveAspectRatio="none" aria-label={t('waveform')}>
       {(peaks || []).map((p, i) => <line key={i} x1={i} x2={i} y1={32 - Math.min(1, p) * 30} y2={32 + Math.min(1, p) * 30} />)}
     </svg>{!peaks && <span className="re-wave-pending">{t('wavePending')}</span>}</div>
+    <div className="re-edit-tracks">
+      {rangeTrack('record_ranges', t('keep'))}
+      {rangeTrack('beep_ranges', t('beep'))}
+    </div>
     {overlays}<SelectionMarkers selection={selection} start={0} end={duration} />
     </div></div>
     {detail}
@@ -239,19 +253,6 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   </div>
   <div className="re-track-scroll" ref={tracksRef} {...navigationHandlers}>
     <div className="re-track-timeline" style={{ width: `${zoom * 100}%` }} {...pointerHandlers}>
-    {rangeTrack('record_ranges', t('keep'))}
-    <div className="re-track re-chime-track" role="group" aria-label={t('cutChime')}>
-      <span className="re-track-label">{t('cutChimeTrack')}</span>
-      {edit.cut_chime_gaps.map(gap => {
-        const description = `${t('cutChimeRemove')}\n${formatTime(gap.start_ms)} → ${formatTime(gap.end_ms)}`;
-        return <button key={`${gap.start_ms}:${gap.end_ms}`} className="re-chime-cue" disabled={busy}
-          style={{ left: pct(gap.start_ms), width: pct(gap.end_ms - gap.start_ms) }} aria-label={description} data-tooltip={description}
-          onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChimeToggle(gap, false); }}>
-          <span className="re-chime-link" aria-hidden="true" /><span className="re-chime-end re-chime-start" aria-hidden="true">♪</span><span className="re-chime-end re-chime-finish" aria-hidden="true">♪</span>
-        </button>;
-      })}
-    </div>
-    {rangeTrack('beep_ranges', t('beep'))}
     {mediaTracks.map(({ kind, assets }) => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
       {assets.map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} data-tooltip={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
@@ -562,8 +563,8 @@ function Editor() {
         <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sound={edit.cut_chime_sound} onSoundChange={value => replaceEdit({ ...edit, cut_chime_sound: value })} sampleUrl={`${API}/cut-chime.wav?sound=${edit.cut_chime_sound}`}
           skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
           onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
-          {toggle => <>
-          <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} busy={!!busy || rebuilding}
+          {(toggle, chimeSettings) => <>
+          <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} chimeSettings={chimeSettings} busy={!!busy || rebuilding}
             detail={<DetailWaveform key={recording.id} open={detailWaveOpen} onToggle={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })} audioUrl={preview?.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />} />
 
         <section className="re-audio-settings" aria-label={t('audioSettings')}><h3>{t('audioSettings')}</h3><div>
