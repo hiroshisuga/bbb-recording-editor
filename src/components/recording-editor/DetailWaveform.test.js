@@ -373,3 +373,28 @@ test.each([
   const update = props.setSelection.mock.calls.at(-1)[0];
   expect(update(props.selection)).toEqual(expected);
 });
+
+test('collapsed panel owns its toggle without fetching or mounting a plot and keeps keyboard focus', async () => {
+  const toggle = jest.fn(() => render({ open: !props.open }));
+  await render({ open: false, onToggle: toggle });
+  let button = container.querySelector('.re-detail-toggle');
+  expect(button.closest('.re-detail-wave')).not.toBeNull();
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  expect(document.getElementById(button.getAttribute('aria-controls')).hidden).toBe(true);
+  await advance();
+  expect(requests()).toHaveLength(0);
+  expect(container.querySelector('canvas')).toBeNull();
+  await act(async () => { Simulate.click(button); });
+  button = container.querySelector('.re-detail-toggle');
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  expect(document.activeElement).toBe(button);
+  expect(document.getElementById(button.getAttribute('aria-controls')).hidden).toBe(false);
+  await advance();
+  expect(requests()).toHaveLength(2);
+  await act(async () => { Simulate.click(button); });
+  expect(container.querySelector('canvas')).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector('.re-detail-toggle'));
+  const count = requests().length;
+  await render({ time: 95000 }); await advance();
+  expect(requests()).toHaveLength(count);
+});

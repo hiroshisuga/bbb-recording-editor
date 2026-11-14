@@ -86,3 +86,18 @@ test('keyboard controls and reset persist, and a remount restores the selected r
   handle = container.querySelector('[role=separator]');
   expect(ratio()).toBe(70);
 });
+
+test('only existing panes occupy space and a single pane has no divider', () => {
+  const render = props => act(() => root.render(<EditorLanguageProvider><PreviewPanes ratio={0.75} onChange={jest.fn()} {...props} /></EditorLanguageProvider>));
+  render({ content: <div>Slides</div>, cameras: null });
+  expect(container.querySelector('.re-content-preview').textContent).toBe('Slides');
+  expect(container.querySelector('.re-cameras')).toBeNull();
+  expect(container.querySelector('[role="separator"]')).toBeNull();
+  expect(container.querySelector('.re-preview').style.gridTemplateColumns).toBe('minmax(0, 1fr)');
+  render({ content: null, cameras: <video /> });
+  expect(container.querySelector('.re-content-preview')).toBeNull();
+  expect(container.querySelector('.re-cameras video')).not.toBeNull();
+  expect(container.querySelector('[role="separator"]')).toBeNull();
+  render({ content: null, cameras: null });
+  expect(container.querySelector('.re-preview')).toBeNull();
+});

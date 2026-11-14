@@ -359,13 +359,13 @@ test('independent endpoints remain visible for end-only, equal and reversed sele
   const audio = container.querySelector('audio');
   audio.currentTime = 20;
   await act(async () => audio.dispatchEvent(new Event('seeked')));
-  await click('開始を現在位置に');
+  await click('現在位置を開始点に');
   expect(start().getAttribute('aria-label')).toContain('00:00:20.000');
   expect(end().getAttribute('aria-label')).toContain('00:00:10.000');
   expect(container.querySelector('.re-selection-status').textContent).toContain('開始が終了より後');
   expect(container.querySelector('.re-selection-overlay')).toBeNull();
   expect(button('ピー音を追加').disabled).toBe(true);
-  await click('終了を現在位置に');
+  await click('現在位置を終了点に');
   expect(start()).not.toBeNull(); expect(end()).not.toBeNull();
   expect(container.querySelector('.re-selection-status').textContent).toContain('同じ時刻');
   await time('選択開始', '00:00:00.000');
@@ -437,8 +437,8 @@ test('shift-clicking the playhead leaves an empty selection', async () => {
 });
 
 test.each([
-  ['開始を現在位置に', 200, '終了を現在位置に', 300],
-  ['終了を現在位置に', 300, '開始を現在位置に', 200],
+  ['現在位置を開始点に', 200, '現在位置を終了点に', 300],
+  ['現在位置を終了点に', 300, '現在位置を開始点に', 200],
 ])('timeline clicks preserve the boundary set by %s until the other boundary is set', async (first, firstX, second, secondX) => {
   const timeline = container.querySelector('.re-timeline');
   timeline.getBoundingClientRect = () => ({ left: 100, width: 600 });
@@ -478,7 +478,7 @@ test('ordinary clicks release a complete selection keeping its start while dragg
   expect(button('録画に残す').disabled).toBe(true);
   expect(button('ピー音を追加').disabled).toBe(true);
   expect(button('↶ 元に戻す').disabled).toBe(true);
-  await click('終了を現在位置に');
+  await click('現在位置を終了点に');
   expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:30.000');
   expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
   await act(async () => {
@@ -509,7 +509,7 @@ test.each([
   expect(container.querySelector('audio').currentTime).toBe((clientX - 100) / 10);
   expect(container.querySelectorAll('.record_ranges .re-bar')).toHaveLength(1);
   expect(calls.some(c => /\/(save|draft|reset)$/.test(c.url))).toBe(false);
-  await click(start ? '終了を現在位置に' : '開始を現在位置に');
+  await click(start ? '現在位置を終了点に' : '現在位置を開始点に');
   expect(container.querySelector('.re-selection-overlay')).not.toBeNull();
 });
 
@@ -818,6 +818,12 @@ test('reopening restores saved beep intervals without changing the beep preview 
 });
 
 test('language, volume, mute, beep preview, speed, zoom and preview split survive reopening the editor', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, slides: [{ presentation: 'deck', page: 1, url: '/slide.svg' }],
+      assets: [{ id: 'camera', kind: 'video', has_video: true, start_ms: 0, end_ms: 60000 }] }) }
+    : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   await volume(37);
   await click('ミュート');
   await act(async () => {
@@ -1196,7 +1202,8 @@ test('detailed waveform is opt-in, shares selection with beep editing, and saves
     await act(async () => Simulate.change(container.querySelector('.re-detail-tools select'), { target: { value: '5000' } }));
     expect(readPreferences()).toEqual(expect.objectContaining({ detailWaveOpen: true, detailWaveSpan: 5000 }));
     await click('詳細波形を閉じる');
-    expect(container.querySelector('.re-detail-wave')).toBeNull();
+    expect(container.querySelector('.re-detail-wave--collapsed')).not.toBeNull();
+    expect(container.querySelector('.re-detail-plot')).toBeNull();
   } finally { global.fetch.mockImplementation(previous); }
 });
 
@@ -1426,4 +1433,51 @@ test('memoized meeting actions pause the current audio after it has been replace
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   expect(HTMLMediaElement.prototype.pause.mock.instances).toContain(current);
   expect(HTMLMediaElement.prototype.pause.mock.instances).not.toContain(previous);
+});
+
+test('audio-only recordings omit absent visual panes and camera, screen and external tracks', () => {
+  expect(container.querySelector('.re-preview')).toBeNull();
+  expect(container.querySelector('.re-track.video')).toBeNull();
+  expect(container.querySelector('.re-track.deskshare')).toBeNull();
+  expect(container.querySelector('.re-external-track')).toBeNull();
+  expect(container.querySelector('.re-tools .re-detail-toggle')).toBeNull();
+  expect(container.querySelector('.re-detail-wave .re-detail-toggle')).not.toBeNull();
+  expect(button('現在位置を開始点に')).toBeDefined();
+  expect(button('現在位置を終了点に')).toBeDefined();
+});
+
+test('visual presence is based on the whole recording and single-camera preview keeps its space between clips', async () => {
+  const original = global.fetch.getMockImplementation();
+  const camera = { id: 'later-camera', kind: 'video', has_video: true, start_ms: 10000, end_ms: 30000, url: '/camera.webm' };
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, assets: [camera] }) } : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-track.video')).not.toBeNull();
+  expect(container.querySelector('.re-track.deskshare')).toBeNull();
+  expect(container.querySelector('.re-external-track')).toBeNull();
+  expect(container.querySelector('.re-cameras')).not.toBeNull();
+  expect(container.querySelector('.re-content-preview')).toBeNull();
+  expect(container.querySelector('[role="separator"]')).toBeNull();
+  const pane = container.querySelector('.re-preview');
+  const audio = container.querySelector('audio');
+  for (const position of [20, 40]) {
+    await act(async () => { audio.currentTime = position; audio.dispatchEvent(new Event('seeked')); });
+    expect(container.querySelector('.re-preview')).toBe(pane);
+    expect(container.querySelector('.re-track.video')).not.toBeNull();
+  }
+});
+
+test('screen and recorded external video tracks remain visible when they exist without adding a camera pane', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest,
+      assets: [{ id: 'screen', kind: 'deskshare', has_video: true, start_ms: 10000, end_ms: 30000 }],
+      events: [{ type: 'StartExternalVideoRecordEvent', time_ms: 35000, url: 'https://example.test/video.mp4', title: 'Recorded video' }],
+    }) } : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-track.deskshare')).not.toBeNull();
+  expect(container.querySelector('.re-external-ribbon').textContent).toBe('Recorded video');
+  expect(container.querySelector('.re-content-preview')).not.toBeNull();
+  expect(container.querySelector('.re-cameras')).toBeNull();
+  expect(container.querySelector('[role="separator"]')).toBeNull();
 });

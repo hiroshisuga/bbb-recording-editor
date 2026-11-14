@@ -109,6 +109,8 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   }, [recording.id, recording.duration_ms, zoom]);
   const duration = recording.duration_ms || 1;
   const presentations = useMemo(() => presentationRanges(recording.events, duration), [recording.events, duration]);
+  const mediaTracks = useMemo(() => ['video', 'deskshare'].map(kind => ({ kind, assets: recording.assets.filter(asset => asset.kind === kind) }))
+    .filter(track => track.assets.length), [recording.assets]);
   const follow = useTimelineFollow(scrollRef, ref, { time, duration, playing, zoom, recordingId: recording.id });
   useTimelineScrollSync(scrollRef, tracksRef, zoom);
   const pct = ms => `${ms / duration * 100}%`;
@@ -250,8 +252,8 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
       })}
     </div>
     {rangeTrack('beep_ranges', t('beep'))}
-    {['video', 'deskshare'].map(kind => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
-      {recording.assets.filter(a => a.kind === kind).map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} data-tooltip={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
+    {mediaTracks.map(({ kind, assets }) => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
+      {assets.map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} data-tooltip={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
     <div className="re-track re-slide-track"><span className="re-track-label">{t('slides')}</span>
       {presentations.map((presentation, i) => {
@@ -270,7 +272,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
         </React.Fragment>;
       })}
     </div>
-    <div className="re-track re-external-track"><span className="re-track-label">{t('externalVideos')}</span>
+    {videos.some(video => video.clear > video.timestamp) && <div className="re-track re-external-track"><span className="re-track-label">{t('externalVideos')}</span>
       {videos.filter(video => video.clear > video.timestamp).map((video, i) => {
         const title = video.title?.trim() || videoTitles[video.url] || video.url || t('externalVideos');
         const description = `${title}\n${formatTime(video.timestamp * 1000)} – ${formatTime(video.clear * 1000)}`;
@@ -282,7 +284,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
             aria-label={externalEventDescription(event, t)} onPointerDown={e => e.stopPropagation()} onClick={() => seek(event.timestamp * 1000)} />)}
         </React.Fragment>;
       })}
-    </div>
+    </div>}
     {overlays}
     <div className="re-track-endpoints" aria-hidden="true">{['start_ms', 'end_ms'].map(edge => Number.isFinite(selection[edge]) && <span key={edge} className={`re-track-endpoint re-track-${edge}`} style={{ left: pct(selection[edge]) }} />)}</div>
   </div></div>
@@ -484,6 +486,10 @@ function Editor() {
   };
   const activeAssets = recording?.assets.filter(a => a.has_video && !a.error && a.start_ms <= time && time < a.end_ms) || [];
   const screen = activeAssets.find(a => a.kind === 'deskshare');
+  const [hasCameras, hasContent] = useMemo(() => [recording?.assets.some(a => a.kind === 'video'),
+    recording && (recording.slides.length > 0 || recording.assets.some(a => a.kind === 'deskshare')
+      || videos.some(video => video.clear > video.timestamp)
+      || recording.events.some(event => ['SharePresentationEvent', 'GotoSlideEvent', 'AddTldrawShapeEvent'].includes(event.type)))], [recording, videos]);
   const external = videos.find(v => v.timestamp * 1000 <= time && time < v.clear * 1000);
   const validSelection = isValidSelection(selection);
   const selectionMessage = selection.start_ms == null ? selection.end_ms == null ? 'selectionNeither' : 'selectionNeedStart'
@@ -531,8 +537,8 @@ function Editor() {
           <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><button onClick={() => setReview(false)}>{t('close')}</button><small>{t('noRebuild')}</small>
         </div>}
         <PreviewPanes ratio={previewSplit} onChange={value => updatePreferences({ previewSplit: value })}
-          content={external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} />}
-          cameras={<>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</>} />
+          content={hasContent ? external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} /> : null}
+          cameras={hasCameras ? <>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</> : null} />
         {external && <p className="re-warnings">{t('externalAudio')}</p>}
         <section className="re-selection-panel" aria-label={t('selection')}>
         <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
@@ -551,14 +557,14 @@ function Editor() {
           <button disabled={!validSelection || !!busy || !edit.beep_ranges.some(r => r.start_ms < selection.end_ms && r.end_ms > selection.start_ms)} title={t('removeBeepHint')} onClick={() => change('beep_ranges', removeRange(edit.beep_ranges, selection, duration))}>{t('removeBeepSelection')}</button>
         </div>
         <p className={`re-selection-status ${selectionMessage === 'selectionEqual' || selectionMessage === 'selectionReversed' ? 're-selection-invalid' : ''}`} role="status" aria-live="polite">{t(selectionMessage, { time: validSelection ? formatTime(selection.end_ms - selection.start_ms) : '' })}</p>
-        <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label><button aria-expanded={detailWaveOpen} disabled={!preview} onClick={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })}>{t(detailWaveOpen ? 'hideDetailWave' : 'showDetailWave')}</button></div>
+        <div className="re-tools"><button disabled={!history.past.length || !!busy} onClick={undo}>{t('undo')}</button><button disabled={!history.future.length || !!busy} onClick={redo}>{t('redo')}</button><label>{t('zoom')} <select value={zoom} onChange={e => updatePreferences({ zoom: Number(e.target.value) })}>{TIMELINE_ZOOMS.map(z => <option key={z} value={z}>{z}×</option>)}</select></label></div>
         </section>
         <CutChimeControl key={recording.id} gaps={chimeGaps} selected={edit.cut_chime_gaps} busy={!!busy || rebuilding} sound={edit.cut_chime_sound} onSoundChange={value => replaceEdit({ ...edit, cut_chime_sound: value })} sampleUrl={`${API}/cut-chime.wav?sound=${edit.cut_chime_sound}`}
           skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
           onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
           {toggle => <>
           <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} busy={!!busy || rebuilding}
-            detail={detailWaveOpen && preview && <DetailWaveform key={`${recording.id}:${preview.audio_url}`} audioUrl={preview.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />} />
+            detail={<DetailWaveform key={recording.id} open={detailWaveOpen} onToggle={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })} audioUrl={preview?.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />} />
 
         <section className="re-audio-settings" aria-label={t('audioSettings')}><h3>{t('audioSettings')}</h3><div>
           <span className="re-volume"><button disabled={!audio} aria-pressed={silent} onClick={toggleMute}>{t(silent ? 'unmute' : 'mute')}</button>

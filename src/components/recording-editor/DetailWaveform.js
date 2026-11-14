@@ -1,5 +1,5 @@
 import SelectionMarkers, { SelectionOffscreen, validSelection, releaseCompleteSelection } from './SelectionMarkers';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { formatTime } from './model';
 import RecordingTime, { EditedRuler } from './RecordingTime';
@@ -120,7 +120,26 @@ function WaveCanvas({ tiles, start, span, label }) {
   return <canvas ref={canvas} aria-label={label} role="img" />;
 }
 
-export default function DetailWaveform({ audioUrl, duration, time, playing, selection, setSelection, seek, span, setSpan, recordRanges = [], clock: suppliedClock }) {
+export default function DetailWaveform({ open = true, onToggle, ...props }) {
+  const { t } = useEditorI18n();
+  const contentId = useId();
+  const button = useRef(null);
+  const restoreFocus = useRef(false);
+  const expanded = open && !!props.audioUrl;
+  useEffect(() => {
+    if (restoreFocus.current) { button.current?.focus(); restoreFocus.current = false; }
+  }, [expanded]);
+  const toggle = onToggle && <button ref={button} className="re-detail-toggle" aria-expanded={expanded} aria-controls={contentId}
+    disabled={!props.audioUrl} onClick={() => { restoreFocus.current = true; onToggle(); }}>{t(expanded ? 'hideDetailWave' : 'showDetailWave')}</button>;
+  return <section className={`re-detail-wave${expanded ? '' : ' re-detail-wave--collapsed'}`} aria-label={t('detailWave')}>
+    {expanded ? <DetailWaveformContents {...props} toggle={toggle} contentId={contentId} /> : <>
+      <div className="re-detail-tools"><strong>{t('detailWave')}</strong>{toggle}</div>
+      <div id={contentId} hidden />
+    </>}
+  </section>;
+}
+
+function DetailWaveformContents({ audioUrl, duration, time, playing, selection, setSelection, seek, span, setSpan, recordRanges = [], clock: suppliedClock, toggle, contentId }) {
   const clock = useMemo(() => suppliedClock || recordingClock(recordRanges, [], duration), [suppliedClock, recordRanges, duration]);
   const { t } = useEditorI18n();
   const width = Math.min(span, duration || span);
@@ -204,10 +223,11 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
     seek(clicked); pointer.current = null; setDragging(false);
   };
   const cancel = () => { pointer.current = null; setDragging(false); };
-  return <section className="re-detail-wave" aria-label={t('detailWave')}>
+  return <>
     <div className="re-detail-tools"><strong>{t('detailWave')}</strong><label>{t('detailSpan')} <select aria-label={t('detailSpan')} value={span} onChange={e => setSpan(Number(e.target.value))}>
       {[5000, 10000, 30000].map(ms => <option key={ms} value={ms}>{t('detailSeconds', { seconds: ms / 1000 })}</option>)}
-    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-detail-record-legend">{t('keep')}</span></div>
+    </select></label><button onClick={() => { setStart(windowStart(time, duration, width)); setFollowing(true); }}>{t('detailReturn')}</button><span className="re-detail-record-legend">{t('keep')}</span>{toggle}</div>
+    <div id={contentId} className="re-detail-body">
     {(!following || time < start || time > start + width) && <div className="re-detail-view-state" role="status">
       {!following && <span>{t('detailFollowPaused')}</span>}
       {time < start ? <span>{t('detailPlayheadBefore')}</span> : time > start + width ? <span>{t('detailPlayheadAfter')}</span> : null}
@@ -230,9 +250,10 @@ export default function DetailWaveform({ audioUrl, duration, time, playing, sele
       <SelectionMarkers selection={selection} start={start} end={start + width} />
       {time >= start && time <= start + width && <div className="re-detail-playhead" style={{ left: pct(time) }} />}
       {loading && <span className="re-detail-status" role="status">{t('detailLoading')}</span>}
-      {error && <span className="re-detail-status" role="status">{t('detailError')} <button onClick={() => setRetry(n => n + 1)} onPointerDown={e => e.stopPropagation()}>{t('detailRetry')}</button></span>}
     </div>
+    {error && <div className="re-detail-status re-detail-error" role="status">{t('detailError')} <button onClick={() => setRetry(n => n + 1)}>{t('detailRetry')}</button></div>}
     <SelectionOffscreen selection={selection} start={start} end={start + width} onShow={value => { setFollowing(false); setStart(windowStart(value, duration, width)); }} />
     <TimelineTooltip key={`${start}:${width}`} targetRef={plotRef} />
-  </section>;
+    </div>
+  </>;
 }

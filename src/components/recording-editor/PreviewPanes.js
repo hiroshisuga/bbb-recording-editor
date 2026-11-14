@@ -1,4 +1,4 @@
-import React, { useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { useEditorI18n } from './i18n';
 import { DEFAULT_PREFERENCES, PREVIEW_SPLIT_MIN, PREVIEW_SPLIT_MAX } from './preferences';
 
@@ -18,10 +18,15 @@ export default function PreviewPanes({ ratio, onChange, content, cameras }) {
     setPendingRatio(null);
     if (commit) onChange(value);
   };
-  return <div ref={container} className={`re-preview${pendingRatio !== null ? ' re-preview--resizing' : ''}`}
-    style={{ gridTemplateColumns: `minmax(0, ${shownRatio}fr) 14px minmax(0, ${1 - shownRatio}fr)` }}>
-    <div id={contentId} className="re-content-preview">{content}</div>
-    <div className="re-preview-divider" role="separator" tabIndex={0} aria-orientation="vertical"
+  const split = !!content && !!cameras;
+  useEffect(() => {
+    if (!split) { drag.current = null; setPendingRatio(null); }
+  }, [split]);
+  if (!content && !cameras) return null;
+  return <div ref={container} className={`re-preview${split ? '' : ' re-preview--single'}${!content ? ' re-preview--camera-only' : ''}${pendingRatio !== null ? ' re-preview--resizing' : ''}`}
+    style={{ gridTemplateColumns: split ? `minmax(0, ${shownRatio}fr) 14px minmax(0, ${1 - shownRatio}fr)` : 'minmax(0, 1fr)' }}>
+    {content && <div id={contentId} className="re-content-preview">{content}</div>}
+    {split && <div className="re-preview-divider" role="separator" tabIndex={0} aria-orientation="vertical"
       aria-label={t('previewResize')} title={t('previewResizeHint')} aria-controls={contentId}
       aria-valuemin={PREVIEW_SPLIT_MIN * 100} aria-valuemax={PREVIEW_SPLIT_MAX * 100} aria-valuenow={Math.round(shownRatio * 100)}
       onPointerDown={event => {
@@ -50,7 +55,7 @@ export default function PreviewPanes({ ratio, onChange, content, cameras }) {
           Home: PREVIEW_SPLIT_MIN, End: PREVIEW_SPLIT_MAX }[event.key];
         if (value === undefined) return;
         event.preventDefault(); event.stopPropagation(); onChange(clamp(value));
-      }} />
-    <div className="re-cameras">{cameras}</div>
+      }} />}
+    {cameras && <div className="re-cameras">{cameras}</div>}
   </div>;
 }
