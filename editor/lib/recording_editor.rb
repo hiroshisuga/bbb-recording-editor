@@ -8,6 +8,8 @@ require 'open3'
 require 'securerandom'
 require 'time'
 require 'uri'
+require 'set'
+require_relative 'list_cache'
 require_relative 'detail_waveform'
 require_relative 'cut_chime'
 require_relative 'audio_render'
@@ -92,6 +94,7 @@ module RecordingEditor
       @probes = {}
       @detail_waveform = DetailWaveform.new(self)
       @rebuild_mutex = Mutex.new
+      @list_cache = ListCache.new
       FileUtils.mkdir_p(@state_root, mode: 0o700)
     end
 
@@ -136,9 +139,9 @@ module RecordingEditor
       Recording.new(self, id)
     end
 
-    def rebuild_info(id)
+    def rebuild_info(id, publication: nil)
       check_id(id)
-      @rebuild_mutex.synchronize { read_rebuild_info(id) }
+      @rebuild_mutex.synchronize { read_rebuild_info(id, publication: publication) }
     end
 
     def write_rebuild_info(id, info)
@@ -148,7 +151,7 @@ module RecordingEditor
       end
     end
 
-    def read_rebuild_info(id)
+    def read_rebuild_info(id, publication: nil)
       path = File.join(state_dir(id), 'rebuild-request.json')
       info = File.file?(path) ? JSON.parse(File.read(path)) : { 'status' => 'not_requested' }
       if %w[requesting requested].include?(info['status'])
@@ -177,7 +180,7 @@ module RecordingEditor
         info['title_restore'] = 'failed' if info['status'] == 'completed' && info['title_restore'] != 'restored'
       end
       info.merge('available' => File.executable?(REBUILD_HELPER) && File.file?(TITLE_RESTORE_HOOK) && File.file?(TITLE_FINALIZE_HOOK),
-                 'processing' => publication_info(id)[:publication_status] == 'processing')
+                 'processing' => (publication || publication_info(id))[:publication_status] == 'processing')
     end
 
     def ensure_not_rebuilding(id)
@@ -187,13 +190,31 @@ module RecordingEditor
       end
     end
 
-    def metadata_info(root, id, warnings)
+    def metadata_info(root, id, warnings, cache: nil)
       path = File.join(root, id, 'metadata.xml')
+      key = [:metadata, root, id]
       unless File.file?(path)
+        cache&.delete(key)
         warnings << '録画メタデータがありません。公開状態を確認できません。'
         return nil
       end
-      raise Error, '録画メタデータの参照先が不正です。' unless File.realpath(path).start_with?(File.realpath(root) + '/')
+      signature = lambda do
+        raise Error, '録画メタデータの参照先が不正です。' unless File.realpath(path).start_with?(File.realpath(root) + '/')
+        list_file_signature(path)
+      end
+      if cache
+        cache.fetch(key, signature) { parse_metadata(path) }
+      else
+        signature.call
+        parse_metadata(path)
+      end
+    rescue Error, SystemCallError => e
+      cache&.delete(key)
+      warnings << "録画メタデータを確認できません: #{e.message}"
+      nil
+    end
+
+    def parse_metadata(path)
       doc = RecordingEditor.xml(File.binread(path))
       text = lambda do |xpath|
         value = doc.at_xpath(xpath)&.text&.strip
@@ -206,9 +227,6 @@ module RecordingEditor
         name: text.call('/recording/meta/meetingName') || doc.at_xpath('/recording/meeting')&.[]('name'),
         duration_ms: start_time && end_time && end_time > start_time ? end_time - start_time : nil,
         playback_duration_ms: playback && playback >= 0 ? playback : nil }
-    rescue Error, SystemCallError => e
-      warnings << "録画メタデータを確認できません: #{e.message}"
-      nil
     end
 
     # File.directory?/file? hide access errors; absence and inability to inspect
@@ -219,11 +237,11 @@ module RecordingEditor
       false
     end
 
-    def publication_info(id)
+    def publication_info(id, cache: nil)
       check_id(id)
       warnings = []
       ready_roots = [published_root, unpublished_root].select { |root| entry_type?(File.join(root, id), 'directory') }
-      info = ready_roots.filter_map { |root| metadata_info(root, id, warnings) }.first
+      info = ready_roots.filter_map { |root| metadata_info(root, id, warnings, cache: cache) }.first
       status = 'not_generated'
       generation = 'not_generated'
       if ready_roots.any?
@@ -247,7 +265,7 @@ module RecordingEditor
       else
         failed = %w[processed published].any? { |step| entry_type?(File.join(status_root, step, "#{id}-presentation.fail"), 'file') }
         processing = entry_type?(File.join(process_root, id), 'directory')
-        info = metadata_info(process_root, id, warnings) if processing
+        info = metadata_info(process_root, id, warnings, cache: cache) if processing
         if failed
           warnings << '録画処理の失敗マーカーがあります。BBBの処理ログを確認してください。'
           status = 'unknown'
@@ -320,17 +338,46 @@ module RecordingEditor
       'unknown'
     end
 
-    def list(now: Time.now)
+    # No content reads/hashing on a hit. Nanosecond timestamps, inode, mode and
+    # resolved path detect in-place edits, atomic replacements and access changes.
+    def list_file_signature(path)
+      stat = File.stat(path)
+      [File.realpath(path), stat.dev, stat.ino, stat.mode, stat.uid, stat.gid, stat.size, stat.mtime.to_r, stat.ctime.to_r]
+    rescue Errno::ENOENT, Errno::ENOTDIR
+      nil
+    end
+
+    def invalidate_list(id)
+      @list_cache.invalidate(id)
+    end
+
+    def raw_list_summary(id, cache: nil)
+      signature = lambda do
+        [list_file_signature(raw_file(id, 'events.xml')),
+         *%w[saved.json original-events.xml].map { |name| list_file_signature(File.join(state_dir(id), name)) }]
+      end
+      read = lambda do
+        rec = recording(id)
+        ranges = rec.record_ranges
+        { name: rec.name, date: rec.start_utc, duration_ms: rec.duration, marked: !ranges.empty?,
+          recorded_duration_ms: ranges.sum { |range| range['end_ms'] - range['start_ms'] }, warnings: rec.warnings }
+      end
+      cache ? cache.fetch([:raw, id], signature, &read) : read.call
+    end
+
+    def list(now: Time.now, cache: true)
+      summaries = cache ? @list_cache : nil
       ids = [raw_root, published_root, unpublished_root, process_root].flat_map do |root|
         Dir.glob(File.join(root, '*')).select { |p| File.directory?(p) }.map { |p| File.basename(p) }
       end
-      ids.uniq.filter_map do |id|
-        next unless id.match?(/\A[a-z0-9]{40}-[0-9]{13}\z/)
+      ids = ids.uniq.select { |id| id.match?(/\A[a-z0-9]{40}-[0-9]{13}\z/) }
+      summaries&.retain(ids.to_set)
+      ids.filter_map do |id|
         # Availability follows the files retained by BBB, not a fixed age limit.
         time = Time.at(id.split('-').last.to_i / 1000.0)
         next if time > now
-        publication = publication_info(id)
-        rebuild = rebuild_info(id)
+        publication = publication_info(id, cache: summaries)
+        rebuild = rebuild_info(id, publication: publication)
         if %w[requesting requested].include?(rebuild['status'])
           publication[:publication_status] = 'processing'
           publication[:generation_status] = 'processing'
@@ -349,16 +396,15 @@ module RecordingEditor
                  warnings: publication[:warnings] }
         begin
           if File.file?(File.join(raw_root, id, 'events.xml'))
-            rec = recording(id)
-            ranges = rec.record_ranges
+            raw = raw_list_summary(id, cache: summaries)
             pending_title = rebuild['recording_title'] if %w[requesting requested failed command_failed].include?(rebuild['status'])
-            display_name = ranges.empty? ? rec.name : publication[:recording_title] || pending_title || rec.name
-            room_name = rec.name == id ? publication[:metadata_name] : rec.name
-            item.merge!(name: display_name, meeting_name: room_name, date: rec.start_utc, duration_ms: rec.duration, raw_available: true, raw_data_status: 'present',
-                        recording_status: ranges.empty? ? 'unmarked' : 'marked',
-                        recorded_duration_ms: ranges.sum { |r| r['end_ms'] - r['start_ms'] })
-            item[:warnings].concat(rec.warnings)
+            display_name = raw[:marked] ? publication[:recording_title] || pending_title || raw[:name] : raw[:name]
+            room_name = raw[:name] == id ? publication[:metadata_name] : raw[:name]
+            item.merge!(name: display_name, meeting_name: room_name, date: raw[:date], duration_ms: raw[:duration_ms], raw_available: true, raw_data_status: 'present',
+                        recording_status: raw[:marked] ? 'marked' : 'unmarked', recorded_duration_ms: raw[:recorded_duration_ms])
+            item[:warnings].concat(raw[:warnings])
           else
+            summaries&.delete([:raw, id])
             item[:warnings] << case item[:raw_data_status]
                                when 'present' then 'rawファイルはありますがevents.xmlがありません。録画区間を確認できません。'
                                when 'missing' then 'rawデータがありません。'
@@ -1145,6 +1191,7 @@ module RecordingEditor
       RecordingEditor.atomic_write(current, xml, mode: stat.mode & 0o777)
       File.chown(stat.uid, stat.gid, current) if Process.uid.zero?
       RecordingEditor.atomic_write(File.join(root, 'saved.json'), JSON.pretty_generate(result))
+      repo.invalidate_list(id)
       progress.call('XMLとraw音声を保存しました。録画の再構築は別操作です。')
       result
     ensure
@@ -1241,6 +1288,7 @@ module RecordingEditor
         RecordingEditor.atomic_write(journal, JSON.pretty_generate(result))
         raise
       end
+      repo.invalidate_list(id)
       progress.call('初期状態に戻しました。録画への反映には別途再構築が必要です。')
       result
     end

@@ -186,4 +186,15 @@ class OrphanDeletionTest < Minitest::Test
     inactive { assert_raises(RecordingEditor::Error) { @service.plan(@id) } }
   end
 
+  def test_deletion_review_bypasses_warmed_list_summaries
+    other = "#{'b' * 40}-1700000000000"
+    path = File.join(@repo.raw_root, other, 'events.xml')
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, '<recording><event timestamp="1000"/><event timestamp="5000"/></recording>')
+    @repo.list # Warm another meeting so this check exercises a cacheable input.
+    cache = @repo.instance_variable_get(:@list_cache)
+    cache.stub(:fetch, ->(*) { flunk 'Deletion review used a cached summary' }) do
+      inactive { assert @service.plan(@id)[:revision] }
+    end
+  end
 end

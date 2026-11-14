@@ -230,4 +230,16 @@ class ServerTest < Minitest::Test
     assert File.file?(File.join(@raw, 'events.xml'))
   end
 
+  def test_list_cache_is_shared_across_independent_http_connections
+    parses, parser = 0, RecordingEditor.method(:xml)
+    RecordingEditor.stub(:xml, ->(*args) { parses += 1; parser.call(*args) }) do
+      first = JSON.parse(request('recordings').body)
+      assert_equal 1, parses
+      3.times { assert_equal first, JSON.parse(request('recordings').body) }
+      assert_equal 1, parses
+      File.write(File.join(@raw, 'events.xml'), @xml.sub('HTTP test', 'Changed room'))
+      assert_equal 'Changed room', JSON.parse(request('recordings').body).first['name']
+      assert_equal 2, parses
+    end
+  end
 end

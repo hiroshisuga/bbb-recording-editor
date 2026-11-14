@@ -13,7 +13,7 @@ class RebuildTest < Minitest::Test
     FileUtils.mkdir_p(File.join(@repo.raw_root, @id))
     @xml = '<recording><event timestamp="1000" eventname="RecordStatusEvent"><status>true</status></event><event timestamp="5000" eventname="RecordStatusEvent"><status>false</status></event></recording>'
     File.write(File.join(@repo.raw_root, @id, 'events.xml'), @xml)
-    @repo.define_singleton_method(:rebuild_info) { |id| super(id).merge('available' => true) }
+    @repo.define_singleton_method(:rebuild_info) { |id, **options| super(id, **options).merge('available' => true) }
     @editor = RecordingEditor::Editor.new(@repo)
     @payload = { 'confirmed' => true, 'revision' => Digest::SHA256.hexdigest(@xml) }
   end
@@ -207,7 +207,7 @@ class RebuildTest < Minitest::Test
   end
 
   def test_missing_helper_reports_setup_error_without_creating_request
-    @repo.define_singleton_method(:rebuild_info) { |id| super(id).merge('available' => false) }
+    @repo.define_singleton_method(:rebuild_info) { |id, **options| super(id, **options).merge('available' => false) }
     assert_equal 503, assert_raises(RecordingEditor::Error) { @editor.rebuild(@id, @payload) }.status
     refute File.file?(File.join(@repo.state_dir(@id), 'rebuild-request.json'))
   end

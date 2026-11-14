@@ -83,7 +83,7 @@ module RecordingEditor
       @repo.check_id(id)
       @repo.ensure_not_rebuilding(id)
       raise Error, '削除には正しい内部会議IDが必要です。' unless id.match?(/\A[0-9a-f]{40}-[0-9]{13}\z/)
-      candidate = @repo.list.find { |item| item[:id] == id }
+      candidate = @repo.list(cache: false).find { |item| item[:id] == id }
       raise Error.new('ここで削除できるのは「未生成」で、rawファイルが残っていない項目だけです。', 409) unless candidate && candidate.values_at(:generation_status, :publication_status, :recording_status, :raw_available, :raw_data_status) == ['not_generated', 'not_generated', 'unknown', false, 'missing']
       raise Error.new('events.xmlが存在するため削除できません。', 409) if File.exist?(File.join(@repo.raw_root, id, 'events.xml'))
       roots, workflows, configuration_hash = configuration
@@ -168,6 +168,7 @@ module RecordingEditor
         warn "BBB orphan deletion failed for #{id}: #{err.lines.last(8).join}"
         raise Error.new('BBBによる削除に失敗したかファイルが残っています。一覧を更新して確認してください。強制削除は行っていません。', 422)
       end
+      @repo.invalidate_list(id)
       { id: id, deleted: true, retained: current[:retained] }
     rescue Errno::ENOENT
       raise Error.new('bbb-recordが見つかりません。削除は行っていません。', 503)
