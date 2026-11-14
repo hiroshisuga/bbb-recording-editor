@@ -91,14 +91,14 @@ export const presentationRanges = (events, duration) => {
   return ranges.filter(range => range.end_ms > range.start_ms);
 };
 
-const merge = (old, patch) => {
+export const mergeSlideShape = (old, patch) => {
   const result = { ...old };
   Object.keys(patch).forEach(key => {
     // Raw events are untrusted. Never merge prototype-related keys.
     if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
     const value = patch[key];
     result[key] = value && typeof value === 'object' && !Array.isArray(value)
-      ? merge(old?.[key] || {}, value) : value;
+      ? mergeSlideShape(old?.[key] || {}, value) : value;
   });
   return result;
 };
@@ -125,7 +125,7 @@ export const slideState = (events, time) => {
     if (event.type === 'AddTldrawShapeEvent') {
       const shapes = pages.get(key) || new Map();
       const id = event.shape_id || event.shape?.id;
-      if (id && event.shape) shapes.set(id, merge(shapes.get(id) || {}, event.shape));
+      if (id && event.shape) shapes.set(id, mergeSlideShape(shapes.get(id) || {}, event.shape));
       pages.set(key, shapes);
     } else if (['DeleteTldrawShapeEvent', 'UndoShapeEvent', 'UndoAnnotationEvent'].includes(event.type)) {
       pages.get(key)?.delete(event.shape_id);
