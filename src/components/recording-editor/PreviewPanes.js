@@ -4,7 +4,7 @@ import { DEFAULT_PREFERENCES, PREVIEW_SPLIT_MIN, PREVIEW_SPLIT_MAX } from './pre
 
 const clamp = value => Math.max(PREVIEW_SPLIT_MIN, Math.min(PREVIEW_SPLIT_MAX, value));
 
-export default function PreviewPanes({ ratio, onChange, content, cameras }) {
+export default function PreviewPanes({ ratio, onChange, content, cameras, comparison = false }) {
   const { t } = useEditorI18n();
   const contentId = useId();
   const container = useRef(null);
@@ -23,7 +23,7 @@ export default function PreviewPanes({ ratio, onChange, content, cameras }) {
     if (!split) { drag.current = null; setPendingRatio(null); }
   }, [split]);
   if (!content && !cameras) return null;
-  return <div ref={container} className={`re-preview${split ? '' : ' re-preview--single'}${!content ? ' re-preview--camera-only' : ''}${pendingRatio !== null ? ' re-preview--resizing' : ''}`}
+  return <div ref={container} className={`re-preview${split ? '' : ' re-preview--single'}${!content ? ' re-preview--camera-only' : ''}${pendingRatio !== null ? ' re-preview--resizing' : ''}${comparison ? ' re-preview--comparison' : ''}`}
     style={{ gridTemplateColumns: split ? `minmax(0, ${shownRatio}fr) 14px minmax(0, ${1 - shownRatio}fr)` : 'minmax(0, 1fr)' }}>
     {content && <div id={contentId} className="re-content-preview">{content}</div>}
     {split && <div className="re-preview-divider" role="separator" tabIndex={0} aria-orientation="vertical"

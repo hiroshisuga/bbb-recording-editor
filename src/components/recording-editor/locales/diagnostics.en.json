@@ -121,5 +121,11 @@
   "繋ぎ目の選択が録画範囲と一致しません。選択を確認してください。": "The selected cuts do not match the recording intervals. Review the chime selection.",
   "音声全体を再エンコードします。部分処理を使用しない理由: ": "Re-encoding the entire audio. Partial processing was not used because: ",
   "Opus音声を部分再エンコードし、未編集部分をコピーしました。": "Re-encoded only the edited Opus regions and copied the unedited audio.",
-  "チャイムの音色が不正です。": "Invalid cut-chime sound."
+  "チャイムの音色が不正です。": "Invalid cut-chime sound.",
+  "表示内容の区間は500件以下の配列で指定してください。": "Display overrides must be an array of at most 500 intervals.",
+  "このBBBバージョンでは表示内容の変更を保存できません。": "Display changes cannot be saved for this BBB version.",
+  "表示内容の区間の形式が不正です。": "Invalid display override interval.",
+  "表示内容の変更区間が重複しています。": "Display override intervals overlap.",
+  "選択範囲には表示できない素材、外部動画、または閉じたプレゼン領域が含まれています。": "The selected interval contains unavailable content, an external video, or a closed presentation area.",
+  "イベントの時刻順が前後しているため、表示内容の変更を保存できません。": "Display changes cannot be saved because the recording events are out of time order."
 }
