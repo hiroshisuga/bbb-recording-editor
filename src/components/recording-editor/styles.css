@@ -351,3 +351,26 @@
   .recording-editor .re-content-heading>button { min-height:40px; }
   .re-content-dialog label { min-height:44px; }
 }
+
+/* Available materials remain visible while the recorded foreground changes. */
+.re-content-previews { display:grid; grid-template-columns:minmax(0,1fr); height:100%; min-height:0; }
+.re-content-previews--compare { grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr)); gap:6px; }
+.re-content-candidate { min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; position:relative; background:#080d14; }
+.re-content-previews--compare .re-content-candidate { border:1px solid var(--re-line); border-radius:4px; min-height:220px; }
+.re-content-previews--compare .re-content-candidate--selected { border-color:#74c4ff; box-shadow:inset 0 0 0 1px #74c4ff; }
+.re-content-candidate-heading { flex:none; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:2px 6px; padding:3px 6px; background:var(--re-panel); color:var(--re-muted); font-size:11px; }
+.re-content-candidate-heading strong { font-weight:500; color:var(--re-text); }
+.re-content-candidate--selected .re-content-candidate-heading span { color:#9fd6ff; }
+.re-content-candidate-body { flex:1; min-height:0; position:relative; }
+.re-content-candidate-body>.re-slide,.re-content-candidate-body>.re-video { height:100%; }
+.re-preview--comparison { height:auto; min-height:320px; }
+.re-preview--comparison .re-content-view { height:auto; min-height:320px; }
+.re-preview--comparison .re-content-image { display:grid; }
+.re-preview--comparison .re-cameras { max-height:360px; }
+@media(max-width:1000px) {
+  .re-preview--comparison { grid-template-columns:minmax(0,1fr) !important; }
+  .re-preview--comparison>.re-preview-divider { display:none; }
+  .re-preview--comparison>.re-cameras { flex-direction:row; max-height:130px; }
+  .re-preview--comparison>.re-cameras>.re-video { flex:1; min-width:0; }
+  .re-preview--comparison .re-cameras .re-video-image { aspect-ratio:auto; flex:1; }
+}

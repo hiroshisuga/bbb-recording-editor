@@ -283,7 +283,7 @@
   "resetUnmarkedToast": "初期状態へ復元しました。録画区間の指定が必要です。",
   "rebuildCompletedToast": "録画の再構築が完了しました。公開状態を確認してください。",
   "errorReviewed": "エラーを確認済みにする",
-  "contentShowing": "表示：{source}",
+  "contentShowing": "録画に使用：{source}",
   "contentChangedFrom": "変更あり・当時は{source}",
   "contentInferred": "推定（切替情報なし）",
   "contentRecorded": "当時の切替に従う",
@@ -304,5 +304,7 @@
   "contentEditHint": "この範囲の表示先を変更します。終了後は当時の切替に戻ります。音声は変更しません。録画への反映にはraw保存と再構築が必要です。",
   "contentApply": "この範囲に適用",
   "contentSaveReview": "表示内容の上書き：{count}区間。元の切替記録を基準に、指定範囲の表示先を変更します。",
-  "contentUnordered": "イベントの時刻順が前後しているため、この録画の表示変更は保存できません。"
+  "contentUnordered": "イベントの時刻順が前後しているため、この録画の表示変更は保存できません。",
+  "contentSelected": "録画に使用",
+  "contentReference": "比較用"
 }

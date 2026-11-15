@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { EditorLanguageProvider, languages, useEditorI18n } from './i18n';
-import ExternalVideoPlayer from 'components/external-video-player';
-import SlidePreview from './SlidePreview';
 import PreviewPanes from './PreviewPanes';
 import DetailWaveform from './DetailWaveform';
 import RecordingTime, { EditedRuler } from './RecordingTime';
@@ -16,6 +14,7 @@ import MeetingList from './MeetingList';
 import OrphanDeleteDialog from './OrphanDeleteDialog';
 import EditorDialog from './EditorDialog';
 import ContentControls from './ContentControls';
+import ContentPreviews, { previewContentSources } from './ContentPreviews';
 import ContentTrack from './ContentTrack';
 import { originalContentSegments, applyContentOverrides, contentAt, displayContentSegments } from './contentModel';
 import EditorToast from './EditorToast';
@@ -513,6 +512,7 @@ function Editor() {
       || videos.some(video => video.clear > video.timestamp)
       || recording.events.some(event => ['SharePresentationEvent', 'GotoSlideEvent', 'AddTldrawShapeEvent'].includes(event.type)))], [recording, videos]);
   const external = videos.find(v => v.timestamp * 1000 <= time && time < v.clear * 1000);
+  const previewSources = recording ? previewContentSources(recording, currentContent, screen, external) : [];
   const validSelection = isValidSelection(selection);
   const selectionMessage = selection.start_ms == null ? selection.end_ms == null ? 'selectionNeither' : 'selectionNeedStart'
     : selection.end_ms == null ? 'selectionNeedEnd' : selection.start_ms === selection.end_ms ? 'selectionEqual'
@@ -576,12 +576,10 @@ function Editor() {
           {!edit.record_ranges.length && <p className="re-warnings">{t('needRange')}</p>}
           <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><small>{t('noRebuild')}</small>{error && <p className="re-error" role="alert">{displayMessage(error)}</p>}
         </EditorDialog>}
-        <PreviewPanes ratio={previewSplit} onChange={value => updatePreferences({ previewSplit: value })}
+        <PreviewPanes comparison={previewSources.length > 1} ratio={previewSplit} onChange={value => updatePreferences({ previewSplit: value })}
           content={hasContent ? <div className="re-content-view"><ContentControls recording={recording} original={originalContent} current={currentContent} overrides={edit.content_overrides} selection={selection} busy={!!busy || rebuilding} onChange={value => replaceEdit({ ...edit, content_overrides: value })} />
-            <div className="re-content-image">{currentContent?.source === 'external' && external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} />
-              : currentContent?.source === 'screen' && currentContent.available && screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />
-              : currentContent?.source === 'slides' && currentContent.available ? <SlidePreview recording={recording} time={time} />
-              : <div className="re-placeholder">{t(currentContent?.source === 'none' ? 'contentHidden' : 'contentUnavailable')}</div>}</div></div> : null}
+            <div className="re-content-image"><ContentPreviews recording={recording} current={currentContent} screen={screen} external={external} sources={previewSources}
+              time={time} playing={playing} rate={rate} seekVersion={seekVersion} videos={videos} primary={primary} getPrimary={getPrimary} /></div></div> : null}
           cameras={hasCameras ? <>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</> : null} />
         {external && <details className="re-external-note"><summary>{t('externalAudioShort')}</summary><p>{t('externalAudio')}</p></details>}
         <section className="re-selection-panel" aria-label={t('selection')}>

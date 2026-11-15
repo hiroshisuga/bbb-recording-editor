@@ -283,7 +283,7 @@
   "resetUnmarkedToast": "Restored the original data. Set recording intervals before saving.",
   "rebuildCompletedToast": "Recording rebuilt. Check its visibility.",
   "errorReviewed": "Mark error as reviewed",
-  "contentShowing": "Showing: {source}",
+  "contentShowing": "Use in recording: {source}",
   "contentChangedFrom": "Edited · originally {source}",
   "contentInferred": "Inferred (no switch event)",
   "contentRecorded": "Follow recorded switches",
@@ -304,5 +304,7 @@
   "contentEditHint": "Change the display for this interval. Recorded switches resume at its end. Audio stays unchanged. Save to raw and rebuild to update playback.",
   "contentApply": "Apply to this interval",
   "contentSaveReview": "Display overrides: {count} intervals. The selected intervals override the original display switches.",
-  "contentUnordered": "Display changes cannot be saved because the recording events are out of time order."
+  "contentUnordered": "Display changes cannot be saved because the recording events are out of time order.",
+  "contentSelected": "Used in recording",
+  "contentReference": "For comparison"
 }

@@ -1688,16 +1688,21 @@ async function chooseContent(source) {
   await click('この範囲に適用');
 }
 
-test('recorded foreground switches show slides while the same screenshare file remains active', async () => {
+test('recorded foreground switches change the used source while both materials remain visible', async () => {
   await openContent();
   const audio = container.querySelector('.re-audio-settings audio');
-  expect(container.querySelector('.re-content-image').textContent).toContain('video preview');
+  const screenPreview = container.querySelector('.re-content-candidate[data-source="screen"]');
+  const slidesPreview = container.querySelector('.re-content-candidate[data-source="slides"]');
+  expect(container.querySelectorAll('.re-content-candidate')).toHaveLength(2);
+  expect(container.querySelector('.re-content-candidate[data-selected="true"] .re-content-candidate-body').textContent).toContain('video preview');
   audio.currentTime = 25; await act(async () => audio.dispatchEvent(new Event('seeked')));
-  expect(container.querySelector('.re-content-image').textContent).toBe('slide preview');
-  expect(container.querySelector('.re-content-heading').textContent).toContain('表示：スライド');
+  expect(container.querySelector('.re-content-candidate[data-selected="true"] .re-content-candidate-body').textContent).toBe('slide preview');
+  expect(container.querySelector('.re-content-heading').textContent).toContain('録画に使用：スライド');
   audio.currentTime = 45; await act(async () => audio.dispatchEvent(new Event('seeked')));
-  expect(container.querySelector('.re-content-image').textContent).toContain('video preview');
+  expect(container.querySelector('.re-content-candidate[data-selected="true"] .re-content-candidate-body').textContent).toContain('video preview');
   expect(container.querySelectorAll('.re-content-track button')).toHaveLength(3);
+  expect(container.querySelector('.re-content-candidate[data-source="screen"]')).toBe(screenPreview);
+  expect(container.querySelector('.re-content-candidate[data-source="slides"]')).toBe(slidesPreview);
 });
 
 test('a display override supports undo, draft, raw save, reopen and restoring the original interval', async () => {
@@ -1707,9 +1712,9 @@ test('a display override supports undo, draft, raw save, reopen and restoring th
   await act(async () => audio.dispatchEvent(new Event('seeked')));
   await chooseContent('screen');
   expect(container.querySelector('.re-content-dialog')).toBeNull();
-  expect(container.querySelector('.re-content-image').textContent).toContain('video preview');
+  expect(container.querySelector('.re-content-candidate[data-selected="true"] .re-content-candidate-body').textContent).toContain('video preview');
   expect(container.querySelector('.re-content-heading').textContent).toContain('当時はスライド');
-  await click('↶ 元に戻す'); expect(container.querySelector('.re-content-image').textContent).toBe('slide preview');
+  await click('↶ 元に戻す'); expect(container.querySelector('.re-content-candidate[data-selected="true"] .re-content-candidate-body').textContent).toBe('slide preview');
   await click('↷ やり直す');
   await click('下書きを保存');
   expect(calls.find(c => c.url.endsWith('/draft')).payload.content_overrides).toEqual([{ start_ms: 20000, end_ms: 40000, source: 'screen' }]);
