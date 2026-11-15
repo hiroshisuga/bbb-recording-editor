@@ -1660,3 +1660,78 @@ test('draft success preserves an audio failure until it is reviewed or audio act
   await openStatus();
   expect(container.querySelector('.re-notification-history').textContent).toContain('プレビュー音声を読み込めません');
 });
+
+const contentFixture = {
+  ...manifest, content_edit_supported: true, content_overrides: [],
+  slides: [{ presentation: 'deck', page: 1, url: '/slide.svg' }],
+  events: [{ type: 'SharePresentationEvent', time_ms: 0, presentation: 'deck', page: 1 }],
+  assets: [{ id: 'shared-screen', kind: 'deskshare', has_video: true, start_ms: 0, end_ms: 60000, url: '/screen.webm' }],
+  content_segments: [[0, 20000, 'screen'], [20000, 40000, 'slides'], [40000, 60000, 'screen']].map(([start_ms, end_ms, source]) => ({
+    start_ms, end_ms, source, inferred: false, available: true, screen_available: true, slides_available: true, editable: true,
+  })),
+};
+async function openContent(extra = {}) {
+  VideoPreview.mockImplementation(() => <div>video preview</div>);
+  const previous = global.fetch.getMockImplementation();
+  let saved = { ...contentFixture, ...extra };
+  global.fetch.mockImplementation(async (url, options) => {
+    if (url.endsWith(`/${id}`)) return { ok: true, json: async () => saved };
+    if (url.endsWith('/save')) { const data = JSON.parse(options.body); saved = { ...saved, ...data, revision: 'content-saved' }; }
+    return previous(url, options);
+  });
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+}
+async function chooseContent(source) {
+  await click('表示内容を変更…');
+  const input = container.querySelector(`.re-content-dialog input[value="${source}"]`);
+  await act(async () => Simulate.change(input));
+  await click('この範囲に適用');
+}
+
+test('recorded foreground switches show slides while the same screenshare file remains active', async () => {
+  await openContent();
+  const audio = container.querySelector('.re-audio-settings audio');
+  expect(container.querySelector('.re-content-image').textContent).toContain('video preview');
+  audio.currentTime = 25; await act(async () => audio.dispatchEvent(new Event('seeked')));
+  expect(container.querySelector('.re-content-image').textContent).toBe('slide preview');
+  expect(container.querySelector('.re-content-heading').textContent).toContain('表示：スライド');
+  audio.currentTime = 45; await act(async () => audio.dispatchEvent(new Event('seeked')));
+  expect(container.querySelector('.re-content-image').textContent).toContain('video preview');
+  expect(container.querySelectorAll('.re-content-track button')).toHaveLength(3);
+});
+
+test('a display override supports undo, draft, raw save, reopen and restoring the original interval', async () => {
+  await openContent();
+  await time('選択開始', '00:00:20.000'); await time('選択終了', '00:00:40.000');
+  const audio = container.querySelector('.re-audio-settings audio'); audio.currentTime = 25;
+  await act(async () => audio.dispatchEvent(new Event('seeked')));
+  await chooseContent('screen');
+  expect(container.querySelector('.re-content-dialog')).toBeNull();
+  expect(container.querySelector('.re-content-image').textContent).toContain('video preview');
+  expect(container.querySelector('.re-content-heading').textContent).toContain('当時はスライド');
+  await click('↶ 元に戻す'); expect(container.querySelector('.re-content-image').textContent).toBe('slide preview');
+  await click('↷ やり直す');
+  await click('下書きを保存');
+  expect(calls.find(c => c.url.endsWith('/draft')).payload.content_overrides).toEqual([{ start_ms: 20000, end_ms: 40000, source: 'screen' }]);
+  await click('rawデータへ保存…'); expect(container.querySelector('.re-save-review').textContent).toContain('表示内容の上書き：1区間');
+  await click('バックアップを作成して保存');
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelectorAll('.re-content-edited')).toHaveLength(1);
+  await time('選択開始', '00:00:20.000'); await time('選択終了', '00:00:40.000');
+  await chooseContent('original');
+  expect(container.querySelector('.re-content-edited')).toBeNull();
+  expect(button('rawデータへ保存…').disabled).toBe(false);
+});
+
+test('unavailable content is disabled for the whole selection and selecting a band never edits raw', async () => {
+  await openContent({ content_segments: contentFixture.content_segments.map((s, i) => i === 1 ? { ...s, screen_available: false } : s) });
+  await act(async () => Simulate.click(container.querySelectorAll('.re-content-track button')[1]));
+  expect(container.querySelector('[aria-label="選択開始"]').value).toBe('00:00:20.000');
+  expect(container.querySelector('[aria-label="選択終了"]').value).toBe('00:00:40.000');
+  expect(button('rawデータへ保存…').disabled).toBe(true);
+  await click('表示内容を変更…');
+  expect(container.querySelector('.re-content-dialog input[value="screen"]').disabled).toBe(true);
+  expect(container.querySelector('.re-content-dialog').textContent).toContain('表示できる素材がありません');
+  expect(calls.some(c => /\/(draft|save)$/.test(c.url))).toBe(false);
+});

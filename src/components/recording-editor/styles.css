@@ -325,3 +325,29 @@
   .recording-editor .re-toast { right:12px; bottom:12px; }
   .re-header .re-dirty { display:block; flex-basis:100%; text-align:right; }
 }
+
+/* The foreground decision is distinct from the availability of its materials. */
+.re-content-view { display:flex; flex-direction:column; height:100%; min-height:0; }
+.re-content-heading { display:flex; align-items:center; flex-wrap:wrap; gap:2px 8px; flex:none; padding:3px 7px; color:var(--re-text); background:var(--re-panel); font-size:11px; }
+.re-content-heading strong { font-weight:500; }
+.recording-editor .re-content-heading>button { margin-left:auto; padding:1px 6px; font-size:11px; }
+.re-content-image { flex:1; min-height:0; position:relative; }
+.re-content-image>.re-slide,.re-content-image>.re-video { height:100%; }
+.re-content-track { height:46px; }
+.recording-editor .re-content-segment { position:absolute; top:20px; height:22px; overflow:hidden; text-overflow:ellipsis; min-width:0; padding:0 3px; border:0; border-right:1px solid var(--re-bg); border-radius:2px; font-size:11px; white-space:nowrap; }
+.recording-editor .re-content-slides { background:#244e6b; }
+.recording-editor .re-content-screen { background:#543b71; }
+.recording-editor .re-content-external { background:#654a28; }
+.recording-editor .re-content-none { background:#283240; color:#a2b2c4; }
+.recording-editor .re-content-edited { box-shadow:inset 0 -3px #e4c17d; }
+.recording-editor .re-content-unavailable { background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,#ffffff10 5px,#ffffff10 8px); }
+.recording-editor .re-content-dialog { width:460px; }
+.re-content-dialog fieldset { border:0; padding:0; margin:12px 0; display:grid; gap:9px; }
+.re-content-dialog legend { font-weight:500; padding:0; margin-bottom:8px; }
+.re-content-dialog label { display:flex; align-items:flex-start; gap:8px; }
+.re-content-dialog input { margin-top:5px; }
+.re-content-dialog small { display:block; font-size:11px; }
+@media(pointer:coarse) {
+  .recording-editor .re-content-heading>button { min-height:40px; }
+  .re-content-dialog label { min-height:44px; }
+}

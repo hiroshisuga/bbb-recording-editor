@@ -13,6 +13,7 @@ require_relative 'list_cache'
 require_relative 'detail_waveform'
 require_relative 'cut_chime'
 require_relative 'audio_render'
+require_relative 'content_switches'
 
 module RecordingEditor
   class Error < StandardError
@@ -420,7 +421,7 @@ module RecordingEditor
   end
 
   class Recording
-    attr_reader :repo, :id, :doc, :origin, :duration, :revision, :warnings, :current_doc
+    attr_reader :repo, :id, :doc, :origin, :duration, :revision, :warnings, :current_doc, :events_in_order
     STARTS = {
       'StartRecordingEvent' => ['audio', 'filename', 'StopRecordingEvent'],
       'AudioTrackPublishedEvent' => ['audio', 'filename', 'AudioTrackUnpublishedEvent'],
@@ -450,7 +451,8 @@ module RecordingEditor
       @origin = Integer(events.first['timestamp'])
       @duration = events.map { |e| Integer(e['timestamp']) }.max - origin
       raise Error, '会議の時間範囲が不正です。' unless duration.positive?
-      warnings << 'イベントの時刻順が前後しています。既存イベントの順序は保存時にも維持します。' if events.each_cons(2).any? { |a, b| a['timestamp'].to_i > b['timestamp'].to_i }
+      @events_in_order = events.each_cons(2).all? { |a, b| a['timestamp'].to_i <= b['timestamp'].to_i }
+      warnings << 'イベントの時刻順が前後しています。既存イベントの順序は保存時にも維持します。' unless events_in_order
     rescue Errno::ENOENT
       raise Error.new('rawデータがありません。', 404)
     rescue ArgumentError
@@ -636,7 +638,7 @@ module RecordingEditor
           data['title'] = field(event, 'externalVideoTitle', 'videoTitle', 'title')
         when 'UpdateExternalVideoRecordEvent'
           data.merge!('state' => field(event, 'state'), 'status' => field(event, 'status'), 'position' => field(event, 'time'), 'rate' => field(event, 'rate'))
-        when 'StopExternalVideoRecordEvent', 'SetScreenshareAsContentEvent', 'SetPresentationIsOpenEvent', 'ParticipantJoinEvent', 'ParticipantLeftEvent', 'ParticipantTalkingEvent'
+        when 'StopExternalVideoRecordEvent', 'SetScreenshareAsContentEvent', 'SetPresentationIsOpenEvent', 'LayoutBroadcastedEvent', 'ParticipantJoinEvent', 'ParticipantLeftEvent', 'ParticipantTalkingEvent'
           data['fields'] = event.element_children.to_h { |n| [n.name, n.text] }
         else
           next
@@ -686,12 +688,15 @@ module RecordingEditor
         beep_ranges: history && history['revision'] == revision ? history.fetch('beep_ranges', []) : [],
         cut_chime: !chime_gaps.empty?, cut_chime_gaps: chime_gaps,
         cut_chime_sound: history && history['revision'] == revision ? CutChime.sound(history) : 'a',
+        content_segments: ContentSwitches.timeline(self), content_edit_supported: ContentSwitches.editable?(self),
+        content_edit_reason: ContentSwitches.editable?(self) ? nil : ContentSwitches.version_supported?(self) ? 'contentUnordered' : 'contentUnsupported',
+        content_overrides: history && history['revision'] == revision ? history.fetch('content_overrides', []) : [],
         assets: media, slides: slides, events: events, warnings: warnings.uniq,
         published_url: published ? "/playback/presentation/2.3/#{id}" : nil,
         preview_key: Media.new(self).preview_key }
     end
 
-    def edited_xml(record_ranges, replacements = {}, cue_outputs: [])
+    def edited_xml(record_ranges, replacements = {}, cue_outputs: [], content_overrides: [])
       raise Error, '録画に残す区間を1つ以上指定してください。BBBは空区間を安全に扱えません。' if record_ranges.empty?
       updated = doc.dup
       old = updated.xpath('/recording/event[@eventname="RecordStatusEvent"]')
@@ -722,6 +727,7 @@ module RecordingEditor
         end
       end
       CutChime.add_events(updated, cue_outputs, origin)
+      ContentSwitches.apply(updated, content_overrides, self)
       updated.to_xml
     end
   end
@@ -1149,6 +1155,7 @@ module RecordingEditor
       raise Error, '録画に残す区間を1つ以上指定してください。BBBは空区間を安全に扱えません。' if records.empty?
       beeps = RecordingEditor.ranges(payload['beep_ranges'] || [], rec.duration)
       chime_gaps = CutChime.selection(payload, records, rec.record_ranges(rec.doc), rec.duration)
+      content_overrides = ContentSwitches.normalize(payload.fetch('content_overrides', history ? history.fetch('content_overrides', []) : []), rec)
       sound = CutChime.sound(payload)
       chime = !chime_gaps.empty?
       cues = CutChime.cues(chime_gaps)
@@ -1166,7 +1173,7 @@ module RecordingEditor
       FileUtils.mkdir_p(staging)
       replacements, outputs, audio_render = AudioRender.new(rec).render(beeps, cues, staging, history: history, progress: progress, sound: sound)
       cue_outputs = outputs.select { |output| output[:cue] }
-      xml = rec.edited_xml(effective, replacements, cue_outputs: cue_outputs)
+      xml = rec.edited_xml(effective, replacements, cue_outputs: cue_outputs, content_overrides: content_overrides)
       current = repo.raw_file(id, 'events.xml')
       raise Error.new('処理中にevents.xmlが変更されました。保存していません。', 409) unless Digest::SHA256.file(current).hexdigest == rec.revision
       stat = File.stat(current)
@@ -1182,6 +1189,7 @@ module RecordingEditor
       end
       # Write-ahead information is kept even if the XML replacement fails.
       result = { 'record_ranges' => records, 'beep_ranges' => beeps, 'cut_chime' => chime, 'cut_chime_gaps' => chime_gaps, 'cut_chime_sound' => sound,
+                 'content_overrides' => content_overrides,
                  'effective_record_ranges' => effective,
                  'audio_render' => audio_render,
                  'xml_backup' => backup, 'outputs' => outputs.map { |o| o.reject { |k, _v| k == :staged } },
@@ -1226,7 +1234,7 @@ module RecordingEditor
       previous_draft = File.file?(draft_path) ? File.binread(draft_path) : nil
       RecordingEditor.atomic_write(File.join(archive, 'saved.json'), previous_saved) if previous_saved
       RecordingEditor.atomic_write(File.join(archive, 'draft.json'), previous_draft) if previous_draft
-      result = { 'operation' => 'reset', 'revision' => data['revision'], 'beep_ranges' => [], 'cut_chime' => false, 'cut_chime_gaps' => [], 'cut_chime_sound' => 'a',
+      result = { 'operation' => 'reset', 'revision' => data['revision'], 'content_overrides' => [], 'beep_ranges' => [], 'cut_chime' => false, 'cut_chime_gaps' => [], 'cut_chime_sound' => 'a',
                  'xml_backup' => File.join(archive, 'events.xml'), 'archive' => archive,
                  'archived_media' => outputs, 'saved_at' => Time.now.utc.iso8601(6), 'status' => 'prepared' }
       journal = File.join(root, "#{token}.json")
@@ -1299,7 +1307,8 @@ module RecordingEditor
       records = RecordingEditor.ranges(payload['record_ranges'], rec.duration)
       beeps = RecordingEditor.ranges(payload['beep_ranges'] || [], rec.duration)
       chime_gaps = CutChime.selection(payload, records, rec.record_ranges(rec.doc), rec.duration)
-      data = { revision: rec.revision, record_ranges: records, beep_ranges: beeps, cut_chime: !chime_gaps.empty?, cut_chime_gaps: chime_gaps, cut_chime_sound: CutChime.sound(payload) }
+      content_overrides = ContentSwitches.normalize(payload.fetch('content_overrides', rec.history_data&.fetch('content_overrides', []) || []), rec)
+      data = { revision: rec.revision, content_overrides: content_overrides, record_ranges: records, beep_ranges: beeps, cut_chime: !chime_gaps.empty?, cut_chime_gaps: chime_gaps, cut_chime_sound: CutChime.sound(payload) }
       RecordingEditor.atomic_write(File.join(repo.state_dir(id), 'draft.json'), JSON.pretty_generate(data))
       data
     end

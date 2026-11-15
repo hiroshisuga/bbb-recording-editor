@@ -15,6 +15,9 @@ import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import OrphanDeleteDialog from './OrphanDeleteDialog';
 import EditorDialog from './EditorDialog';
+import ContentControls from './ContentControls';
+import ContentTrack from './ContentTrack';
+import { originalContentSegments, applyContentOverrides, contentAt, displayContentSegments } from './contentModel';
 import EditorToast from './EditorToast';
 import useEditorNotifications from './useEditorNotifications';
 import useAudioPreview from './useAudioPreview';
@@ -79,7 +82,7 @@ function RecordingEvents({ events, time, seek }) {
   </section>;
 }
 
-function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, chimeSettings, busy, clock, detail }) {
+function Timeline({ recording, videos, videoTitles, edit, change, selection, setSelection, time, playing, seek, peaks, zoom, chimeGaps, onChimeToggle, chimeSettings, busy, clock, detail, contentSegments, showContent }) {
   const { t } = useEditorI18n();
   const ref = useRef(null);
   const scrollRef = useRef(null);
@@ -256,6 +259,7 @@ function Timeline({ recording, videos, videoTitles, edit, change, selection, set
   </div>
   <div className="re-track-scroll" ref={tracksRef} {...navigationHandlers}>
     <div className="re-track-timeline" style={{ width: `${zoom * 100}%` }} {...pointerHandlers}>
+    {showContent && <ContentTrack segments={contentSegments} duration={duration} setSelection={setSelection} seek={seek} />}
     {mediaTracks.map(({ kind, assets }) => <div className={`re-track ${kind}`} key={kind}><span className="re-track-label">{kind === 'video' ? t('camera') : t('screen')}</span>
       {assets.map(a => <div key={a.id} className={`re-clip ${a.error ? 'missing' : ''}`} style={{ left: pct(a.start_ms), width: pct(a.end_ms - a.start_ms) }} data-tooltip={`${a.relative || a.filename}\n${formatTime(a.start_ms)} – ${formatTime(a.end_ms)}`} onPointerDown={e => e.stopPropagation()} onClick={() => seek(a.start_ms)}>{a.user || kind}</div>)}
     </div>)}
@@ -311,7 +315,7 @@ function Editor() {
   const [meetings, setMeetings] = useState([]);
   const [deleteMeeting, setDeleteMeeting] = useState(null);
   const [recording, setRecording] = useState(null);
-  const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [], cut_chime_gaps: [], cut_chime_sound: 'a' });
+  const [edit, setEdit] = useState({ record_ranges: [], beep_ranges: [], content_overrides: [], cut_chime_gaps: [], cut_chime_sound: 'a' });
   const [history, setHistory] = useState({ past: [], future: [] });
   const [selection, setSelection] = useState({ start_ms: null, end_ms: null });
   const [time, setTime] = useState(0);
@@ -350,6 +354,10 @@ function Editor() {
     : recording?.playback_sync === 'reflected' ? 'playbackReflected' : 'playbackUnknown';
   const videos = useMemo(() => recording ? externalVideos(recording.events, duration) : [], [recording, duration]);
   const videoTitles = useExternalVideoTitles(videos, recording?.id, loadExternalVideoTitle);
+  const originalContent = useMemo(() => recording ? originalContentSegments(recording) : [], [recording]);
+  const contentSegments = useMemo(() => applyContentOverrides(originalContent, edit.content_overrides), [originalContent, edit.content_overrides]);
+  const contentBand = useMemo(() => displayContentSegments(contentSegments), [contentSegments]);
+  const currentContent = contentAt(contentSegments, time);
   const primary = useMemo(() => audio ? audioAdapter(audio, duration) : null, [audio, duration]);
   const getPrimary = useCallback(() => primary, [primary]);
   useEffect(() => {
@@ -561,7 +569,7 @@ function Editor() {
         {rebuildReview && <EditorDialog className="re-review re-rebuild-review" title={t('rebuildReviewTitle')} onClose={() => setRebuildReview(false)}><p>{t('rebuildReviewDetails')}</p><p className="re-warnings">{t('rebuildWarning')}</p><p className="re-warnings">{t('rebuildPublishedWarning')}</p>{recording.recording_title && <p>{t('rebuildKeepTitle', { title: recording.recording_title })}</p>}
           <button className="re-primary" disabled={!!rebuildBlock} onClick={rebuild}>{t('confirmRebuild')}</button>{error && <p className="re-error" role="alert">{displayMessage(error)}</p>}
         </EditorDialog>}
-        {review && <EditorDialog className="re-review re-save-review" title={t('reviewTitle')} onClose={() => setReview(false)}><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>
+        {review && <EditorDialog className="re-review re-save-review" title={t('reviewTitle')} onClose={() => setReview(false)}><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>{edit.content_overrides.length > 0 && <p>{t('contentSaveReview', { count: edit.content_overrides.length })}</p>}
           {edit.cut_chime_gaps.length > 0 && <><p>{t('cutChimeSound')}: {t(`cutChimeSound_${edit.cut_chime_sound}`)}</p><p className="re-warnings">{t('cutChimeWarning')}</p></>}
           {edit.beep_ranges.length > 0 && <p className="re-warnings">{t('reviewAudioWarning')}</p>}
           {recording.beep_ranges.length > 0 && !edit.beep_ranges.length && <p>{t('reviewAudioRestore')}</p>}
@@ -569,7 +577,11 @@ function Editor() {
           <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><small>{t('noRebuild')}</small>{error && <p className="re-error" role="alert">{displayMessage(error)}</p>}
         </EditorDialog>}
         <PreviewPanes ratio={previewSplit} onChange={value => updatePreferences({ previewSplit: value })}
-          content={hasContent ? external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} /> : null}
+          content={hasContent ? <div className="re-content-view"><ContentControls recording={recording} original={originalContent} current={currentContent} overrides={edit.content_overrides} selection={selection} busy={!!busy || rebuilding} onChange={value => replaceEdit({ ...edit, content_overrides: value })} />
+            <div className="re-content-image">{currentContent?.source === 'external' && external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} />
+              : currentContent?.source === 'screen' && currentContent.available && screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />
+              : currentContent?.source === 'slides' && currentContent.available ? <SlidePreview recording={recording} time={time} />
+              : <div className="re-placeholder">{t(currentContent?.source === 'none' ? 'contentHidden' : 'contentUnavailable')}</div>}</div></div> : null}
           cameras={hasCameras ? <>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</> : null} />
         {external && <details className="re-external-note"><summary>{t('externalAudioShort')}</summary><p>{t('externalAudio')}</p></details>}
         <section className="re-selection-panel" aria-label={t('selection')}>
@@ -595,7 +607,7 @@ function Editor() {
           skipConfirm={skipChimeConfirm} onSkipConfirmChange={value => updatePreferences({ skipChimeConfirm: value })}
           onChange={value => replaceEdit({ ...edit, cut_chime_gaps: value })}>
           {(toggle, chimeSettings) => <>
-          <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} chimeSettings={chimeSettings} busy={!!busy || rebuilding}
+          <Timeline recording={recording} videos={videos} videoTitles={videoTitles} edit={edit} change={change} selection={selection} setSelection={setSelection} time={time} playing={playing} seek={seek} peaks={preview?.peaks} zoom={zoom} chimeGaps={chimeGaps} clock={clock} onChimeToggle={toggle} chimeSettings={chimeSettings} busy={!!busy || rebuilding} contentSegments={contentBand} showContent={hasContent}
             detail={<DetailWaveform key={recording.id} open={detailWaveOpen} onToggle={() => updatePreferences({ detailWaveOpen: !detailWaveOpen })} audioUrl={preview?.audio_url} duration={duration} time={time} playing={playing} selection={selection} setSelection={setSelection} seek={seek} span={detailWaveSpan} setSpan={value => updatePreferences({ detailWaveSpan: value })} recordRanges={edit.record_ranges} clock={clock} />} />
 
         <section className="re-audio-settings" aria-label={t('audioSettings')}><h3>{t('audioSettings')}</h3><div>

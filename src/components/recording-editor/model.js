@@ -177,7 +177,7 @@ export const readEditorEdit = (data, duration = data.duration_ms) => {
     const oldCues = data.cut_chime ? cutChimeRanges(records, data.original_record_ranges || [], duration) : [];
     selected = cutChimeGaps(records, duration).filter(gap => oldCues.some(cue => cue.start_ms === gap.start_ms));
   }
-  return { record_ranges: records, beep_ranges: data.beep_ranges || [],
+  return { record_ranges: records, beep_ranges: data.beep_ranges || [], content_overrides: data.content_overrides || [],
     cut_chime_gaps: retainChimeGaps(records, selected, duration),
     cut_chime_sound: CUT_CHIME_SOUNDS.includes(data.cut_chime_sound) ? data.cut_chime_sound : 'a' };
 };
