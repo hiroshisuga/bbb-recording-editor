@@ -26,6 +26,9 @@ let calls;
 const originalFetch = global.fetch;
 const button = text => [...container.querySelectorAll('button'), ...document.querySelectorAll('.re-chime-settings-popover button')].find(b => b.textContent === text);
 async function click(text) { await act(async () => { Simulate.click(button(text)); }); }
+async function openStatus() { if (!container.querySelector('.re-state-dialog')) await act(async () => Simulate.click(container.querySelector('.re-status-toggle'))); }
+async function closeStatus() { await act(async () => Simulate.click(container.querySelector('.re-state-dialog .re-dialog-heading button'))); }
+async function openReset() { await openStatus(); await click('初期状態に戻す…'); }
 async function openChimeSettings() {
   if (!document.querySelector('.re-chime-settings-popover')) await act(async () => Simulate.click(container.querySelector('.re-chime-settings-toggle')));
 }
@@ -113,12 +116,16 @@ test('editor heading uses the recording title, keeps the room name separate and 
   expect(container.querySelector('.re-title h1').textContent).toBe(title);
   expect(container.querySelector('.re-title-room').textContent).toBe('会議室: 会議室');
   expect(container.querySelector('.re-title h1').innerHTML).toContain('&lt;A&gt;');
+  expect(container.querySelector('.re-state-dialog')).toBeNull();
+  await openStatus();
   expect(container.textContent).toContain('録画タイトルの復元を確認できませんでした');
+  await closeStatus();
   await click('録画を再構築…');
   expect(container.querySelector('.re-rebuild-review').textContent).toContain(title);
   expect(container.querySelector('.re-rebuild-review').textContent).toContain('公開前に復元');
   await language('en');
   expect(container.querySelector('.re-title-room').textContent).toBe('Room: 会議室');
+  await click('Close'); await openStatus();
   expect(container.textContent).toContain('Recording title restoration could not be verified');
 });
 
@@ -128,9 +135,9 @@ test('reused previews are explicitly identified in both languages', async () => 
     ? { ok: true, json: async () => ({ status: 'done', result: { audio_url: '/demo.webm', peaks: [], cache_reused: true } }) }
     : fetch(url, options));
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
-  expect(container.querySelector('.re-success').textContent).toBe('保存済みのプレビュー音声と波形を再利用しました。');
+  expect(container.querySelector('.re-toast-message').textContent).toBe('保存済みのプレビュー音声と波形を再利用しました。');
   await language('en');
-  expect(container.querySelector('.re-success').textContent).toBe('Reused the saved preview audio and waveforms.');
+  expect(container.querySelector('.re-toast-message').textContent).toBe('Reused the saved preview audio and waveforms.');
 });
 
 const cutRanges = [{ start_ms: 1000, end_ms: 10000 }, { start_ms: 20000, end_ms: 30000 }, { start_ms: 40000, end_ms: 59000 }];
@@ -875,7 +882,7 @@ test('resetting a recording preserves listening preferences', async () => {
   await volume(25);
   await click('ミュート');
   await act(async () => Simulate.change(container.querySelector('.re-audio-settings input[type="checkbox"]'), { target: { checked: false } }));
-  await click('初期状態に戻す…');
+  await openReset();
   await click('確認して初期状態に戻す');
   expect(container.querySelector('audio').volume).toBeCloseTo(0.25);
   expect(container.querySelector('audio').muted).toBe(true);
@@ -899,7 +906,7 @@ test('preferences remain editable when browser storage is blocked', async () => 
 test('reset requires confirmation and clears edits, draft and undo without rebuilding', async () => {
   await selectRange();
   await click('ピー音を追加');
-  await click('初期状態に戻す…');
+  await openReset();
   expect(calls.some(call => call.url.endsWith('/reset'))).toBe(false);
   expect(container.querySelector('.re-reset-review').textContent).toContain('履歴へ退避');
   await click('確認して初期状態に戻す');
@@ -922,11 +929,13 @@ test('reset with an unavailable helper explains setup without requiring another 
   global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
     ? { ok: true, json: async () => ({ ...manifest, last_operation: 'reset', playback_sync: 'needs_rebuild', rebuild: { available: false, status: 'not_requested' } }) }
     : fetch(url, options));
-  await click('初期状態に戻す…');
+  await openReset();
   await click('確認して初期状態に戻す');
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
+  await openStatus();
   expect(container.textContent).toContain('rawデータへの再保存は不要');
+  await openStatus();
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('rawデータへの保存や初期化とは別の条件');
   expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
 });
@@ -942,8 +951,10 @@ test('unmarked meetings open with no keep intervals and require an explicit inte
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('rawデータへ保存…').title).toContain('区間を1つ以上指定');
   expect(button('録画を再構築…').disabled).toBe(true);
+  await openStatus();
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('区間を1つ以上指定');
   expect(calls.some(call => call.url.endsWith('/save'))).toBe(false);
+  await closeStatus();
   await selectRange();
   await click('録画に残す');
   expect(button('rawデータへ保存…').disabled).toBe(false);
@@ -958,11 +969,12 @@ test('resetting an unmarked original restores empty keep intervals', async () =>
   global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
     ? { ok: true, json: async () => ({ ...manifest, record_ranges: [], record_ranges_persisted: false, last_operation: 'reset', playback_sync: 'needs_rebuild' }) }
     : fetch(url, options));
-  await click('初期状態に戻す…');
+  await openReset();
   await click('確認して初期状態に戻す');
   expect(container.querySelector('.re-bar')).toBeNull();
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
+  await openStatus();
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('区間を1つ以上指定');
   expect(container.textContent).toContain('録画に残す区間は空');
   expect(container.textContent).not.toContain('現在の編集内容はrawデータに保存済み');
@@ -979,7 +991,9 @@ test('BBB processing blocks mutations and explains the disabled rebuild', async 
   await click('ピー音を追加');
   expect(button('rawデータへ保存…').disabled).toBe(true);
   expect(button('録画を再構築…').disabled).toBe(true);
+  await openStatus();
   expect(button('初期状態に戻す…').disabled).toBe(true);
+  await openStatus();
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('処理中');
 });
 
@@ -1002,7 +1016,9 @@ test('saving refreshes meeting summaries and keeps the current publication badge
   await click('バックアップを作成して保存');
   expect(calls.filter(call => call.url.endsWith('/recordings'))).toHaveLength(2);
   expect(container.querySelector('.re-meeting .re-status-unpublished').textContent).toBe('生成済み · 非公開');
-  expect(container.textContent).toContain('XMLバックアップ: /backup/events.xml');
+  expect(container.querySelector('.re-toast').textContent).not.toContain('/backup/events.xml');
+  await openStatus();
+  expect(container.querySelector('.re-notification-history').textContent).toContain('XMLバックアップ: /backup/events.xml');
 });
 
 test('switching language preserves edits, selection, filter, undo history and media', async () => {
@@ -1023,7 +1039,7 @@ test('switching language preserves edits, selection, filter, undo history and me
   expect(container.querySelector('[aria-label="Generation / publication status"]').value).toBe('unpublished');
   expect(container.querySelector('[aria-label="Raw data status"]').value).toBe('present');
   expect(container.querySelector('.re-status-unpublished').textContent).toBe('Generated · Unpublished');
-  expect(container.querySelector('.re-dirty').textContent).toBe('Unsaved changes');
+  expect(container.querySelector('.re-dirty').textContent).toContain('Unsaved changes');
   expect(container.querySelector('audio')).toBe(audio);
   expect(calls).toHaveLength(requests);
   expect(localStorage.getItem(LANGUAGE_KEY)).toBe('en');
@@ -1045,7 +1061,9 @@ test('warnings, save review, errors and completed messages follow the selected l
     ? { status: 'done', result: { audio_url: '/demo.webm', peaks: [] } } : warned }));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
   await language('en');
+  await openStatus();
   expect(container.querySelector('.re-warnings').textContent).toContain('Raw data is missing.');
+  await closeStatus();
   await act(async () => Simulate.click(container.querySelector('.re-events h3 button')));
   // User content is kept exactly as recorded, even when it resembles a diagnostic.
   expect(container.querySelector('.re-events').textContent).toContain('参加者: rawデータがありません。');
@@ -1055,9 +1073,9 @@ test('warnings, save review, errors and completed messages follow the selected l
   expect(container.querySelector('.re-review').textContent).toContain('Keep: 1 interval / Beep: 1 interval');
   global.fetch.mockImplementation(async () => ({ ok: false, json: async () => ({ error: 'events.xmlが変更されています。会議を読み直してください。' }) }));
   await click('Back up and save');
-  expect(container.querySelector('[role="alert"]').textContent).toBe('events.xml has changed. Reload the meeting.');
+  expect(container.querySelector('.re-save-review [role="alert"]').textContent).toBe('events.xml has changed. Reload the meeting.');
   await language('ja');
-  expect(container.querySelector('[role="alert"]').textContent).toBe('events.xmlが変更されています。会議を読み直してください。');
+  expect(container.querySelector('.re-save-review [role="alert"]').textContent).toBe('events.xmlが変更されています。会議を読み直してください。');
 });
 
 
@@ -1104,68 +1122,73 @@ test('rebuild helper absence is visible and prevents submitting a request', asyn
     : { ...manifest, rebuild: { available: false, status: 'not_requested' } } }));
   await act(async () => { Simulate.click(container.querySelector('.re-meeting')); });
   expect(button('録画を再構築…').disabled).toBe(true);
+  await openStatus();
   expect(container.querySelector('#re-rebuild-reason').textContent).toContain('未設置');
-  expect(container.querySelector('#re-rebuild-reason code').textContent).toBe('sudo bash editor/deploy/install-rebuild-helper.sh');
+  expect(container.querySelector('.re-block-reason code').textContent).toBe('sudo bash editor/deploy/install-rebuild-helper.sh');
 });
 
-test('opening a previously completed or pending rebuild does not trigger the visibility reminder', async () => {
-  const originalMock = global.fetch.getMockImplementation();
-  let status = 'completed';
+test('completed rebuild reminders live in status details until explicitly acknowledged', async () => {
+  const original = global.fetch.getMockImplementation();
   global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
-    ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status } }) }
-    : !options?.method && url.endsWith('/rebuild')
-      ? { ok: true, json: async () => ({ available: true, status: 'completed' }) }
-      : originalMock(url, options));
+    ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status: 'completed' } }) }
+    : original(url, options));
   await act(async () => Simulate.click(container.querySelector('.re-meeting')));
   expect(container.querySelector('.re-visibility-check')).toBeNull();
-  status = 'requested';
+  expect(container.querySelector('.re-attention-count').textContent).toBe('1');
+  await openStatus();
+  expect(container.querySelector('.re-visibility-check')).not.toBeNull();
+  await closeStatus();
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await openStatus();
+  expect(container.querySelector('.re-visibility-check')).not.toBeNull();
+  await click('公開状態を確認済みにする');
+  expect(container.querySelector('.re-visibility-check')).toBeNull();
+  await closeStatus();
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await openStatus();
+  expect(container.querySelector('.re-visibility-check')).toBeNull();
+});
+
+test('a completed rebuild reminder survives toast expiry and the next editing action', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith('/rebuild')
+    ? { ok: true, json: async () => ({ status: 'done', result: { available: true, status: 'completed' } }) }
+    : original(url, options));
   jest.useFakeTimers();
   try {
-    await act(async () => Simulate.click(container.querySelector('.re-meeting')));
-    status = 'completed';
-    await act(async () => { jest.advanceTimersByTime(5000); });
-    expect(container.querySelector('.re-visibility-check')).toBeNull();
+    await click('録画を再構築…'); await click('確認して再構築を依頼');
+    expect(container.querySelector('.re-toast')).not.toBeNull();
+    await act(async () => jest.advanceTimersByTime(5000));
+    expect(container.querySelector('.re-toast')).toBeNull();
+    await selectRange(); await click('ピー音を追加');
+    await openStatus();
+    expect(container.querySelector('.re-visibility-check')).not.toBeNull();
+    expect(container.querySelector('.re-notification-history').textContent).toContain('再構築が完了しました');
   } finally { jest.useRealTimers(); }
 });
 
-test('an immediately completed rebuild shows the reminder only until the recording is reopened', async () => {
-  const originalMock = global.fetch.getMockImplementation();
-  global.fetch.mockImplementation(async (url, options) => url.endsWith('/rebuild')
-    ? { ok: true, json: async () => ({ status: 'done', result: { available: true, status: 'completed' } }) }
-    : url.endsWith(`/${id}`)
-      ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status: 'completed' } }) }
-      : originalMock(url, options));
-  await click('録画を再構築…'); await click('確認して再構築を依頼');
-  expect(container.querySelector('.re-visibility-check')).not.toBeNull();
-  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
-  expect(container.querySelector('.re-visibility-check')).toBeNull();
-});
-
-test('polling a completed rebuild updates the message and unlocks raw saving', async () => {
+test('polling completion updates the toast and state without opening a dialog', async () => {
   jest.useFakeTimers();
   try {
-    await click('録画を再構築…');
-    await click('確認して再構築を依頼');
-    const originalMock = global.fetch.getMockImplementation();
+    await click('録画を再構築…'); await click('確認して再構築を依頼');
+    const original = global.fetch.getMockImplementation();
     global.fetch.mockImplementation(async (url, options) => !options?.method && url.endsWith('/rebuild')
       ? { ok: true, json: async () => ({ available: true, status: 'completed' }) }
       : url.endsWith(`/${id}`)
         ? { ok: true, json: async () => ({ ...manifest, rebuild: { available: true, status: 'completed' } }) }
-        : originalMock(url, options));
-    await act(async () => { jest.advanceTimersByTime(5000); });
-    expect(container.querySelector('.re-success').textContent).toContain('録画の再構築が完了しました');
+        : original(url, options));
+    await act(async () => jest.advanceTimersByTime(5000));
+    expect(container.querySelector('.re-toast-message').textContent).toContain('録画の再構築が完了しました');
+    expect(container.querySelector('.re-state-dialog')).toBeNull();
+    await openStatus();
     expect(container.querySelector('.re-visibility-check').textContent).toContain('Greenlight側で設定し直してください');
     await language('en');
     expect(container.querySelector('.re-visibility-check').textContent).toContain('Check recording visibility after rebuilding');
-    await language('ja');
+    await language('ja'); await closeStatus();
     expect(button('rawデータへ保存…').disabled).toBe(true);
     expect(button('録画を再構築…').disabled).toBe(false);
-    await selectRange();
-    await click('ピー音を追加');
+    await selectRange(); await click('ピー音を追加');
     expect(button('rawデータへ保存…').disabled).toBe(false);
-    expect(container.querySelector('.re-visibility-check')).toBeNull();
-    await act(async () => Simulate.click(container.querySelector('.re-meeting')));
-    expect(container.querySelector('.re-visibility-check')).toBeNull();
   } finally { jest.useRealTimers(); }
 });
 
@@ -1547,4 +1570,93 @@ test('cluster menu pointer actions never reach timeline selection handlers throu
   expect([...container.querySelectorAll('.re-selection input')].map(input => input.value)).toEqual(selection);
   expect(audio.currentTime).toBe(10);
   expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+});
+
+test('warnings and draft actions are opt-in and loading a draft returns to the editor', async () => {
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, warnings: ['素材がありません: mic.webm'],
+      draft: { revision: manifest.revision, record_ranges: manifest.record_ranges, beep_ranges: [{ start_ms: 2000, end_ms: 3000 }] } }) }
+    : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  expect(container.querySelector('.re-title').nextElementSibling.className).toContain('re-selection-panel');
+  expect(container.querySelector('.re-warnings,.re-draft,.re-state-dialog')).toBeNull();
+  await openStatus();
+  expect(container.querySelector('.re-state-dialog').tagName).toBe('DIALOG');
+  expect(container.querySelector('.re-state-dialog').getAttribute('open')).not.toBeNull();
+  expect(container.querySelector('.re-warnings').textContent).toContain('mic.webm');
+  await click('下書きを読み込む');
+  expect(container.querySelector('.re-state-dialog')).toBeNull();
+  expect(container.querySelector('.beep_ranges .re-bar')).not.toBeNull();
+  expect(button('rawデータへ保存…').disabled).toBe(false);
+});
+
+test('dismissing an audio failure keeps it reviewable and switching recordings clears its notification scope', async () => {
+  await act(async () => Simulate.error(container.querySelector('.re-audio-settings audio')));
+  await act(async () => Simulate.click(container.querySelector('.re-toast-message')));
+  expect(container.querySelector('.re-toast')).toBeNull();
+  expect(container.querySelector('.re-attention-count').textContent).toBe('1');
+  await openStatus();
+  expect(container.querySelector('.re-state-dialog [role="alert"]').textContent).toContain('プレビュー音声を読み込めません');
+  await click('エラーを確認済みにする');
+  expect(container.querySelector('.re-attention-count')).toBeNull();
+  expect(container.querySelector('.re-notification-history').textContent).toContain('プレビュー音声を読み込めません');
+  await closeStatus();
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await openStatus();
+  expect(container.querySelector('.re-notification-history').textContent).not.toContain('プレビュー音声を読み込めません');
+});
+
+test('expired progress does not cancel the job or unlock controls and completion produces a new toast', async () => {
+  let complete;
+  const original = global.fetch.getMockImplementation();
+  global.fetch.mockImplementation(async (url, options) => url.endsWith('/preview')
+    ? new Promise(resolve => { complete = () => resolve({ ok: true, json: async () => ({ status: 'done', result: { audio_url: '/demo.webm', peaks: [], cache_reused: true } }) }); })
+    : original(url, options));
+  jest.useFakeTimers();
+  try {
+    await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+    expect(container.querySelector('.re-toast')).not.toBeNull();
+    await act(async () => jest.advanceTimersByTime(5000));
+    expect(container.querySelector('.re-toast')).toBeNull();
+    expect(container.querySelector('.re-working-compact')).not.toBeNull();
+    expect(button('下書きを保存').disabled).toBe(true);
+    await openStatus();
+    expect(container.querySelector('.re-state-dialog [role="status"]').textContent).toContain('素材を読み込んでいます');
+    await closeStatus();
+    await act(async () => complete());
+    expect(container.querySelector('.re-working-compact')).toBeNull();
+    expect(container.querySelector('.re-toast-message').textContent).toContain('再利用しました');
+    expect(button('下書きを保存').disabled).toBe(false);
+  } finally { jest.useRealTimers(); }
+});
+
+test('visibility acknowledgement follows the rebuild request rather than subsequent raw saves', async () => {
+  const original = global.fetch.getMockImplementation();
+  let revision = manifest.revision, requestId = 'rebuild-one';
+  global.fetch.mockImplementation(async (url, options) => url.endsWith(`/${id}`)
+    ? { ok: true, json: async () => ({ ...manifest, revision, rebuild: { available: true, status: 'completed', request_id: requestId } }) }
+    : original(url, options));
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await openStatus(); await click('公開状態を確認済みにする'); await closeStatus();
+  revision = 'new-raw-revision';
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await openStatus(); expect(container.querySelector('.re-visibility-check')).toBeNull(); await closeStatus();
+  requestId = 'rebuild-two';
+  await act(async () => Simulate.click(container.querySelector('.re-meeting')));
+  await openStatus(); expect(container.querySelector('.re-visibility-check')).not.toBeNull();
+});
+
+test('draft success preserves an audio failure until it is reviewed or audio actually recovers', async () => {
+  const audio = container.querySelector('.re-audio-settings audio');
+  await act(async () => Simulate.error(audio));
+  await click('下書きを保存');
+  expect(container.querySelector('.re-attention-count').textContent).toBe('1');
+  await openStatus();
+  expect(container.querySelector('.re-state-dialog [role="alert"]').textContent).toContain('プレビュー音声を読み込めません');
+  await closeStatus();
+  await act(async () => Simulate.canPlay(audio));
+  expect(container.querySelector('.re-attention-count')).toBeNull();
+  await openStatus();
+  expect(container.querySelector('.re-notification-history').textContent).toContain('プレビュー音声を読み込めません');
 });

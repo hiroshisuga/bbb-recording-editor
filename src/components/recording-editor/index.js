@@ -14,6 +14,9 @@ import SelectionMarkers, { SelectionOffscreen, validSelection as isValidSelectio
 import VideoPreview from './VideoPreview';
 import MeetingList from './MeetingList';
 import OrphanDeleteDialog from './OrphanDeleteDialog';
+import EditorDialog from './EditorDialog';
+import EditorToast from './EditorToast';
+import useEditorNotifications from './useEditorNotifications';
 import useAudioPreview from './useAudioPreview';
 import useTimelineFollow from './useTimelineFollow';
 import useTimelineScrollSync from './useTimelineScrollSync';
@@ -319,9 +322,9 @@ function Editor() {
   const [audio, setAudio] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState('');
-  const [message, setMessage] = useState('');
-  const [requestedRebuildId, setRequestedRebuildId] = useState(null);
-  const [error, setError] = useState('');
+  const { entries: notifications, toast, error, unresolvedErrors, setMessage, setError, resolveError, clear: clearNotifications, dismiss: dismissToast } = useEditorNotifications();
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [visibilityAcknowledged, setVisibilityAcknowledged] = useState(new Set());
   const [review, setReview] = useState(false);
   const [rebuildReview, setRebuildReview] = useState(false);
   const [resetReview, setResetReview] = useState(false);
@@ -337,6 +340,14 @@ function Editor() {
   const rebuildBlock = busy ? t('working') : !recording?.rebuild?.available ? t('rebuildSetup')
     : rebuilding ? t('rebuildBlockedProcessing') : !edit.record_ranges.length ? t('needRange') : dirty ? t('saveBeforeRebuild')
       : needsRangeSave ? t('saveCandidateRanges') : '';
+  const visibilityKey = recording ? `${recording.id}:${recording.rebuild?.request_id || recording.rebuild?.revision || recording.revision}` : '';
+  const visibilityCheck = recording?.rebuild?.status === 'completed' && !rebuilding && !visibilityAcknowledged.has(visibilityKey);
+  const rebuildFailed = ['failed', 'command_failed'].includes(recording?.rebuild?.status);
+  const separateErrors = unresolvedErrors.filter(item => !(item.message.id === 'rebuildFailed' && rebuildFailed));
+  const attentionCount = recording ? recording.warnings.length + separateErrors.length + Number(visibilityCheck)
+    + Number(rebuildFailed) + Number(recording.rebuild?.title_restore === 'failed') : unresolvedErrors.length;
+  const playbackLabel = rebuilding ? 'processing' : recording?.playback_sync === 'needs_rebuild' ? 'playbackNotReflected'
+    : recording?.playback_sync === 'reflected' ? 'playbackReflected' : 'playbackUnknown';
   const videos = useMemo(() => recording ? externalVideos(recording.events, duration) : [], [recording, duration]);
   const videoTitles = useExternalVideoTitles(videos, recording?.id, loadExternalVideoTitle);
   const primary = useMemo(() => audio ? audioAdapter(audio, duration) : null, [audio, duration]);
@@ -358,8 +369,8 @@ function Editor() {
   };
 
   const refreshList = useCallback(async () => {
-    try { setMeetings(await request('/recordings')); } catch (e) { setError(e.message); }
-  }, []);
+    try { setMeetings(await request('/recordings')); resolveError('list'); } catch (e) { setError(e.message, 'list'); }
+  }, [setError, resolveError]);
   useEffect(() => { refreshList(); }, [refreshList]);
   useEffect(() => {
     if (!rebuilding) return undefined;
@@ -373,13 +384,13 @@ function Editor() {
           if (cancelled) return;
           setRecording(data);
         } else setRecording(current => ({ ...current, rebuild: result }));
-        if (result.status === 'completed') setMessage({ id: 'rebuildCompleted' });
-        if (['failed', 'command_failed'].includes(result.status)) setError({ id: 'rebuildFailed' });
+        if (result.status === 'completed') { resolveError('rebuild'); setMessage({ id: 'rebuildCompleted' }); }
+        if (['failed', 'command_failed'].includes(result.status)) setError({ id: 'rebuildFailed' }, 'rebuild');
         await refreshList();
-      } catch (e) { if (!cancelled) setError(e.message); }
+      } catch (e) { if (!cancelled) setError(e.message, 'rebuild'); }
     }, 5000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [rebuilding, recording?.id, refreshList]);
+  }, [rebuilding, recording?.id, refreshList, setMessage, setError, resolveError]);
   useEffect(() => {
     if (!audio) return undefined;
     const tick = () => { setTime(Math.min(duration, audio.currentTime * 1000)); setPlaying(!audio.paused && !audio.ended); };
@@ -399,7 +410,7 @@ function Editor() {
     next = { ...next, cut_chime_gaps: retainChimeGaps(next.record_ranges, next.cut_chime_gaps || [], duration) };
     setHistory(h => ({ past: [...h.past, edit].slice(-100), future: [] }));
     setEdit(next); setReview(false); setRebuildReview(false); setResetReview(false); setMessage('');
-  }, [edit, busy, duration]);
+  }, [edit, busy, duration, setMessage]);
   const change = (kind, ranges) => replaceEdit({ ...edit, [kind]: normalizeRanges(ranges, duration) });
   const undo = useCallback(() => {
     if (!history.past.length) return;
@@ -412,12 +423,12 @@ function Editor() {
   };
   useEffect(() => {
     const key = e => {
-      if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'AUDIO', 'VIDEO'].includes(e.target.tagName) || busy) return;
-      if (e.code === 'Space' && audio) { e.preventDefault(); if (audio.paused) audio.play().catch(err => setError(err.message)); else audio.pause(); }
+      if (e.target.closest('dialog') || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'AUDIO', 'VIDEO'].includes(e.target.tagName) || busy) return;
+      if (e.code === 'Space' && audio) { e.preventDefault(); if (audio.paused) audio.play().catch(err => setError(err.message, 'audio')); else audio.pause(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [audio, busy, undo]);
+  }, [audio, busy, undo, setError]);
 
   const runJob = useCallback(async (path, payload) => {
     let job = await request(path, payload);
@@ -429,7 +440,7 @@ function Editor() {
   }, []);
   const open = useCallback(async id => {
     setBusy({ id: 'loadingMedia' }); setError(''); setMessage(''); setReview(false); setRebuildReview(false); setResetReview(false);
-    setRequestedRebuildId(null);
+    clearNotifications(); setStatusOpen(false);
     audio?.pause(); setRecording(null); setPreview(null); setTime(0); setPlaying(false);
     try {
       const data = await request(`/recordings/${id}`);
@@ -439,41 +450,42 @@ function Editor() {
       const generated = await runJob(`/recordings/${id}/preview`, {});
       setPreview(generated);
       if (generated.cache_reused) setMessage({ id: 'previewReused' });
-    } catch (e) { setError(e.message); } finally { setBusy(''); }
-  }, [audio, runJob]);
+    } catch (e) { setError(e.message, 'preview'); } finally { setBusy(''); }
+  }, [audio, runJob, clearNotifications, setError, setMessage]);
   const draft = async () => {
-    setBusy({ id: 'savingDraft' }); setError('');
-    try { await request(`/recordings/${recording.id}/draft`, { ...edit, cut_chime: edit.cut_chime_gaps.length > 0, revision: recording.revision }); setMessage({ id: 'draftSaved' }); }
-    catch (e) { setError(e.message); } finally { setBusy(''); }
+    setBusy({ id: 'savingDraft' }); setError('', 'draft');
+    try { await request(`/recordings/${recording.id}/draft`, { ...edit, cut_chime: edit.cut_chime_gaps.length > 0, revision: recording.revision }); resolveError('draft'); setMessage({ id: 'draftSaved' }); }
+    catch (e) { setError(e.message, 'draft'); } finally { setBusy(''); }
   };
   const save = async () => {
     if (rebuilding || busy || !canSaveRaw) return;
-    setBusy({ id: 'savingRaw' }); setError(''); audio?.pause();
+    setBusy({ id: 'savingRaw' }); setError('', 'save'); audio?.pause();
     try {
       const result = await runJob(`/recordings/${recording.id}/save`, { ...edit, cut_chime: edit.cut_chime_gaps.length > 0, revision: recording.revision });
       const data = await request(`/recordings/${recording.id}`);
       setRecording(data); setEdit(readEditorEdit(data));
       setHistory({ past: [], future: [] }); setReview(false);
+      resolveError('save');
       setMessage({ id: 'rawSaved', values: { backup: result.xml_backup } });
       await refreshList();
-    } catch (e) { setError(e.message); } finally { setBusy(''); }
+    } catch (e) { setError(e.message, 'save'); } finally { setBusy(''); }
   };
   const rebuild = async () => {
     if (rebuildBlock) return;
-    setRequestedRebuildId(null);
-    setBusy({ id: 'requestingRebuild' }); setError(''); audio?.pause();
+    setBusy({ id: 'requestingRebuild' }); setError('', 'rebuild'); audio?.pause();
     try {
       const result = await runJob(`/recordings/${recording.id}/rebuild`, { revision: recording.revision, confirmed: true });
-      setRequestedRebuildId(recording.id);
+      setVisibilityAcknowledged(current => { const next = new Set(current); next.delete(visibilityKey); return next; });
       setRecording(current => ({ ...current, rebuild: result })); setRebuildReview(false);
+      resolveError('rebuild');
       setMessage({ id: result.status === 'completed' ? 'rebuildCompleted' : 'rebuildRequested' });
       await refreshList();
-    } catch (e) { setError(e.message); } finally { setBusy(''); }
+    } catch (e) { setError(e.message, 'rebuild'); } finally { setBusy(''); }
   };
   const reset = async () => {
     if (rebuilding || busy || !recording.reset?.available) return;
     const id = recording.id;
-    setBusy({ id: 'resetting' }); setError(''); setMessage(''); audio?.pause();
+    setBusy({ id: 'resetting' }); setError('', 'reset'); setMessage(''); audio?.pause();
     try {
       await runJob(`/recordings/${id}/reset`, { revision: recording.revision, confirmed: true });
       setPreview(null); setTime(0); setPlaying(false);
@@ -482,8 +494,9 @@ function Editor() {
       setHistory({ past: [], future: [] }); setSelection({ start_ms: null, end_ms: null });
       setReview(false); setRebuildReview(false); setResetReview(false);
       setPreview(await runJob(`/recordings/${id}/preview`, {}));
+      resolveError('reset');
       setMessage({ id: data.record_ranges_persisted === false ? 'resetUnmarkedCompleted' : 'resetCompleted' }); await refreshList();
-    } catch (e) { setError(e.message); } finally { setBusy(''); }
+    } catch (e) { setError(e.message, 'reset'); } finally { setBusy(''); }
   };
   const activeAssets = recording?.assets.filter(a => a.has_video && !a.error && a.start_ms <= time && time < a.end_ms) || [];
   const screen = activeAssets.find(a => a.kind === 'deskshare');
@@ -504,45 +517,63 @@ function Editor() {
     }} onClose={() => setDeleteMeeting(null)} onDeleted={id => {
       setDeleteMeeting(null); setMeetings(items => items.filter(item => item.id !== id));
       if (recording?.id === id) { audio?.pause(); setRecording(null); setPreview(null); }
-      setError(''); setMessage({ id: 'deleteCompleted' }); refreshList();
+      clearNotifications(); setStatusOpen(false); setMessage({ id: 'deleteCompleted' }); refreshList();
     }} />}
+    <EditorToast busy={busy} toast={toast} dismiss={dismissToast} onDetails={() => setStatusOpen(true)} />
+    {statusOpen && <EditorDialog className="re-state-dialog" title={t('statusNotifications')} onClose={() => setStatusOpen(false)}>
+      {busy && <p role="status">◌ {displayMessage(busy)}</p>}
+      {recording && <>
+        <h3>{recording.name || recording.id}</h3>
+        <section><h3>{t('currentState')}</h3><p>{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('rawAlreadySaved')}</p>
+          {rebuilding ? <p>{t(rebuildPending ? 'rebuildRequested' : 'rebuildBlockedProcessing')}</p>
+            : recording.playback_sync === 'needs_rebuild' ? <p>{t(recording.last_operation === 'reset' ? needsRangeSave ? 'resetUnmarkedCompleted' : 'resetNeedsRebuild' : 'rawNeedsRebuild')}</p>
+            : <p>{t(recording.playback_sync === 'reflected' ? 'rawReflected' : 'playbackUnknown')}</p>}
+          {rebuildBlock && <details className="re-block-reason" open><summary>{t('rebuildWhy')}</summary><p id="re-rebuild-reason">{rebuildBlock}</p>
+            {!recording.rebuild?.available && <details><summary>{t('rebuildSetupDetails')}</summary><p>{t('rebuildInstallHint')}</p><code>sudo bash editor/deploy/install-rebuild-helper.sh</code></details>}</details>}
+        </section>
+        {recording.draft?.revision === recording.revision && <section className="re-draft"><h3>{t('draftAvailable')}</h3>
+          <button disabled={!!busy} onClick={() => { replaceEdit(readEditorEdit({ ...recording.draft, original_record_ranges: recording.original_record_ranges }, duration)); setStatusOpen(false); }}>{t('loadDraft')}</button></section>}
+        {(recording.warnings.length > 0 || visibilityCheck || ['failed', 'command_failed'].includes(recording.rebuild?.status) || recording.rebuild?.title_restore === 'failed') && <section className="re-status-attention"><h3>{t('attentionRequired')}</h3>
+          {recording.warnings.length > 0 && <details className="re-warnings" open><summary>{t('warnings', { count: recording.warnings.length })}</summary>{recording.warnings.map((w, i) => <p key={i}>{diagnostic(w)}</p>)}</details>}
+          {['failed', 'command_failed'].includes(recording.rebuild?.status) && <p className="re-error" role="alert">{t('rebuildFailed')}</p>}
+          {recording.rebuild?.title_restore === 'failed' && <p className="re-error" role="alert">{t('rebuildTitleFailed')}</p>}
+          {visibilityCheck && <div className="re-warnings re-visibility-check"><p>{t('rebuildVisibilityCheck')}</p>
+            {recording.published_url && <a href={recording.published_url} target="_blank" rel="noreferrer">{t('publishedLink')}</a>}
+            <button onClick={() => setVisibilityAcknowledged(current => new Set(current).add(visibilityKey))}>{t('visibilityChecked')}</button></div>}
+        </section>}
+      </>}
+      {separateErrors.map(item => <div key={item.source} className="re-error"><p role="alert">{displayMessage(item.message)}</p><button onClick={() => resolveError(item.source)}>{t('errorReviewed')}</button></div>)}
+      <section className="re-notification-history"><h3>{t('recentNotifications')}</h3>
+        {!notifications.length ? <p className="re-muted">{t('noNotifications')}</p> : <ol>{[...notifications].reverse().map(item => <li key={item.id} className={`re-history-${item.kind}`}>{displayMessage(item.message)}</li>)}</ol>}
+      </section>
+      {recording && <section className="re-status-reset"><button disabled={!!busy || rebuilding || !recording.reset?.available} onClick={() => { setStatusOpen(false); setResetReview(true); setReview(false); setRebuildReview(false); }}>{t('resetOriginal')}</button>
+        {!recording.reset?.available && <p className="re-muted">{t('resetUnavailable')}</p>}</section>}
+    </EditorDialog>}
     <header className="re-header"><div><span className="re-brand">BigBlueButton</span><strong>{t('title')}</strong></div>
-      <div className="re-header-actions"><label className="re-language">{t('language')} <select aria-label={t('language')} value={locale} onChange={e => setLocale(e.target.value)}>{languages.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select></label>{recording && <><span className="re-dirty">{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('saved')}</span><button disabled={!!busy} onClick={draft}>{t('saveDraft')}</button><button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw} title={!edit.record_ranges.length ? t('needRange') : !canSaveRaw ? t('rawAlreadySaved') : ''} onClick={() => { setReview(!review); setRebuildReview(false); setResetReview(false); }}>{t('saveRaw')}</button><button disabled={!!rebuildBlock} title={rebuildBlock} aria-describedby={rebuildBlock ? 're-rebuild-reason' : undefined} onClick={() => { setRebuildReview(!rebuildReview); setReview(false); setResetReview(false); }}>{t('rebuildRecording')}</button></>}</div>
+      <div className="re-header-actions"><label className="re-language">{t('language')} <select aria-label={t('language')} value={locale} onChange={e => setLocale(e.target.value)}>{languages.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select></label><button className={`re-status-toggle${attentionCount ? ' re-needs-attention' : ''}`} aria-haspopup="dialog" onClick={() => setStatusOpen(true)}>{t('statusNotifications')}{attentionCount > 0 && <span className="re-attention-count">{attentionCount}</span>}</button>{(busy || rebuilding) && <span className="re-working-compact" role="status">◌ {t('working')}</span>}{recording && <><span className="re-dirty">{dirty ? t('unsaved') : needsRangeSave ? t('candidateRanges') : t('saved')} · {t(playbackLabel)}</span><button disabled={!!busy} onClick={draft}>{t('saveDraft')}</button><button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw} title={!edit.record_ranges.length ? t('needRange') : !canSaveRaw ? t('rawAlreadySaved') : ''} onClick={() => { setStatusOpen(false); setReview(true); setRebuildReview(false); setResetReview(false); }}>{t('saveRaw')}</button><button disabled={!!rebuildBlock} title={rebuildBlock} onClick={() => { setStatusOpen(false); setRebuildReview(true); setReview(false); setResetReview(false); }}>{t('rebuildRecording')}</button>{rebuildBlock && <button className="re-action-help" aria-label={t('rebuildWhy')} onClick={() => setStatusOpen(true)}>ⓘ</button>}</>}</div>
     </header>
     <div className="re-shell"><MeetingList meetings={meetings} selectedId={recording?.id} busy={busy} dirty={dirty} onRefresh={refreshList} onOpen={open} onDelete={setDeleteMeeting} /><main className="re-main">
-      {busy && <div className="re-notice" role="status">◌ {displayMessage(busy)}</div>}{error && <div className="re-error" role="alert">{displayMessage(error)}</div>}{message && <div className="re-success" role="status">{displayMessage(message)}</div>}
       {!recording ? <div className="re-welcome"><h1>{t('welcomeTitle')}</h1><p>{t('welcomeSelect')}</p><p>{t('welcomeEdit')}</p><p>{t('manualRebuild')}</p></div> : <>
         <div className="re-title"><div><h1>{recording.name || recording.id}</h1>{recording.meeting_name && recording.meeting_name !== recording.name && <div className="re-title-room"><small>{t('roomName')}: {recording.meeting_name}</small></div>}<small>{recording.id} · {t('wholeMeeting', { time: formatTime(duration) })}</small></div>{recording.published_url && <a href={recording.published_url} target="_blank" rel="noreferrer">{t('publishedLink')}</a>}</div>
-        {recording.warnings.length > 0 && <details className="re-warnings" open><summary>{t('warnings', { count: recording.warnings.length })}</summary>{recording.warnings.map((w, i) => <p key={i}>{diagnostic(w)}</p>)}</details>}
-        {recording.draft?.revision === recording.revision && <div className="re-draft">{t('draftAvailable')} <button disabled={!!busy} onClick={() => replaceEdit(readEditorEdit({ ...recording.draft, original_record_ranges: recording.original_record_ranges }, duration))}>{t('loadDraft')}</button></div>}
-        {!busy && !dirty && !needsRangeSave && <p className="re-muted">{t('rawAlreadySaved')}</p>}
-        {recording.playback_sync === 'needs_rebuild' && !rebuilding && <div className="re-notice" role="status">{t(recording.last_operation === 'reset' ? needsRangeSave ? 'resetUnmarkedCompleted' : 'resetNeedsRebuild' : 'rawNeedsRebuild')}</div>}
-        {recording.playback_sync === 'reflected' && !rebuilding && <p className="re-muted">{t('rawReflected')}</p>}
-        {rebuildBlock && !busy && <div id="re-rebuild-reason" className="re-warnings"><p>{rebuildBlock}</p>{!recording.rebuild?.available && <><p>{t('rebuildInstallHint')}</p><code>sudo bash editor/deploy/install-rebuild-helper.sh</code></>}</div>}
-        {rebuilding && <div className="re-notice" role="status">{t(rebuildPending ? 'rebuildRequested' : 'rebuildBlockedProcessing')}</div>}
-        {message?.id === 'rebuildCompleted' && requestedRebuildId === recording.id && !rebuilding && <div className="re-warnings re-visibility-check" role="note">{t('rebuildVisibilityCheck')}</div>}
-        {['failed', 'command_failed'].includes(recording.rebuild?.status) && <div className="re-error" role="alert">{t('rebuildFailed')}</div>}
-        {recording.rebuild?.title_restore === 'failed' && <div className="re-error" role="alert">{t('rebuildTitleFailed')}</div>}
-        <div className="re-reset"><button disabled={!!busy || rebuilding || !recording.reset?.available} onClick={() => { setResetReview(!resetReview); setReview(false); setRebuildReview(false); }}>{t('resetOriginal')}</button>{!recording.reset?.available && <small>{t('resetUnavailable')}</small>}</div>
-        {resetReview && <div className="re-review re-reset-review"><h3>{t('resetReviewTitle')}</h3><p>{t('resetReviewDetails')}</p><p className="re-warnings">{t('resetWarning')}</p><p>{t('resetPublished')}</p>
-          <button disabled={!!busy || rebuilding} onClick={reset}>{t('confirmReset')}</button><button disabled={!!busy} onClick={() => setResetReview(false)}>{t('close')}</button>
-        </div>}
-        {rebuildReview && <div className="re-review re-rebuild-review"><h3>{t('rebuildReviewTitle')}</h3><p>{t('rebuildReviewDetails')}</p><p className="re-warnings">{t('rebuildWarning')}</p><p className="re-warnings">{t('rebuildPublishedWarning')}</p>{recording.recording_title && <p>{t('rebuildKeepTitle', { title: recording.recording_title })}</p>}
-          <button className="re-primary" disabled={!!rebuildBlock} onClick={rebuild}>{t('confirmRebuild')}</button><button disabled={!!busy} onClick={() => setRebuildReview(false)}>{t('close')}</button>
-        </div>}
-        {review && <div className="re-review"><h3>{t('reviewTitle')}</h3><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>
+        {resetReview && <EditorDialog className="re-review re-reset-review" title={t('resetReviewTitle')} onClose={() => setResetReview(false)}><p>{t('resetReviewDetails')}</p><p className="re-warnings">{t('resetWarning')}</p><p>{t('resetPublished')}</p>
+          <button disabled={!!busy || rebuilding} onClick={reset}>{t('confirmReset')}</button>{error && <p className="re-error" role="alert">{displayMessage(error)}</p>}
+        </EditorDialog>}
+        {rebuildReview && <EditorDialog className="re-review re-rebuild-review" title={t('rebuildReviewTitle')} onClose={() => setRebuildReview(false)}><p>{t('rebuildReviewDetails')}</p><p className="re-warnings">{t('rebuildWarning')}</p><p className="re-warnings">{t('rebuildPublishedWarning')}</p>{recording.recording_title && <p>{t('rebuildKeepTitle', { title: recording.recording_title })}</p>}
+          <button className="re-primary" disabled={!!rebuildBlock} onClick={rebuild}>{t('confirmRebuild')}</button>{error && <p className="re-error" role="alert">{displayMessage(error)}</p>}
+        </EditorDialog>}
+        {review && <EditorDialog className="re-review re-save-review" title={t('reviewTitle')} onClose={() => setReview(false)}><p>{t('reviewCounts', { record: edit.record_ranges.length, beep: edit.beep_ranges.length })}</p><p>{t('reviewDetails')}</p>
           {edit.cut_chime_gaps.length > 0 && <><p>{t('cutChimeSound')}: {t(`cutChimeSound_${edit.cut_chime_sound}`)}</p><p className="re-warnings">{t('cutChimeWarning')}</p></>}
           {edit.beep_ranges.length > 0 && <p className="re-warnings">{t('reviewAudioWarning')}</p>}
           {recording.beep_ranges.length > 0 && !edit.beep_ranges.length && <p>{t('reviewAudioRestore')}</p>}
           {!edit.record_ranges.length && <p className="re-warnings">{t('needRange')}</p>}
-          <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><button onClick={() => setReview(false)}>{t('close')}</button><small>{t('noRebuild')}</small>
-        </div>}
+          <button className="re-primary" disabled={!!busy || rebuilding || !canSaveRaw || !edit.record_ranges.length} onClick={save}>{t('confirmSave')}</button><small>{t('noRebuild')}</small>{error && <p className="re-error" role="alert">{displayMessage(error)}</p>}
+        </EditorDialog>}
         <PreviewPanes ratio={previewSplit} onChange={value => updatePreferences({ previewSplit: value })}
           content={hasContent ? external && primary ? <ExternalVideoPlayer videos={videos} getPrimary={getPrimary} /> : screen ? <VideoPreview clip={screen} time={time} playing={playing} rate={rate} seekVersion={seekVersion} /> : <SlidePreview recording={recording} time={time} /> : null}
           cameras={hasCameras ? <>{activeAssets.filter(a => a.kind === 'video').slice(0, 4).map(a => <VideoPreview key={a.id} clip={a} time={time} playing={playing} rate={rate} seekVersion={seekVersion} />)}{!activeAssets.some(a => a.kind === 'video') && <div className="re-placeholder">{t('noCamera')}</div>}</> : null} />
-        {external && <p className="re-warnings">{t('externalAudio')}</p>}
+        {external && <details className="re-external-note"><summary>{t('externalAudioShort')}</summary><p>{t('externalAudio')}</p></details>}
         <section className="re-selection-panel" aria-label={t('selection')}>
-        <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message)); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
+        <div className="re-transport"><button className="re-play" disabled={!preview || !!busy} onClick={() => { if (audio.paused) audio.play().catch(e => setError(e.message, 'audio')); else audio.pause(); }}>{playing ? t('pause') : t('play')}</button>
           <select aria-label={t('speed')} value={rate} onChange={e => updatePreferences({ rate: Number(e.target.value) })}>{PLAYBACK_RATES.map(r => <option key={r} value={r}>{r}×</option>)}</select>
           <RecordingTime clock={clock} time={time} duration={duration} sourceControl={<TimeField label={t('position')} value={Math.round(time)} max={duration} onChange={seek} onFocus={() => audio?.pause()} />} />
         </div>
@@ -572,7 +603,7 @@ function Editor() {
             <label>{t('volume')} <input type="range" aria-label={t('volume')} min="0" max="100" step="1" value={Math.round(volume * 100)} disabled={!audio} onChange={changeVolume} /></label><output>{Math.round(volume * 100)}%</output>
           </span>
           <label><input type="checkbox" checked={beepPreview} onChange={e => updatePreferences({ beepPreview: e.target.checked })} /> {t('previewBeep')}</label><span className="re-muted">{t('playOff')}</span>
-          {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onError={() => setError({ id: 'audioError' })} />}
+          {preview && <audio ref={setAudio} src={preview.audio_url} preload="auto" onCanPlay={() => resolveError('audio')} onError={() => setError({ id: 'audioError' }, 'audio')} />}
         </div></section>
           </>}
         </CutChimeControl>
